@@ -51,29 +51,37 @@ def gemini_json(prompt):
     }
     headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
     models = [GEMINI_MODEL]
-    if "gemini-flash-latest" not in models:
-        models.append("gemini-flash-latest")
+    for extra in ("gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"):
+        if extra not in models:
+            models.append(extra)
+    dead = set()          # model names that do not exist / are not allowed
+    deadline = time.time() + 15 * 60   # give Gemini at most 15 minutes in total
     last = None
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        for attempt in range(3):
+    round_no = 0
+    while time.time() < deadline and len(dead) < len(models):
+        round_no += 1
+        for model in models:
+            if model in dead or time.time() >= deadline:
+                continue
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
-                print(f"Gemini: model={model} attempt={attempt + 1}", flush=True)
-                r = requests.post(url, headers=headers, json=body, timeout=(30, 240))
+                print(f"Gemini: round={round_no} model={model}", flush=True)
+                r = requests.post(url, headers=headers, json=body, timeout=(30, 120))
                 if r.status_code == 200:
                     text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
                     data = json.loads(text)
                     if isinstance(data, list):
                         data = data[0]
                     return data
-                last = f"{model}: {r.status_code} {r.text[:300]}"
+                last = f"{model}: {r.status_code} {r.text[:200]}"
                 print(last, flush=True)
                 if r.status_code in (400, 404):
-                    break  # this model name is not usable, try the next one
+                    dead.add(model)
             except Exception as e:  # noqa: BLE001
                 last = f"{model}: {e}"
                 print(last, flush=True)
-            time.sleep(15 * (attempt + 1))
+            time.sleep(10)
+        time.sleep(min(30 * round_no, 120))
     raise RuntimeError(f"Gemini failed: {last}")
 
 
