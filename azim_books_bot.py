@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -174,30 +175,35 @@ def make_voice(scenes, voice):
 
 # ---------------------------------------------------------------- images
 def make_image(prompt, path, seed):
+    """Free Pollinations allows 1 image every 45 s per IP: on a 402 we wait the time it asks for."""
     full = f"{prompt}, {STYLE}"
     q = urllib.parse.quote(full)
-    # (model, width, height): try the best model first, then simpler fallbacks
-    variants = [("flux", W, H), ("turbo", W, H), (None, 1024, 576)]
+    models = ["flux", "turbo", None]
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
-    for model, w, h in variants:
-        url = f"https://image.pollinations.ai/prompt/{q}?width={w}&height={h}&nologo=true&seed={seed}"
+    other_failures = 0
+    for attempt in range(1, 16):
+        model = models[min(other_failures // 2, len(models) - 1)]
+        url = f"https://image.pollinations.ai/prompt/{q}?width={W}&height={H}&nologo=true&seed={seed}"
         if model:
             url += f"&model={model}"
-        for attempt in range(2):
-            try:
-                print(f"Image: model={model} attempt={attempt + 1}", flush=True)
-                r = requests.get(url, headers=headers, timeout=150)
-                ctype = r.headers.get("content-type", "")
-                if r.status_code == 200 and ctype.startswith("image") and len(r.content) > 5000:
-                    path.write_bytes(r.content)
-                    time.sleep(4)
-                    return
-                print(f"  -> status={r.status_code} type={ctype} body={r.text[:200]!r}", flush=True)
-                if r.status_code == 429:
-                    time.sleep(30)
-            except requests.RequestException as e:
-                print(f"  -> error: {e}", flush=True)
-            time.sleep(10 * (attempt + 1))
+        try:
+            print(f"Image: attempt={attempt} model={model}", flush=True)
+            r = requests.get(url, headers=headers, timeout=150)
+            ctype = r.headers.get("content-type", "")
+            if r.status_code == 200 and ctype.startswith("image") and len(r.content) > 5000:
+                path.write_bytes(r.content)
+                time.sleep(47)   # respect the free limit before the next image
+                return
+            print(f"  -> status={r.status_code} type={ctype} body={r.text[:160]!r}", flush=True)
+            if r.status_code == 402:
+                m = re.search(r"Retry after (\d+)s", r.text)
+                wait = int(m.group(1)) + 3 if m else 47
+                time.sleep(min(wait, 60))
+                continue
+        except requests.RequestException as e:
+            print(f"  -> error: {e}", flush=True)
+        other_failures += 1
+        time.sleep(10)
     raise RuntimeError("Image generation failed")
 
 
