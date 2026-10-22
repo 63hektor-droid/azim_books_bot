@@ -45,26 +45,35 @@ def norm(title):
 
 # ---------------------------------------------------------------- Gemini
 def gemini_json(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.8},
     }
     headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
+    models = [GEMINI_MODEL]
+    if "gemini-flash-latest" not in models:
+        models.append("gemini-flash-latest")
     last = None
-    for attempt in range(5):
-        try:
-            r = requests.post(url, headers=headers, json=body, timeout=180)
-            if r.status_code == 200:
-                text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-                data = json.loads(text)
-                if isinstance(data, list):
-                    data = data[0]
-                return data
-            last = f"{r.status_code} {r.text[:300]}"
-        except Exception as e:  # noqa: BLE001
-            last = str(e)
-        time.sleep(20 * (attempt + 1))
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for attempt in range(3):
+            try:
+                print(f"Gemini: model={model} attempt={attempt + 1}", flush=True)
+                r = requests.post(url, headers=headers, json=body, timeout=(30, 240))
+                if r.status_code == 200:
+                    text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    data = json.loads(text)
+                    if isinstance(data, list):
+                        data = data[0]
+                    return data
+                last = f"{model}: {r.status_code} {r.text[:300]}"
+                print(last, flush=True)
+                if r.status_code in (400, 404):
+                    break  # this model name is not usable, try the next one
+            except Exception as e:  # noqa: BLE001
+                last = f"{model}: {e}"
+                print(last, flush=True)
+            time.sleep(15 * (attempt + 1))
     raise RuntimeError(f"Gemini failed: {last}")
 
 
