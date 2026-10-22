@@ -15,7 +15,7 @@ import requests
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHANNEL_ID = os.environ["CHANNEL_ID"]
 GEMINI_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 ROOT = Path(__file__).parent
 POSTED_FILE = ROOT / "azim_posted.json"
