@@ -167,17 +167,29 @@ def make_voice(scenes, voice):
 # ---------------------------------------------------------------- images
 def make_image(prompt, path, seed):
     full = f"{prompt}, {STYLE}"
-    url = ("https://image.pollinations.ai/prompt/" + urllib.parse.quote(full)
-           + f"?width={W}&height={H}&model=flux&nologo=true&seed={seed}")
-    for attempt in range(6):
-        try:
-            r = requests.get(url, timeout=240)
-            if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
-                path.write_bytes(r.content)
-                return
-        except requests.RequestException:
-            pass
-        time.sleep(15 * (attempt + 1))
+    q = urllib.parse.quote(full)
+    # (model, width, height): try the best model first, then simpler fallbacks
+    variants = [("flux", W, H), ("turbo", W, H), (None, 1024, 576)]
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
+    for model, w, h in variants:
+        url = f"https://image.pollinations.ai/prompt/{q}?width={w}&height={h}&nologo=true&seed={seed}"
+        if model:
+            url += f"&model={model}"
+        for attempt in range(2):
+            try:
+                print(f"Image: model={model} attempt={attempt + 1}", flush=True)
+                r = requests.get(url, headers=headers, timeout=150)
+                ctype = r.headers.get("content-type", "")
+                if r.status_code == 200 and ctype.startswith("image") and len(r.content) > 5000:
+                    path.write_bytes(r.content)
+                    time.sleep(4)
+                    return
+                print(f"  -> status={r.status_code} type={ctype} body={r.text[:200]!r}", flush=True)
+                if r.status_code == 429:
+                    time.sleep(30)
+            except requests.RequestException as e:
+                print(f"  -> error: {e}", flush=True)
+            time.sleep(10 * (attempt + 1))
     raise RuntimeError("Image generation failed")
 
 
