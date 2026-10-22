@@ -1,4 +1,4 @@
-import asyncio
+import base64
 import json
 import math
 import os
@@ -10,7 +10,6 @@ import urllib.parse
 from datetime import date
 from pathlib import Path
 
-import edge_tts
 import requests
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -29,7 +28,15 @@ MAX_SECONDS = 178         # hard limit: under 3 minutes
 MAX_WORDS = 330
 TOTAL_BOOKS = 10000
 
-VOICES = {"female": "fa-IR-DilaraNeural", "male": "fa-IR-FaridNeural"}
+# Gemini TTS (much more natural than the old voices). Change voice names here if you want others.
+GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+VOICES = {"female": "Sulafat", "male": "Charon"}
+VOICE_STYLE = {
+    "female": ("warm, soft and captivating storyteller, calm and natural pacing with gentle emotion, "
+               "native Iranian Persian pronunciation"),
+    "male": ("deep, calm and engaging narrator, natural pacing with expressive emphasis, "
+             "native Iranian Persian pronunciation"),
+}
 FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
 
 STYLE = ("beautiful detailed digital painting, storybook illustration, rich colors, "
@@ -45,7 +52,7 @@ def norm(title):
 
 
 # ---------------------------------------------------------------- Gemini
-def gemini_json(prompt):
+def gemini_json(prompt, minutes=15):
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.8},
@@ -56,7 +63,7 @@ def gemini_json(prompt):
         if extra not in models:
             models.append(extra)
     dead = set()          # model names that do not exist / are not allowed
-    deadline = time.time() + 15 * 60   # give Gemini at most 15 minutes in total
+    deadline = time.time() + minutes * 60   # time budget for this call
     last = None
     round_no = 0
     while time.time() < deadline and len(dead) < len(models):
@@ -86,6 +93,30 @@ def gemini_json(prompt):
     raise RuntimeError(f"Gemini failed: {last}")
 
 
+def polish(data):
+    """Second pass: a strict Persian editor rewrites the narration for quality (skipped if it fails)."""
+    prompt = f"""You are a senior Persian (Iranian) editor and radio narrator.
+Below is JSON with Persian narration for a book-summary video that a voice will read aloud.
+Rewrite ONLY the "narration_fa" fields so they are flawless, natural, elegant and engaging spoken Persian,
+not a literal translation:
+- fix grammar, word choice, awkward phrasing and spelling; use proper half-spaces;
+- keep the SAME number of scenes in the SAME order and keep each scene's meaning;
+- each scene at most 28 words; smooth transitions between scenes; warm storytelling tone;
+- numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
+Return the SAME JSON structure, changed only in "narration_fa".
+JSON: {json.dumps(data, ensure_ascii=False)}"""
+    try:
+        new = gemini_json(prompt, minutes=5)
+        old_scenes, new_scenes = data["scenes"], new["scenes"]
+        if len(old_scenes) == len(new_scenes) and all(x.get("narration_fa") for x in new_scenes):
+            for a, b in zip(old_scenes, new_scenes):
+                a["narration_fa"] = b["narration_fa"].strip()
+            print("Narration polished.", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("Polish skipped:", e, flush=True)
+    return data
+
+
 def pick_book(posted):
     used = {norm(p["title_en"]) for p in posted}
     recent = [p["title_en"] for p in posted[-200:]]
@@ -112,6 +143,11 @@ Return JSON with exactly these keys:
 Rules:
 - All narration together must be at most {MAX_WORDS} Persian words.
 - First scene = a strong hook. Last scene = the key message or lesson of the book.
+- Write like a gifted Iranian storyteller / radio narrator, NOT a literal translation:
+  natural, elegant, fluent spoken Persian (Iranian), correct grammar and spelling, proper half-spaces.
+- Scenes must flow into each other like one smooth story, with an emotional, engaging tone.
+- The text will be read aloud by a voice: write numbers as words, no Latin letters, no emojis,
+  no brackets, no abbreviations. Write names the way they are commonly written in Persian.
 - Image prompts: painting / cartoon illustration style, no text or letters inside the image,
   no real celebrity faces, no scenes copied from films.
 """
@@ -130,16 +166,12 @@ Rules:
         if ok:
             if data.get("book_type") not in ("novel", "psychology", "other"):
                 data["book_type"] = "other"
-            return data
+            return polish(data)
         time.sleep(5)
     raise RuntimeError("Could not get a valid new book from Gemini")
 
 
 # ---------------------------------------------------------------- voice
-async def _tts(text, voice, rate, path):
-    await edge_tts.Communicate(text, voice, rate=rate).save(str(path))
-
-
 def probe_duration(path):
     out = subprocess.check_output([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -147,30 +179,74 @@ def probe_duration(path):
     return float(out.strip())
 
 
-def make_voice(scenes, voice):
-    rate = "+0%"
-    for _ in range(3):
-        durs = []
-        for i, s in enumerate(scenes):
-            p = WORK / f"voice_{i:02d}.mp3"
-            last = None
-            for attempt in range(4):
-                try:
-                    asyncio.run(_tts(s["narration_fa"], voice, rate, p))
-                    last = None
-                    break
-                except Exception as e:  # noqa: BLE001
-                    last = e
-                    time.sleep(5 * (attempt + 1))
-            if last:
-                raise last
-            durs.append(probe_duration(p))
-        total = sum(d + PAD for d in durs)
-        print(f"voice total = {total:.1f}s (rate {rate})")
-        if total <= MAX_SECONDS:
-            return durs
-        rate = f"+{int((total / MAX_SECONDS - 1) * 100) + 6}%"
-    raise RuntimeError("Narration is longer than 3 minutes")
+def tts_gemini(text, voice, style, out_wav):
+    headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": text, "speech_metadata": {"style": style}}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {"voiceConfig": {"voice": voice}},
+        },
+    }
+    dead = set()
+    deadline = time.time() + 6 * 60
+    last = None
+    round_no = 0
+    while time.time() < deadline and len(dead) < len(GEMINI_TTS_MODELS):
+        round_no += 1
+        for model in GEMINI_TTS_MODELS:
+            if model in dead or time.time() >= deadline:
+                continue
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                r = requests.post(url, headers=headers, json=body, timeout=(30, 180))
+                if r.status_code == 200:
+                    parts = r.json()["candidates"][0]["content"]["parts"]
+                    audio = next(p["inlineData"]["data"] for p in parts if "inlineData" in p)
+                    raw = base64.b64decode(audio)
+                    if len(raw) > 2000:
+                        out_wav.write_bytes(raw)
+                        return
+                last = f"{model}: {r.status_code} {r.text[:200]}"
+                print("  TTS:", last, flush=True)
+                if r.status_code in (400, 404):
+                    dead.add(model)
+            except Exception as e:  # noqa: BLE001
+                last = f"{model}: {e}"
+                print("  TTS:", last, flush=True)
+            time.sleep(8)
+        time.sleep(min(20 * round_no, 90))
+    raise RuntimeError(f"Gemini TTS failed: {last}")
+
+
+def make_voice(scenes, kind):
+    voice = VOICES[kind]
+    style = VOICE_STYLE[kind]
+    print(f"Voice: {voice} ({kind})", flush=True)
+    wavs = []
+    for i, s in enumerate(scenes):
+        p = WORK / f"voice_{i:02d}.wav"
+        tts_gemini(s["narration_fa"].strip(), voice, style, p)
+        wavs.append(p)
+        time.sleep(6)   # stay under the free per-minute limit
+    raw = [probe_duration(p) for p in wavs]
+    total = sum(d + PAD for d in raw)
+    factor = 1.0
+    if total > MAX_SECONDS:
+        factor = min(2.0, total / MAX_SECONDS * 1.03)
+    print(f"voice total = {total:.1f}s, speed factor = {factor:.2f}", flush=True)
+    durs = []
+    for i, p in enumerate(wavs):
+        mp3 = WORK / f"voice_{i:02d}.mp3"
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(p)]
+        if factor > 1.0:
+            cmd += ["-filter:a", f"atempo={factor:.3f}"]
+        cmd += ["-c:a", "libmp3lame", "-q:a", "3", str(mp3)]
+        sh(cmd)
+        durs.append(probe_duration(mp3))
+    if sum(d + PAD for d in durs) > MAX_SECONDS + 2:
+        raise RuntimeError("Narration is longer than 3 minutes")
+    return durs
 
 
 # ---------------------------------------------------------------- images
@@ -277,8 +353,8 @@ def main():
     scenes = book["scenes"]
     print("Book:", book["title_en"], "|", book["book_type"], "|", len(scenes), "scenes")
 
-    voice = VOICES["female" if book["book_type"] in FEMALE_TYPES else "male"]
-    durs = make_voice(scenes, voice)
+    kind = "female" if book["book_type"] in FEMALE_TYPES else "male"
+    durs = make_voice(scenes, kind)
 
     seed = int(time.time()) % 100000
     for i, s in enumerate(scenes):
