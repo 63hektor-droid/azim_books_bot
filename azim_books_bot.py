@@ -39,16 +39,8 @@ else:                     # slow free images (1 per 45 s) -> shorter video so th
     MIN_SCENES, MAX_SCENES = 12, 14
     WORDS = "480 to 600"
 
-# ----- voices (Gemini TTS). Change the names here to try other voices.
-GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
-VOICES = {"female": "Despina", "male": "Charon"}
-VOICE_STYLE = {
-    "female": ("natural, fluent and confident, like a professional podcast host or documentary narrator "
-               "speaking Iranian Persian; warm and engaging; brisk conversational pace, no exaggerated pauses, "
-               "no slow syllable-by-syllable reading, not a children's storyteller"),
-    "male": ("natural, fluent and authoritative, like a documentary narrator speaking Iranian Persian; "
-             "warm and engaging; brisk conversational pace, no exaggerated pauses"),
-}
+# ----- voices (edge-tts, free, no daily limit). Change the names here to try other voices.
+VOICES = {"female": "fa-IR-DilaraNeural", "male": "fa-IR-FaridNeural"}
 FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
 
 
@@ -292,44 +284,26 @@ def probe_duration(path):
     return float(out.strip())
 
 
-def tts_gemini(text, voice, style, out_wav):
-    headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
-    body = {
-        "contents": [{"role": "user", "parts": [{"text": text, "speech_metadata": {"style": style}}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"voice": voice}},
-        },
-    }
-    dead = set()
-    deadline = time.time() + 6 * 60
+def tts_edge(text, voice, out_mp3):
+    """Free Microsoft Edge neural voice (edge-tts). Retries a few times on network errors."""
+    import asyncio
+    import edge_tts
+
+    async def run():
+        await edge_tts.Communicate(text, voice).save(str(out_mp3))
+
     last = None
-    round_no = 0
-    while time.time() < deadline and len(dead) < len(GEMINI_TTS_MODELS):
-        round_no += 1
-        for model in GEMINI_TTS_MODELS:
-            if model in dead or time.time() >= deadline:
-                continue
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            try:
-                r = requests.post(url, headers=headers, json=body, timeout=(30, 180))
-                if r.status_code == 200:
-                    parts = r.json()["candidates"][0]["content"]["parts"]
-                    audio = next(p["inlineData"]["data"] for p in parts if "inlineData" in p)
-                    raw = base64.b64decode(audio)
-                    if len(raw) > 2000:
-                        out_wav.write_bytes(raw)
-                        return
-                last = f"{model}: {r.status_code} {r.text[:200]}"
-                print("  TTS:", last, flush=True)
-                if r.status_code in (400, 404):
-                    dead.add(model)
-            except Exception as e:  # noqa: BLE001
-                last = f"{model}: {e}"
-                print("  TTS:", last, flush=True)
-            time.sleep(8)
-        time.sleep(min(20 * round_no, 90))
-    raise RuntimeError(f"Gemini TTS failed: {last}")
+    for attempt in range(1, 6):
+        try:
+            asyncio.run(run())
+            if out_mp3.exists() and out_mp3.stat().st_size > 2000:
+                return
+            last = "empty audio file"
+        except Exception as e:  # noqa: BLE001
+            last = str(e)
+        print(f"  TTS attempt {attempt} failed: {last}", flush=True)
+        time.sleep(5 * attempt)
+    raise RuntimeError(f"edge-tts failed: {last}")
 
 
 TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse,"
@@ -338,14 +312,13 @@ TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,
 
 def make_voice(scenes, kind):
     voice = VOICES[kind]
-    style = VOICE_STYLE[kind]
     print(f"Voice: {voice} ({kind}), scenes: {len(scenes)}", flush=True)
     wavs = []
     for i, s in enumerate(scenes):
-        p = WORK / f"voice_{i:02d}.wav"
-        tts_gemini(s["narration_fa"].strip(), voice, style, p)
+        p = WORK / f"raw_{i:02d}.mp3"
+        tts_edge(s["narration_fa"].strip(), voice, p)
         wavs.append(p)
-        time.sleep(5)   # stay under the free per-minute limit
+        time.sleep(0.5)
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
     for i, p in enumerate(wavs):
