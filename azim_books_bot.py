@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import time
 import urllib.parse
+import wave
 from datetime import date
 from pathlib import Path
 
@@ -39,7 +40,21 @@ else:                     # slow free images (1 per 45 s) -> shorter video so th
     MIN_SCENES, MAX_SCENES = 12, 14
     WORDS = "480 to 600"
 
-# ----- voices (edge-tts, free, no daily limit). Change the names here to try other voices.
+# ----- voices
+# Main voice: Gemini TTS (same GEMINI_API_KEY, free tier). Change the names here to try other voices.
+GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
+GEMINI_VOICES = {"female": "Gacrux", "male": "Charon"}
+GEMINI_TTS_GAP = 32       # seconds between Gemini TTS calls (free tier allows about 2 per minute)
+TTS_CHUNK_BYTES = 3200    # about 4 scenes are read in ONE call, so the voice keeps a natural flow
+TTS_STYLE = (
+    "Read the following text aloud in fluent, natural Iranian Persian (Farsi), like a gifted and warm podcast host "
+    "telling a gripping story to an adult friend. Use lively, expressive intonation that follows the meaning, "
+    "natural rhythm, short natural pauses at commas and longer ones at the end of sentences, and a normal "
+    "conversational speed. Never sound robotic, never monotone, never like a children's story. "
+    "Pronounce every word and every name exactly as an educated Iranian speaker would. Text:\n\n"
+)
+
+# Backup voice (edge-tts, free): used only if Gemini TTS fails or its free limit is finished.
 VOICES = {"female": "fa-IR-DilaraNeural", "male": "fa-IR-FaridNeural"}
 FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
 
@@ -203,7 +218,8 @@ Rules for the visuals:
             if not has_wrapup(data["scenes"]):
                 continue
             data = polish(data)
-            return align_visuals(data, book)
+            data = align_visuals(data, book)
+            return prep_speech(data)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
 
@@ -276,6 +292,44 @@ Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
     return data
 
 
+def prep_speech(data):
+    """Step E: make a separate version of the text for the VOICE only, so words and names are pronounced
+    correctly. The subtitles keep the normal text (narration_fa). Skipped if it fails."""
+    scenes = data["scenes"]
+    texts = [s["narration_fa"] for s in scenes]
+    prompt = f"""You are a Persian (Iranian) radio director who prepares scripts for a voice actor.
+Below is a JSON list of Persian narration paragraphs. For each one, return a version prepared ONLY for correct
+pronunciation by a text-to-speech voice. Rules:
+- Keep every word, the order of the words and the meaning exactly the same. Do not rewrite or shorten anything.
+- Foreign names of people, places and terms: write them in Persian letters in the way an educated Iranian
+  pronounces them (add the needed vowel marks, for example fatha, kasra, damma, so the name cannot be misread).
+- Add vowel marks (fatha, kasra, damma) ONLY on words that are really ambiguous when read without them
+  (for example words that can be read in two ways). Do not put marks on ordinary clear words.
+- Numbers are written as Persian words. No Latin letters, no digits, no brackets.
+- Keep the punctuation, and add a comma where a speaker would naturally pause in a long sentence.
+Return JSON: {{"speech": [ ...one prepared string per paragraph, same order and same count... ]}}
+JSON: {json.dumps(texts, ensure_ascii=False)}"""
+    try:
+        new = gemini_json(prompt, minutes=6, models=WRITE_MODELS)["speech"]
+        marks = re.compile("[\u064b-\u0652\u0670]")
+        good = len(new) == len(texts) and all(isinstance(x, str) and x.strip() for x in new)
+        if good:
+            for a, b in zip(texts, new):
+                ratio = len(marks.sub("", b)) / max(len(a), 1)
+                if not 0.8 <= ratio <= 1.3:
+                    good = False
+                    break
+        if good:
+            for s, t in zip(scenes, new):
+                s["speech_fa"] = t.strip()
+            print("Speech text prepared for pronunciation.", flush=True)
+        else:
+            print("Speech prep result rejected: the normal text will be read.", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("Speech prep skipped:", e, flush=True)
+    return data
+
+
 # ---------------------------------------------------------------- voice
 def probe_duration(path):
     out = subprocess.check_output([
@@ -285,7 +339,7 @@ def probe_duration(path):
 
 
 def tts_edge(text, voice, out_mp3):
-    """Free Microsoft Edge neural voice (edge-tts). Retries a few times on network errors."""
+    """Backup: free Microsoft Edge neural voice (edge-tts). Retries a few times on network errors."""
     import asyncio
     import edge_tts
 
@@ -306,19 +360,137 @@ def tts_edge(text, voice, out_mp3):
     raise RuntimeError(f"edge-tts failed: {last}")
 
 
+def gemini_tts(text, voice, out_wav):
+    """Main voice: Gemini TTS. Returns when out_wav is written, raises if every attempt fails."""
+    body = {
+        "contents": [{"parts": [{"text": TTS_STYLE + text}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}},
+        },
+    }
+    headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
+    dead = set()
+    last = None
+    for attempt in range(1, 7):
+        for model in GEMINI_TTS_MODELS:
+            if model in dead:
+                continue
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                print(f"  Gemini TTS: attempt={attempt} model={model} voice={voice}", flush=True)
+                r = requests.post(url, headers=headers, json=body, timeout=(30, 300))
+                if r.status_code == 200:
+                    parts = r.json()["candidates"][0]["content"]["parts"]
+                    b64 = next((p["inlineData"]["data"] for p in parts if "inlineData" in p), None)
+                    if b64:
+                        pcm = base64.b64decode(b64)
+                        with wave.open(str(out_wav), "wb") as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(24000)
+                            wf.writeframes(pcm)
+                        if probe_duration(out_wav) > 1.0:
+                            return
+                    last = f"{model}: no audio in the answer"
+                else:
+                    last = f"{model}: {r.status_code} {r.text[:200]}"
+                    if r.status_code in (400, 404):
+                        dead.add(model)
+                    elif r.status_code == 429:
+                        time.sleep(40)
+                print("  ->", last, flush=True)
+            except Exception as e:  # noqa: BLE001
+                last = f"{model}: {e}"
+                print("  ->", last, flush=True)
+            time.sleep(6)
+        if len(dead) == len(GEMINI_TTS_MODELS):
+            break
+        time.sleep(10 * attempt)
+    raise RuntimeError(f"Gemini TTS failed: {last}")
+
+
+def group_scenes(texts, max_bytes=TTS_CHUNK_BYTES):
+    groups, cur, size = [], [], 0
+    for i, t in enumerate(texts):
+        b = len(t.encode("utf-8"))
+        if cur and size + b > max_bytes:
+            groups.append(cur)
+            cur, size = [], 0
+        cur.append(i)
+        size += b
+    if cur:
+        groups.append(cur)
+    return groups
+
+
+def silence_points(wav):
+    """Middle points (seconds) of the pauses found in the audio."""
+    r = subprocess.run(
+        ["ffmpeg", "-i", str(wav), "-af", "silencedetect=noise=-35dB:d=0.3", "-f", "null", "-"],
+        capture_output=True, text=True)
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    return [(s + e) / 2 for s, e in zip(starts, ends)]
+
+
+def split_chunk(wav, texts, prefix):
+    """Cut one long audio into one file per scene: the cut points are the pauses nearest to the expected place."""
+    if len(texts) == 1:
+        return [wav]
+    total = probe_duration(wav)
+    weights = [max(len(re.sub(r"\s+", "", t)), 1) for t in texts]
+    sw = sum(weights)
+    mids = silence_points(wav)
+    avg = total / len(texts)
+    cuts = [0.0]
+    acc = 0
+    for k in range(len(texts) - 1):
+        acc += weights[k]
+        target = total * acc / sw
+        near = [m for m in mids if abs(m - target) <= max(1.5, 0.35 * avg) and m > cuts[-1] + 1.0]
+        cuts.append(min(near, key=lambda m: abs(m - target)) if near else target)
+    cuts.append(total)
+    out = []
+    for k in range(len(texts)):
+        p = Path(f"{prefix}_{k}.wav")
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
+            "-ss", f"{cuts[k]:.3f}", "-to", f"{cuts[k + 1]:.3f}", str(p)])
+        out.append(p)
+    return out
+
+
 TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse,"
         "silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse")
 
 
 def make_voice(scenes, kind):
-    voice = VOICES[kind]
-    print(f"Voice: {voice} ({kind}), scenes: {len(scenes)}", flush=True)
-    wavs = []
-    for i, s in enumerate(scenes):
-        p = WORK / f"raw_{i:02d}.mp3"
-        tts_edge(s["narration_fa"].strip(), voice, p)
-        wavs.append(p)
-        time.sleep(0.5)
+    gvoice = GEMINI_VOICES[kind]
+    evoice = VOICES[kind]
+    speech = [(s.get("speech_fa") or s["narration_fa"]).strip() for s in scenes]
+    plain = [s["narration_fa"].strip() for s in scenes]
+    print(f"Voice: Gemini TTS {gvoice} ({kind}), scenes: {len(scenes)}", flush=True)
+
+    wavs = [None] * len(scenes)
+    groups = group_scenes(speech)
+    for gi, idxs in enumerate(groups):
+        chunk = WORK / f"chunk_{gi:02d}.wav"
+        try:
+            gemini_tts("\n\n".join(speech[i] for i in idxs), gvoice, chunk)
+            parts = split_chunk(chunk, [speech[i] for i in idxs], WORK / f"raw_g{gi:02d}")
+            for i, p in zip(idxs, parts):
+                wavs[i] = p
+            print(f"  part {gi + 1}/{len(groups)} done with Gemini TTS", flush=True)
+            if gi < len(groups) - 1:
+                time.sleep(GEMINI_TTS_GAP)
+        except Exception as e:  # noqa: BLE001
+            print(f"  part {gi + 1}: Gemini TTS failed ({e}); using backup voice {evoice}", flush=True)
+            for i in idxs:
+                p = WORK / f"raw_{i:02d}.mp3"
+                tts_edge(plain[i], evoice, p)
+                wavs[i] = p
+                time.sleep(0.5)
+
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
     for i, p in enumerate(wavs):
