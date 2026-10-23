@@ -60,6 +60,13 @@ def norm(title):
     return " ".join(title.lower().replace(".", " ").replace(",", " ").split())
 
 
+def has_wrapup(scenes):
+    """True if the last scenes contain the word 'جمع‌بندی' (the closing wrap-up is mandatory)."""
+    tail = "".join(s["narration_fa"] for s in scenes[-3:])
+    tail = tail.replace("\u200c", "").replace(" ", "")
+    return "جمعبندی" in tail
+
+
 # ---------------------------------------------------------------- Gemini text
 def gemini_json(prompt, minutes=12, models=None):
     body = {
@@ -121,11 +128,13 @@ Return JSON with exactly these keys:
 - "author_fa": author name in Persian
 - "book_type": one of "novel", "psychology", "other"
     (novel = fiction/novels, psychology = psychology books, other = everything else)
-- "outline_en": a detailed and FACTUALLY ACCURATE outline of the book in English (700-1000 words).
+- "outline_en": a rich, detailed and FACTUALLY ACCURATE outline of the book in English (1100-1500 words).
     For a novel: setting and era, main characters (with a short physical description of each),
-    the full plot in order with the key events, turning points and the ending, the main themes, why it matters.
+    the full plot in order with ALL the key events, turning points and the ending, the main themes, the book's
+    message, why it matters.
     For a non-fiction book: the author and context, the core thesis, the 8-12 main ideas in order, each with
-    the argument and a concrete example/story/experiment from the book, practical takeaways, legacy and criticism.
+    the argument and a concrete example/story/experiment from the book (names, places, outcomes), practical
+    takeaways, the book's overall conclusion, legacy and criticism.
     Only include facts you are sure about. Never invent events, quotes or studies."""
         data = gemini_json(prompt, minutes=12, models=WRITE_MODELS)
         try:
@@ -146,7 +155,7 @@ Return JSON with exactly these keys:
 
 def write_scenes(book):
     """Step B: write the Persian narration and a visual storyboard from the outline."""
-    for _ in range(3):
+    for _ in range(4):
         prompt = f"""You are a gifted Iranian writer and podcast host. Write the script of a video that summarizes the
 book "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience. Use ONLY the facts in this outline:
 
@@ -154,12 +163,13 @@ book "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience
 
 Return JSON with exactly these keys:
 - "art_style_en": ONE consistent visual style for all images of this video, either painterly
-  (for example "cinematic digital oil painting, rich colors, dramatic lighting") or cartoon
-  (for example "stylish 2D cartoon illustration, bold shapes, vibrant colors"), chosen to fit this book.
+  (for example "digital oil painting, rich colors, clean sharp brushwork") or cartoon
+  (for example "stylish 2D cartoon illustration, bold clean outlines, flat vibrant colors"), chosen to fit this book.
+  The style must be crisp and clean: never use words like glow, haze, bloom, dreamy, soft focus or mist.
 - "characters": a list of the recurring characters, each {{"name": "...", "look_en": "detailed fixed visual
   description in English: age, face, hair, clothes, colors"}}. Empty list if the book has no characters.
 - "scenes": a list of {MIN_SCENES} to {MAX_SCENES} objects, each with:
-    "narration_fa": 2-3 sentences of Persian narration (28-45 words),
+    "narration_fa": 2-3 sentences of Persian narration (28-45 words) about ONE single idea or event,
     "characters_present": list of character names (from "characters") visible in the picture, may be empty,
     "setting_en": where the picture takes place (concrete place, time, light),
     "action_en": exactly what is happening in the picture: who is doing what,
@@ -168,8 +178,13 @@ Return JSON with exactly these keys:
 Rules for the narration:
 - Total narration: {WORDS} Persian words.
 - Structure: (1) a gripping hook, (2) who wrote it and why it matters, briefly, (3) the content in order with real
-  depth: specific events, ideas, examples and turning points, not vague generalities, (4) the key lessons,
-  (5) a memorable closing sentence.
+  depth: specific events, ideas, examples and turning points, with concrete names, places and details from the
+  outline, never vague generalities or filler, and no repetition, (4) the key lessons, (5) a mandatory,
+  clear closing wrap-up (see next rule).
+- MANDATORY wrap-up: the LAST 2 or 3 scenes are a real conclusion. The first of them must start with the
+  Persian word «جمع‌بندی» (for example «در جمع‌بندی») and restate the book's central message and its main
+  takeaways in order; the very last sentence of the video is a memorable closing sentence.
+- Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
 - Natural, fluent, elegant SPOKEN Iranian Persian, like a skilled podcast host. Not a literal translation.
   Correct grammar and spelling, proper half-spaces. Mix short and medium sentences; no childish tone.
 - It will be read aloud: write numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
@@ -186,15 +201,19 @@ Rules for the visuals:
                 len(scenes) >= max(8, MIN_SCENES - 4)
                 and all(s.get("narration_fa") and s.get("action_en") and s.get("setting_en") for s in scenes)
                 and data.get("art_style_en")
+                and has_wrapup(scenes)
             )
         except Exception:  # noqa: BLE001
             ok = False
         if ok:
             data["scenes"] = scenes[:MAX_SCENES + 2]
             data.setdefault("characters", [])
-            return polish(data)
+            if not has_wrapup(data["scenes"]):
+                continue
+            data = polish(data)
+            return align_visuals(data, book)
         time.sleep(5)
-    raise RuntimeError("Could not get a valid script from Gemini")
+    raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
 
 
 def polish(data):
@@ -205,6 +224,8 @@ Below is a JSON list of Persian narration paragraphs for one video; a voice will
 Rewrite them so they are flawless, natural, elegant, engaging SPOKEN Persian, not a literal translation:
 - fix grammar, word choice, awkward phrasing and spelling; use proper half-spaces;
 - keep exactly the same number of items in the same order and keep each item's meaning and its information;
+- the closing wrap-up items at the end (they contain the word «جمع‌بندی») must stay a clear, complete conclusion
+  and must keep the word «جمع‌بندی»;
 - each item 2-3 sentences, at most 45 words; smooth transitions between items; confident, warm, adult tone;
 - numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
 Return JSON: {{"narration": [ ...the rewritten items... ]}}
@@ -212,11 +233,54 @@ JSON: {json.dumps(texts, ensure_ascii=False)}"""
     try:
         new = gemini_json(prompt, minutes=6, models=WRITE_MODELS)["narration"]
         if len(new) == len(texts) and all(isinstance(x, str) and x.strip() for x in new):
-            for s, t in zip(data["scenes"], new):
-                s["narration_fa"] = t.strip()
-            print("Narration polished.", flush=True)
+            check = [{"narration_fa": x} for x in new]
+            if has_wrapup(check):
+                for s, t in zip(data["scenes"], new):
+                    s["narration_fa"] = t.strip()
+                print("Narration polished.", flush=True)
+            else:
+                print("Polish dropped the wrap-up word: kept the original narration.", flush=True)
     except Exception as e:  # noqa: BLE001
         print("Polish skipped:", e, flush=True)
+    return data
+
+
+def align_visuals(data, book):
+    """Step D: write each picture from the FINAL narration so the image matches the text (skipped if it fails)."""
+    scenes = data["scenes"]
+    chars = data.get("characters", [])
+    items = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
+    prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration paragraphs, in order, of a video
+that summarizes the book "{book['title_en']}" by {book['author_en']}. While each paragraph is read aloud, ONE picture
+is shown. For EACH paragraph write the picture so that it illustrates the exact content of that paragraph.
+
+Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "visual_en": "..."}}, ...]}}
+with exactly {len(scenes)} items, in the same order.
+
+Rules for "visual_en":
+- English, 25 to 55 words. Start with the main subject doing the main action, then the place and time, then
+  the important objects.
+- Show the single most important thing that the paragraph says: concrete people, objects, place and action.
+  For non-fiction, show the concrete story, example or experiment from the paragraph, or a clear literal visual
+  metaphor of the idea. For the closing wrap-up paragraphs, show a symbolic scene of the book's central message.
+- The image model does not know names: describe people by their fixed look (use the characters' looks below)
+  and never write book titles or names in the picture description.
+- No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
+- Do not write an art style (it is added separately).
+"characters_present": names (from the characters list) visible in the picture, may be empty.
+
+Characters: {json.dumps(chars, ensure_ascii=False)}
+Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
+    try:
+        vis = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["visuals"]
+        if len(vis) == len(scenes) and all(isinstance(v.get("visual_en"), str) and v["visual_en"].strip()
+                                           for v in vis):
+            for s, v in zip(scenes, vis):
+                s["visual_en"] = v["visual_en"].strip()
+                s["characters_present"] = v.get("characters_present") or []
+            print("Visuals aligned to the final narration.", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("Visual alignment skipped:", e, flush=True)
     return data
 
 
@@ -309,15 +373,22 @@ def make_voice(scenes, kind):
 
 
 # ---------------------------------------------------------------- images
+CLEAN = ("clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, "
+         "no haze, no glow, no bloom, no blur, no soft focus, no film grain, no text, no letters, no watermark")
+
+
 def build_prompt(art, chars, scene):
     names = scene.get("characters_present") or []
     looks = "; ".join(f"{c['name']}: {c['look_en']}" for c in chars
                       if isinstance(c, dict) and c.get("name") in names)
+    if scene.get("visual_en"):
+        return (f"{scene['visual_en']} "
+                + (f"Characters: {looks}. " if looks else "")
+                + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
     return (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
             + (f"Characters: {looks}. " if looks else "")
             + f"Mood: {scene.get('mood_en', 'cinematic')}. "
-            + f"Art style: {art}. Wide cinematic 16:9 composition, highly detailed, sharp focus, "
-              f"beautiful lighting, no text, no letters, no watermark")
+            + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
 
 
 _cf_size_ok = True
@@ -414,13 +485,15 @@ def build_video(scenes, durs, out_path):
         frames = math.ceil(length * FPS)
         clip = WORK / f"clip_{i:02d}.mp4"
         zoom = ("z='min(zoom+0.0004,1.12)'" if i % 2 == 0 else "z='if(eq(on,1),1.12,max(zoom-0.0004,1.0))'")
-        vf = ("scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+        # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
+        vf = ("scale=2560:1440:flags=lanczos:force_original_aspect_ratio=increase,crop=2560:1440,"
+              "unsharp=5:5:0.6:5:5:0.0,"
               f"zoompan={zoom}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
               "format=yuv420p")
         sh(["ffmpeg", "-y", "-loglevel", "error",
             "-i", f"img_{i:02d}.jpg", "-i", f"voice_{i:02d}.mp3",
             "-vf", vf, "-af", "apad", "-t", f"{length:.2f}",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",    # near-lossless intermediate
             "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1",
             clip.name], cwd=WORK)
         clips.append(clip.name)
@@ -444,11 +517,12 @@ def build_video(scenes, durs, out_path):
 
     style = ("FontName=Noto Sans Arabic,FontSize=22,PrimaryColour=&H00FFFFFF,"
              "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=28")
-    for crf, maxrate in (("27", "650k"), ("31", "420k")):   # keep the file under Telegram's 50 MB limit
+    # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
+    for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
         sh(["ffmpeg", "-y", "-loglevel", "error", "-i", "joined.mp4",
             "-vf", f"subtitles=subs.srt:force_style='{style}'",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
-            "-maxrate", maxrate, "-bufsize", "1300k", "-c:a", "copy",
+            "-maxrate", maxrate, "-bufsize", "1440k", "-c:a", "copy",
             "-movflags", "+faststart", out_path.name], cwd=WORK)
         if out_path.stat().st_size < 48 * 1024 * 1024:
             break
