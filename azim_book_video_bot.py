@@ -201,6 +201,11 @@ Rules for the narration:
 - Natural, fluent, elegant SPOKEN Iranian Persian, like a skilled podcast host. Not a literal translation.
   Correct grammar and spelling, proper half-spaces. Mix short and medium sentences; no childish tone.
 - It will be read aloud: write numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
+- Write EVERYTHING in Persian script, with no English or Latin word at all, not even for names and titles. Use the
+  Iranian forms: the book is «{book['title_fa']}» and the author is «{book['author_fa']}». Write other foreign names
+  the common Iranian way (for example «الیزابت»، «دارسی»).
+- Use everyday words that any listener understands at once. Avoid rare, archaic, heavy literary or Arabic words,
+  long compound words, and slang borrowed from English. If a simple word exists, use it.
 - Do not quote the book at length; paraphrase.
 
 Rules for the visuals:
@@ -224,6 +229,7 @@ Rules for the visuals:
             if not has_wrapup(data["scenes"]):
                 continue
             data = polish(data)
+            data = sanitize_narration(data, book)
             return align_visuals(data, book)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
@@ -242,7 +248,9 @@ Rewrite them so they are flawless, natural, elegant, engaging SPOKEN Persian, no
 - each item 2-4 sentences, at most 45 words; every sentence at most 12 words; at most TWO consecutive ezafe
   links in any noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase;
   smooth transitions between items; confident, warm, adult tone;
-- numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
+- numbers as words, no Latin letters, no emojis, no brackets, no abbreviations;
+- no English or Latin word anywhere: replace each with its Persian translation or common Persian spelling;
+- replace any rare, archaic, heavy or hard-to-pronounce word with a simple everyday word every listener understands.
 Return JSON: {{"narration": [ ...the rewritten items... ]}}
 JSON: {json.dumps(texts, ensure_ascii=False)}"""
     try:
@@ -257,6 +265,51 @@ JSON: {json.dumps(texts, ensure_ascii=False)}"""
                 print("Polish dropped the wrap-up word: kept the original narration.", flush=True)
     except Exception as e:  # noqa: BLE001
         print("Polish skipped:", e, flush=True)
+    return data
+
+
+LATIN = re.compile(r"[A-Za-z]")
+DIGITS = re.compile(r"[0-9\u06f0-\u06f9]")
+
+
+def sanitize_narration(data, book):
+    """Make sure the narration has no English/Latin words and no digits (the voice reads them badly)."""
+    scenes = data["scenes"]
+    for sc in scenes:
+        sc["narration_fa"] = sc["narration_fa"].replace("ي", "ی").replace("ك", "ک")
+
+    def bad(i):
+        return bool(LATIN.search(scenes[i]["narration_fa"]) or DIGITS.search(scenes[i]["narration_fa"]))
+
+    for attempt in range(2):
+        idx = [i for i in range(len(scenes)) if bad(i)]
+        if not idx:
+            return data
+        print(f"Narration check: {len(idx)} scene(s) contain English letters or digits, fixing (try {attempt + 1}).",
+              flush=True)
+        items = [{"i": i, "narration_fa": scenes[i]["narration_fa"]} for i in idx]
+        prompt = f"""Fix these Persian narration paragraphs of a video about the book "{book['title_en']}".
+A voice will read them aloud, so: replace EVERY English/Latin word with its Persian translation or the common Persian
+spelling (the book title is «{book['title_fa']}», the author is «{book['author_fa']}»), and write every digit as Persian
+words. Keep the same meaning, order and length. Keep the word «جمع‌بندی» if it is in a paragraph.
+Use everyday words that every listener understands.
+Return JSON: {{"fixed": [{{"i": 0, "narration_fa": "..."}}, ...]}}
+Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
+        try:
+            fixed = gemini_json(prompt, minutes=5, models=WRITE_MODELS)["fixed"]
+            for f in fixed:
+                i = int(f["i"])
+                txt = f.get("narration_fa", "").strip()
+                if i in idx and txt:
+                    scenes[i]["narration_fa"] = txt.replace("ي", "ی").replace("ك", "ک")
+        except Exception as e:  # noqa: BLE001
+            print("Narration fix skipped:", e, flush=True)
+    # last resort: drop what is still Latin, so the voice never reads English
+    for i in range(len(scenes)):
+        if LATIN.search(scenes[i]["narration_fa"]):
+            t = LATIN.sub("", scenes[i]["narration_fa"])
+            scenes[i]["narration_fa"] = " ".join(t.split())
+            print(f"Scene {i}: removed leftover English letters.", flush=True)
     return data
 
 
