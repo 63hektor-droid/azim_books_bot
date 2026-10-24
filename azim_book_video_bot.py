@@ -332,19 +332,34 @@ def get_speaker(kind):
     return _speakers[kind]
 
 
+def text_variants(text):
+    """The same phrase written in 3 safe ways. The model needs a final full stop to know where to end."""
+    base = " ".join(text.split())
+    core = base.rstrip(" .،,;؛:!?؟…")
+    v1 = core + "."                                                  # always ends with a full stop
+    v2 = core.replace("\u200c", "") + "."                            # without half-spaces
+    v3 = re.sub(r"[،,;؛:!?؟…«»\"'()\-]", " ", v2.rstrip("."))        # without any punctuation inside
+    v3 = " ".join(v3.split()) + "."
+    out = []
+    for v in (v1, v2, v3):
+        if v not in out:
+            out.append(v)
+    return out
+
+
 def tts_pocket(text, kind, out_wav):
-    """Pocket TTS Farsi v2 (offline, CPU). Retries a few times on errors."""
+    """Pocket TTS Farsi v2 (offline, CPU). On failure the phrase is retried in a different written form."""
     last = None
-    for attempt in range(1, 4):
+    for attempt, variant in enumerate(text_variants(text), start=1):
         try:
-            get_speaker(kind).synthesize(text, str(out_wav))
+            get_speaker(kind).synthesize(variant, str(out_wav))
             if out_wav.exists() and out_wav.stat().st_size > 2000:
                 return
             last = "empty audio file"
         except Exception as e:  # noqa: BLE001
             last = str(e)
-        print(f"  TTS attempt {attempt} failed: {last}", flush=True)
-        time.sleep(3 * attempt)
+        print(f"  TTS attempt {attempt} failed for: {variant[:60]} -> {last[:80]}", flush=True)
+        time.sleep(1)
     raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
