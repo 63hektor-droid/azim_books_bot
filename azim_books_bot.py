@@ -26,21 +26,29 @@ ROOT = Path(__file__).parent
 POSTED_FILE = ROOT / "azim_posted.json"
 WORK = ROOT / "azim_work"
 
+START_TIME = time.time()
+JOB_BUDGET = 340 * 60     # seconds; GitHub Actions default job limit is 360 minutes
+
 W, H = 1280, 720
 FPS = 25
 PAD = 0.25                # pause after each scene (seconds)
 TOTAL_BOOKS = 10000
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
+MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 
 if USE_CF:                # fast images -> long, detailed video
     MIN_SCENES, MAX_SCENES = 24, 28
-    WORDS = "950 to 1150"
+    WORDS = "850 to 1000"  # fits in the time limit with little or no speed-up
 else:                     # slow free images (1 per 45 s) -> shorter video so the job does not time out
     MIN_SCENES, MAX_SCENES = 12, 14
-    WORDS = "480 to 600"
+    WORDS = "450 to 550"
 
-# ----- voices (edge-tts, free, no daily limit). Change the names here to try other voices.
-VOICES = {"female": "fa-IR-DilaraNeural", "male": "fa-IR-FaridNeural"}
+# ----- voices: Pocket TTS Farsi v2 via the "sokhanvar" library (free, offline, CPU).
+# Each voice is cloned from a reference recording of at most 5 seconds (WAV), placed next to this script.
+REF_AUDIO = {
+    "female": Path(os.environ.get("AZIM_REF_FEMALE", Path(__file__).parent / "azim_voice_female.wav")),
+    "male": Path(os.environ.get("AZIM_REF_MALE", Path(__file__).parent / "azim_voice_male.wav")),
+}
 FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
 
 
@@ -49,7 +57,15 @@ def sh(cmd, cwd=None):
 
 
 def norm(title):
-    return " ".join(title.lower().replace(".", " ").replace(",", " ").split())
+    t = " ".join(title.lower().replace(".", " ").replace(",", " ").replace(":", " ").split())
+    for prefix in ("the ", "a ", "an "):
+        if t.startswith(prefix):
+            t = t[len(prefix):]
+    return t
+
+
+def norm_fa(title):
+    return norm(title.replace("\u200c", " ").replace("ي", "ی").replace("ك", "ک"))
 
 
 def has_wrapup(scenes):
@@ -105,12 +121,13 @@ WRITE_MODELS = ["gemini-pro-latest", GEMINI_MODEL, "gemini-flash-latest", "gemin
 def pick_book(posted):
     """Step A: choose a new famous book and build a detailed, accurate English outline of it."""
     used = {norm(p["title_en"]) for p in posted}
-    recent = [p["title_en"] for p in posted[-200:]]
+    used_fa = {norm_fa(p["title_fa"]) for p in posted if p.get("title_fa")}
+    all_titles = [p["title_en"] for p in posted]      # the full list, not only the last 200
     number = len(posted) + 1
     for _ in range(4):
         prompt = f"""You are the editor of a Persian channel that summarizes the most famous books in the world.
 This is video number {number} of {TOTAL_BOOKS}. Choose ONE very famous, world-renowned book that is NOT in
-this already-used list: {json.dumps(recent, ensure_ascii=False)}.
+this already-used list: {json.dumps(all_titles, ensure_ascii=False)}.
 Pick the most famous remaining ones first (world classics, global bestsellers, books everybody knows).
 
 Return JSON with exactly these keys:
@@ -132,6 +149,7 @@ Return JSON with exactly these keys:
         try:
             ok = (
                 norm(data["title_en"]) not in used
+                and norm_fa(data["title_fa"]) not in used_fa
                 and data.get("title_fa") and data.get("author_fa")
                 and len(data.get("outline_en", "")) > 800
             )
@@ -284,26 +302,41 @@ def probe_duration(path):
     return float(out.strip())
 
 
-def tts_edge(text, voice, out_mp3):
-    """Free Microsoft Edge neural voice (edge-tts). Retries a few times on network errors."""
-    import asyncio
-    import edge_tts
+_speakers = {}
 
-    async def run():
-        await edge_tts.Communicate(text, voice).save(str(out_mp3))
 
+def get_speaker(kind):
+    """Load the Pocket TTS Farsi v2 model once per voice (the weights download on first use)."""
+    if kind not in _speakers:
+        from sokhanvar import Sokhanvar
+        ref = REF_AUDIO[kind].resolve()
+        if not ref.exists():
+            raise RuntimeError(f"Reference voice file not found: {ref}")
+        cfg = WORK / f"azim_sokhanvar_{kind}.yaml"
+        cfg.write_text(
+            "backend: pocket_tts_farsi\n"
+            "model: mehdi-hf/pocket-tts-farsi-v2\n"
+            "language: fa\n"
+            f"reference_audio: {ref}\n"
+            f"output_dir: {(WORK / 'tts_out').resolve()}\n", encoding="utf-8")
+        _speakers[kind] = Sokhanvar.from_yaml(str(cfg))
+    return _speakers[kind]
+
+
+def tts_pocket(text, kind, out_wav):
+    """Pocket TTS Farsi v2 (offline, CPU). Retries a few times on errors."""
     last = None
-    for attempt in range(1, 6):
+    for attempt in range(1, 4):
         try:
-            asyncio.run(run())
-            if out_mp3.exists() and out_mp3.stat().st_size > 2000:
+            get_speaker(kind).synthesize(text, str(out_wav))
+            if out_wav.exists() and out_wav.stat().st_size > 2000:
                 return
             last = "empty audio file"
         except Exception as e:  # noqa: BLE001
             last = str(e)
         print(f"  TTS attempt {attempt} failed: {last}", flush=True)
-        time.sleep(5 * attempt)
-    raise RuntimeError(f"edge-tts failed: {last}")
+        time.sleep(3 * attempt)
+    raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
 TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse,"
@@ -311,14 +344,13 @@ TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,
 
 
 def make_voice(scenes, kind):
-    voice = VOICES[kind]
-    print(f"Voice: {voice} ({kind}), scenes: {len(scenes)}", flush=True)
+    print(f"Voice: Pocket TTS Farsi v2 ({kind}), scenes: {len(scenes)}", flush=True)
+    (WORK / "tts_out").mkdir(exist_ok=True)
     wavs = []
     for i, s in enumerate(scenes):
-        p = WORK / f"raw_{i:02d}.mp3"
-        tts_edge(s["narration_fa"].strip(), voice, p)
+        p = WORK / f"raw_{i:02d}.wav"
+        tts_pocket(s["narration_fa"].strip(), kind, p)
         wavs.append(p)
-        time.sleep(0.5)
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
     for i, p in enumerate(wavs):
@@ -329,7 +361,10 @@ def make_voice(scenes, kind):
     total = sum(d + PAD for d in raw)
     factor = 1.0
     if total > MAX_SECONDS:
-        factor = min(1.45, total / MAX_SECONDS * 1.02)
+        factor = total / MAX_SECONDS * 1.02
+        if factor > MAX_SPEED:
+            raise RuntimeError(
+                f"Narration too long ({total:.0f}s): needs speed x{factor:.2f}, above the x{MAX_SPEED} limit")
     print(f"voice total = {total:.1f}s, speed factor = {factor:.2f}", flush=True)
     durs = []
     for i, p in enumerate(trimmed):
@@ -346,8 +381,8 @@ def make_voice(scenes, kind):
 
 
 # ---------------------------------------------------------------- images
-CLEAN = ("clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, "
-         "no haze, no glow, no bloom, no blur, no soft focus, no film grain, no text, no letters, no watermark")
+# Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, pure illustration"
 
 
 def build_prompt(art, chars, scene):
@@ -427,10 +462,16 @@ def pollinations_image(prompt, path, seed):
     raise RuntimeError("Image generation failed")
 
 
-def make_image(prompt, path, seed):
-    if USE_CF and cf_image(prompt, path):
-        time.sleep(1)
-        return
+def make_image(prompt, path, seed, scenes_left):
+    """Try Cloudflare first. If it fails, fall back to Pollinations only when the time budget allows."""
+    if USE_CF:
+        if cf_image(prompt, path):
+            time.sleep(1)
+            return
+        print("WARNING: Cloudflare failed for this image, falling back to Pollinations (slow).", flush=True)
+    needed = (scenes_left + 1) * 50
+    if time.time() - START_TIME + needed > JOB_BUDGET:
+        raise RuntimeError("Not enough time left for slow image generation")
     pollinations_image(prompt, path, seed)
 
 
@@ -457,7 +498,9 @@ def build_video(scenes, durs, out_path):
         length = d + PAD
         frames = math.ceil(length * FPS)
         clip = WORK / f"clip_{i:02d}.mp4"
-        zoom = ("z='min(zoom+0.0004,1.12)'" if i % 2 == 0 else "z='if(eq(on,1),1.12,max(zoom-0.0004,1.0))'")
+        inc = 0.12 / max(frames, 1)    # zoom speed spread over the whole scene (no early stop)
+        zoom = (f"z='min(zoom+{inc:.6f},1.12)'" if i % 2 == 0
+                else f"z='if(eq(on,1),1.12,max(zoom-{inc:.6f},1.0))'")
         # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
         vf = ("scale=2560:1440:flags=lanczos:force_original_aspect_ratio=increase,crop=2560:1440,"
               "unsharp=5:5:0.6:5:5:0.0,"
@@ -491,6 +534,7 @@ def build_video(scenes, durs, out_path):
     style = ("FontName=Noto Sans Arabic,FontSize=22,PrimaryColour=&H00FFFFFF,"
              "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=28")
     # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
+    fits = False
     for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
         sh(["ffmpeg", "-y", "-loglevel", "error", "-i", "joined.mp4",
             "-vf", f"subtitles=subs.srt:force_style='{style}'",
@@ -498,7 +542,11 @@ def build_video(scenes, durs, out_path):
             "-maxrate", maxrate, "-bufsize", "1440k", "-c:a", "copy",
             "-movflags", "+faststart", out_path.name], cwd=WORK)
         if out_path.stat().st_size < 48 * 1024 * 1024:
+            fits = True
             break
+    if not fits:
+        raise RuntimeError(
+            f"Video is still {out_path.stat().st_size / 1e6:.1f} MB after the last attempt: too big for Telegram")
     return t
 
 
@@ -532,6 +580,7 @@ def main():
     scenes = script["scenes"]
     words = sum(len(s["narration_fa"].split()) for s in scenes)
     print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
+    (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
 
     kind = "female" if book["book_type"] in FEMALE_TYPES else "male"
     durs = make_voice(scenes, kind)
@@ -539,7 +588,15 @@ def main():
     seed = int(time.time()) % 100000
     for i, s in enumerate(scenes):
         prompt = build_prompt(script["art_style_en"], script.get("characters", []), s)
-        make_image(prompt, WORK / f"img_{i:02d}.jpg", seed + i)
+        img = WORK / f"img_{i:02d}.jpg"
+        try:
+            make_image(prompt, img, seed + i, len(scenes) - i - 1)
+        except Exception as e:  # noqa: BLE001
+            if i == 0:
+                raise
+            # one failed picture must not lose the whole video: reuse the previous picture
+            print(f"WARNING: image {i} failed ({e}); reusing the previous picture.", flush=True)
+            shutil.copy(WORK / f"img_{i - 1:02d}.jpg", img)
 
     final = WORK / "azim_final.mp4"
     total = build_video(scenes, durs, final)
