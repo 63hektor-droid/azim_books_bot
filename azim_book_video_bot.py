@@ -38,10 +38,10 @@ MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 
 if USE_CF:                # fast images -> long, detailed video
     MIN_SCENES, MAX_SCENES = 24, 28
-    WORDS = "850 to 1000"  # fits in the time limit with little or no speed-up
+    WORDS = "620 to 740"   # Pocket TTS speaks slowly: this fits in 8 minutes with no speed-up
 else:                     # slow free images (1 per 45 s) -> shorter video so the job does not time out
     MIN_SCENES, MAX_SCENES = 12, 14
-    WORDS = "450 to 550"
+    WORDS = "380 to 460"
 
 # ----- voices: Pocket TTS Farsi v2 via the "sokhanvar" library (free, offline, CPU).
 # Each voice is cloned from a reference recording of at most 5 seconds (WAV), placed next to this script.
@@ -166,7 +166,7 @@ Return JSON with exactly these keys:
 def write_scenes(book):
     """Step B: write the Persian narration and a visual storyboard from the outline."""
     for _ in range(4):
-        prompt = f"""You are a gifted Iranian writer and podcast host. Write the script of a video that summarizes the
+        prompt = f"""You are a gifted Iranian writer and radio host. Write the script of a video that summarizes the
 book "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience. Use ONLY the facts in this outline:
 
 {book['outline_en']}
@@ -179,7 +179,7 @@ Return JSON with exactly these keys:
 - "characters": a list of the recurring characters, each {{"name": "...", "look_en": "detailed fixed visual
   description in English: age, face, hair, clothes, colors"}}. Empty list if the book has no characters.
 - "scenes": a list of {MIN_SCENES} to {MAX_SCENES} objects, each with:
-    "narration_fa": 2-3 sentences of Persian narration (28-45 words) about ONE single idea or event,
+    "narration_fa": 3 short sentences of Persian narration (22-34 words) about ONE single idea or event,
     "characters_present": list of character names (from "characters") visible in the picture, may be empty,
     "setting_en": where the picture takes place (concrete place, time, light),
     "action_en": exactly what is happening in the picture: who is doing what,
@@ -204,6 +204,8 @@ Rules for the narration:
 - Write EVERYTHING in Persian script, with no English or Latin word at all, not even for names and titles. Use the
   Iranian forms: the book is «{book['title_fa']}» and the author is «{book['author_fa']}». Write other foreign names
   the common Iranian way (for example «الیزابت»، «دارسی»).
+- Never use English loanwords or words that sound English (for example «پادکست»، «ویدئو»، «آنلاین»، «لایک»،
+  «اپلیکیشن»، «استایل»): use the Persian word instead («برنامه»، «تصویر»...). Never say the video is a podcast.
 - Use everyday words that any listener understands at once. Avoid rare, archaic, heavy literary or Arabic words,
   long compound words, and slang borrowed from English. If a simple word exists, use it.
 - Do not quote the book at length; paraphrase.
@@ -245,11 +247,12 @@ Rewrite them so they are flawless, natural, elegant, engaging SPOKEN Persian, no
 - keep exactly the same number of items in the same order and keep each item's meaning and its information;
 - the closing wrap-up items at the end (they contain the word «جمع‌بندی») must stay a clear, complete conclusion
   and must keep the word «جمع‌بندی»;
-- each item 2-4 sentences, at most 45 words; every sentence at most 12 words; at most TWO consecutive ezafe
+- each item 2-4 sentences, at most 36 words; every sentence at most 12 words; at most TWO consecutive ezafe
   links in any noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase;
   smooth transitions between items; confident, warm, adult tone;
 - numbers as words, no Latin letters, no emojis, no brackets, no abbreviations;
-- no English or Latin word anywhere: replace each with its Persian translation or common Persian spelling;
+- no English or Latin word anywhere, and no English loanword (such as «پادکست»، «ویدئو»، «آنلاین»): replace each with a
+  plain Persian word;
 - replace any rare, archaic, heavy or hard-to-pronounce word with a simple everyday word every listener understands.
 Return JSON: {{"narration": [ ...the rewritten items... ]}}
 JSON: {json.dumps(texts, ensure_ascii=False)}"""
@@ -411,19 +414,45 @@ def text_variants(text):
     return out
 
 
+REPORT_FILE = ROOT / "azim_voice_report.txt"
+
+
+def note(msg):
+    """Print and keep a line in the voice report (uploaded as an artifact by the workflow)."""
+    print(msg, flush=True)
+    try:
+        with open(REPORT_FILE, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except OSError:
+        pass
+
+
+def suspicious(text, dur):
+    """A generation whose length does not fit its words is probably babble or cut speech."""
+    words = len(text.split())
+    if words < 6:
+        return False
+    per_word = dur / words
+    return per_word < 0.22 or per_word > 0.9
+
+
 def tts_try(text, kind, out_wav):
-    """Read one text with Pocket TTS. Tries 3 written forms and, for length-cap failures, 3 seeds."""
+    """Read one text with Pocket TTS. Tries 3 written forms; length-cap or odd-length results are retried with 3 seeds."""
     last = "unknown error"
     for variant in text_variants(text):
         for seed in SEEDS:
             try:
                 get_speaker(kind, seed).synthesize(variant, str(out_wav))
                 if out_wav.exists() and out_wav.stat().st_size > 2000:
-                    return
-                last = "empty audio file"
+                    dur = probe_duration(out_wav)
+                    if not suspicious(variant, dur):
+                        return
+                    last = f"length cap: suspicious duration {dur:.1f}s for {len(variant.split())} words"
+                else:
+                    last = "empty audio file"
             except Exception as e:  # noqa: BLE001
                 last = str(e)
-            print(f"  TTS failed (seed {seed}) for: {variant[:60]} -> {last[:90]}", flush=True)
+            note(f"  TTS rejected (seed {seed}): {variant[:60]} -> {last[:90]}")
             if "ezafe" in last:
                 raise RuntimeError(f"Pocket TTS failed: {last}")   # deterministic: other forms/seeds do not help
             if "length cap" not in last and "silence" not in last:
@@ -431,10 +460,10 @@ def tts_try(text, kind, out_wav):
     raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
-def rewrite_sentence(text):
+def rewrite_sentence(text, strong=False):
     """Ask Gemini to say the same thing in simpler, shorter sentences (used when the voice cannot read a sentence)."""
     prompt = f"""Rewrite this Persian sentence for a voice engine that cannot handle long noun chains.
-Keep exactly the same meaning and information. Use 1 or 2 short, simple sentences (each at most 10 words),
+Keep exactly the same meaning and information. Use {"2 to 3 very short sentences (each at most 6 words)" if strong else "1 or 2 short, simple sentences (each at most 10 words)"},
 spoken Iranian Persian, correct grammar and half-spaces. Avoid more than two consecutive ezafe links
 (noun of noun of noun), avoid commas inside noun phrases, no Latin letters, no digits, no brackets.
 Return JSON: {{"text": "..."}}
@@ -447,23 +476,25 @@ Sentence: {text}"""
         return None
 
 
-def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrite_ok=True):
-    """Whole text first; if it fails: sentences (with one simpler rewrite), then phrases, then word groups."""
+def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrites=2):
+    """Whole text first; if it fails: sentences (up to 2 simpler rewrites), then phrases, then word groups."""
     if not skip:
         try:
             tts_try(text, kind, out_wav)
             return [out_wav]
         except RuntimeError:
             pass
-    if level == 1 and rewrite_ok:
-        new = rewrite_sentence(text)
-        if new:
-            print(f"  Rewrote a sentence the voice could not read:\n    {text[:70]}\n -> {new[:70]}", flush=True)
+    if level == 1:
+        for k in range(rewrites):
+            new = rewrite_sentence(text)
+            if not new:
+                continue
+            note(f"  REWRITE: {text[:70]}\n        -> {new[:70]}")
             try:
-                return tts_pieces(new, kind, out_wav.with_name(out_wav.stem + "_rw.wav"),
-                                  level=0, rewrite_ok=False)
+                return tts_pieces(new, kind, out_wav.with_name(f"{out_wav.stem}_rw{k}.wav"),
+                                  level=0, rewrites=0)
             except RuntimeError:
-                pass
+                continue
     if level == 0:
         parts = [x.strip() for x in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if x.strip()]
     elif level == 1:
@@ -474,20 +505,23 @@ def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrite_ok=True):
             raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
         mid = (len(words) + 1) // 2
         parts = [" ".join(words[:mid]), " ".join(words[mid:])]
+        note(f"  SPLIT by words: {text[:60]}")
     if len(parts) <= 1:
         if level >= 2:
             raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
-        return tts_pieces(text, kind, out_wav, level + 1, skip=True, rewrite_ok=rewrite_ok)
+        return tts_pieces(text, kind, out_wav, level + 1, skip=True, rewrites=rewrites)
     files = []
     for j, part in enumerate(parts):
         files += tts_pieces(part, kind, out_wav.with_name(f"{out_wav.stem}_{level}{j}.wav"),
-                            level + 1, rewrite_ok=rewrite_ok)
+                            level + 1, rewrites=rewrites)
     return files
 
 
 def tts_text(text, kind, out_wav):
     """Whole scene. The library itself puts natural pauses between sentences; pieces are joined only on fallback."""
     files = tts_pieces(text, kind, out_wav)
+    if not files:
+        raise RuntimeError(f"Pocket TTS could not read this scene at all: {text[:80]}")
     if len(files) == 1:
         if files[0] != out_wav:
             shutil.copy(files[0], out_wav)
@@ -751,6 +785,8 @@ def main():
     words = sum(len(s["narration_fa"].split()) for s in scenes)
     print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
     (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    REPORT_FILE.write_text(f"Book: {book['title_en']}\n", encoding="utf-8")
 
     kind = "female" if book["book_type"] in FEMALE_TYPES else "male"
     durs = make_voice(scenes, kind)
