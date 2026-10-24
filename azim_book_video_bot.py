@@ -348,6 +348,63 @@ def tts_pocket(text, kind, out_wav):
     raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
+def split_chunks(text, max_words=12):
+    """Split a narration into short phrases (Pocket TTS fails on long ones)."""
+    parts = []
+    for sent in re.split(r"(?<=[.!?؟…])\s+", text.strip()):
+        pieces = [x.strip() for x in re.split(r"(?<=[،,;؛:])\s+", sent) if x.strip()]
+        for piece in pieces:
+            words = piece.split()
+            for i in range(0, len(words), max_words):
+                parts.append(" ".join(words[i:i + max_words]))
+    # merge very short pieces into the previous one
+    merged = []
+    for x in parts:
+        if merged and len(x.split()) < 3:
+            merged[-1] += " " + x
+        else:
+            merged.append(x)
+    return merged or [text.strip()]
+
+
+def tts_chunk(text, kind, out_wav, depth=0):
+    """One short phrase. If the model still fails, split it in half and try again."""
+    try:
+        tts_pocket(text, kind, out_wav)
+        return [out_wav]
+    except RuntimeError:
+        words = text.split()
+        if len(words) < 4 or depth >= 3:
+            raise
+        mid = len(words) // 2
+        a = out_wav.with_name(out_wav.stem + "a.wav")
+        b = out_wav.with_name(out_wav.stem + "b.wav")
+        return (tts_chunk(" ".join(words[:mid]), kind, a, depth + 1)
+                + tts_chunk(" ".join(words[mid:]), kind, b, depth + 1))
+
+
+def tts_text(text, kind, out_wav):
+    """Whole scene: short phrases are read one by one and joined with a short natural pause."""
+    files = []
+    for j, ch in enumerate(split_chunks(text)):
+        files += tts_chunk(ch, kind, out_wav.with_name(f"{out_wav.stem}_c{j:02d}.wav"))
+    cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+    labels = []
+    n = 0
+    for k, f in enumerate(files):
+        cmd += ["-i", str(f)]
+        labels.append(f"[{n}:a]aresample=24000,aformat=channel_layouts=mono[a{n}]")
+        n += 1
+        if k < len(files) - 1:
+            cmd += ["-f", "lavfi", "-t", "0.18", "-i", "anullsrc=r=24000:cl=mono"]
+            labels.append(f"[{n}:a]aresample=24000,aformat=channel_layouts=mono[a{n}]")
+            n += 1
+    ins = "".join(f"[a{i}]" for i in range(n))
+    fc = ";".join(labels) + f";{ins}concat=n={n}:v=0:a=1[out]"
+    cmd += ["-filter_complex", fc, "-map", "[out]", str(out_wav)]
+    sh(cmd)
+
+
 TRIM = ("silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse,"
         "silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB,areverse")
 
@@ -358,7 +415,7 @@ def make_voice(scenes, kind):
     wavs = []
     for i, s in enumerate(scenes):
         p = WORK / f"raw_{i:02d}.wav"
-        tts_pocket(s["narration_fa"].strip(), kind, p)
+        tts_text(s["narration_fa"].strip(), kind, p)
         wavs.append(p)
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
