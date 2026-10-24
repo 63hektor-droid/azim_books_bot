@@ -415,6 +415,7 @@ def text_variants(text):
 
 
 REPORT_FILE = ROOT / "azim_voice_report.txt"
+REWRITTEN = []            # (original sentence, spoken sentence) pairs, used to keep the subtitles equal to the voice
 
 
 def note(msg):
@@ -491,8 +492,10 @@ def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrites=2):
                 continue
             note(f"  REWRITE: {text[:70]}\n        -> {new[:70]}")
             try:
-                return tts_pieces(new, kind, out_wav.with_name(f"{out_wav.stem}_rw{k}.wav"),
-                                  level=0, rewrites=0)
+                files = tts_pieces(new, kind, out_wav.with_name(f"{out_wav.stem}_rw{k}.wav"),
+                                   level=0, rewrites=0)
+                REWRITTEN.append((text, new))
+                return files
             except RuntimeError:
                 continue
     if level == 0:
@@ -553,7 +556,10 @@ def make_voice(scenes, kind):
     wavs = []
     for i, s in enumerate(scenes):
         p = WORK / f"raw_{i:02d}.wav"
+        REWRITTEN.clear()
         tts_text(s["narration_fa"].strip(), kind, p)
+        for orig, spoken in REWRITTEN:
+            s["narration_fa"] = s["narration_fa"].replace(orig, spoken)
         wavs.append(p)
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
