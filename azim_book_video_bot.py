@@ -303,11 +303,13 @@ def probe_duration(path):
 
 
 _speakers = {}
+SEEDS = (42, 7, 123)      # a failed generation is retried with another seed
 
 
-def get_speaker(kind):
-    """Load the Pocket TTS Farsi v2 model once per voice (the weights download on first use)."""
-    if kind not in _speakers:
+def get_speaker(kind, seed=42):
+    """Load the Pocket TTS Farsi v2 model once per voice and seed (the weights download on first use)."""
+    key = (kind, seed)
+    if key not in _speakers:
         from sokhanvar import Sokhanvar
         ref = REF_AUDIO[kind].resolve()
         if not ref.exists():
@@ -321,24 +323,27 @@ def get_speaker(kind):
                 sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(flac), "-ac", "1", "-ar", "24000", str(ref)])
             except ImportError:
                 raise RuntimeError(f"Reference voice file not found: {ref}")
-        cfg = WORK / f"azim_sokhanvar_{kind}.yaml"
+        cfg = WORK / f"azim_sokhanvar_{kind}_{seed}.yaml"
         cfg.write_text(
             "backend: pocket_tts_farsi\n"
             "model: mehdi-hf/pocket-tts-farsi-v2\n"
             "language: fa\n"
             f"reference_audio: {ref}\n"
+            "reference_seconds: 5.0\n"
+            f"seed: {seed}\n"
+            "retries: 1\n"
             f"output_dir: {(WORK / 'tts_out').resolve()}\n", encoding="utf-8")
-        _speakers[kind] = Sokhanvar.from_yaml(str(cfg))
-    return _speakers[kind]
+        _speakers[key] = Sokhanvar.from_yaml(str(cfg))
+    return _speakers[key]
 
 
 def text_variants(text):
-    """The same phrase written in 3 safe ways. The model needs a final full stop to know where to end."""
+    """The same text written in 3 safe ways. The model needs a final full stop to know where to end."""
     base = " ".join(text.split())
     core = base.rstrip(" .،,;؛:!?؟…")
     v1 = core + "."                                                  # always ends with a full stop
     v2 = core.replace("\u200c", "") + "."                            # without half-spaces
-    v3 = re.sub(r"[،,;؛:!?؟…«»\"'()\-]", " ", v2.rstrip("."))        # without any punctuation inside
+    v3 = re.sub(r"[،,;؛:!?؟…«»\"'()\-]", " ", v2.rstrip("."))         # without punctuation inside
     v3 = " ".join(v3.split()) + "."
     out = []
     for v in (v1, v2, v3):
@@ -347,62 +352,54 @@ def text_variants(text):
     return out
 
 
-def tts_pocket(text, kind, out_wav):
-    """Pocket TTS Farsi v2 (offline, CPU). On failure the phrase is retried in a different written form."""
-    last = None
-    for attempt, variant in enumerate(text_variants(text), start=1):
-        try:
-            get_speaker(kind).synthesize(variant, str(out_wav))
-            if out_wav.exists() and out_wav.stat().st_size > 2000:
-                return
-            last = "empty audio file"
-        except Exception as e:  # noqa: BLE001
-            last = str(e)
-        print(f"  TTS attempt {attempt} failed for: {variant[:60]} -> {last[:80]}", flush=True)
-        time.sleep(1)
+def tts_try(text, kind, out_wav):
+    """Read one text with Pocket TTS. Tries 3 written forms and, for length-cap failures, 3 seeds."""
+    last = "unknown error"
+    for variant in text_variants(text):
+        for seed in SEEDS:
+            try:
+                get_speaker(kind, seed).synthesize(variant, str(out_wav))
+                if out_wav.exists() and out_wav.stat().st_size > 2000:
+                    return
+                last = "empty audio file"
+            except Exception as e:  # noqa: BLE001
+                last = str(e)
+            print(f"  TTS failed (seed {seed}) for: {variant[:60]} -> {last[:90]}", flush=True)
+            if "length cap" not in last and "silence" not in last:
+                break          # another seed does not help for this kind of error
     raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
-def split_chunks(text, max_words=12):
-    """Split a narration into short phrases (Pocket TTS fails on long ones)."""
-    parts = []
-    for sent in re.split(r"(?<=[.!?؟…])\s+", text.strip()):
-        pieces = [x.strip() for x in re.split(r"(?<=[،,;؛:])\s+", sent) if x.strip()]
-        for piece in pieces:
-            words = piece.split()
-            for i in range(0, len(words), max_words):
-                parts.append(" ".join(words[i:i + max_words]))
-    # merge very short pieces into the previous one
-    merged = []
-    for x in parts:
-        if merged and len(x.split()) < 3:
-            merged[-1] += " " + x
-        else:
-            merged.append(x)
-    return merged or [text.strip()]
-
-
-def tts_chunk(text, kind, out_wav, depth=0):
-    """One short phrase. If the model still fails, split it in half and try again."""
-    try:
-        tts_pocket(text, kind, out_wav)
-        return [out_wav]
-    except RuntimeError:
-        words = text.split()
-        if len(words) < 4 or depth >= 3:
-            raise
-        mid = len(words) // 2
-        a = out_wav.with_name(out_wav.stem + "a.wav")
-        b = out_wav.with_name(out_wav.stem + "b.wav")
-        return (tts_chunk(" ".join(words[:mid]), kind, a, depth + 1)
-                + tts_chunk(" ".join(words[mid:]), kind, b, depth + 1))
+def tts_pieces(text, kind, out_wav, level=0, skip=False):
+    """Whole text first; if it fails, sentence by sentence; then phrase by phrase."""
+    if not skip:
+        try:
+            tts_try(text, kind, out_wav)
+            return [out_wav]
+        except RuntimeError:
+            if level >= 2:
+                raise
+    if level == 0:
+        parts = [x.strip() for x in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if x.strip()]
+    else:
+        parts = [x.strip() for x in re.split(r"(?<=[،,;؛:])\s+", text.strip()) if x.strip()]
+    if len(parts) <= 1:
+        if level >= 1:
+            raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
+        return tts_pieces(text, kind, out_wav, level + 1, skip=True)
+    files = []
+    for j, part in enumerate(parts):
+        files += tts_pieces(part, kind, out_wav.with_name(f"{out_wav.stem}_{level}{j}.wav"), level + 1)
+    return files
 
 
 def tts_text(text, kind, out_wav):
-    """Whole scene: short phrases are read one by one and joined with a short natural pause."""
-    files = []
-    for j, ch in enumerate(split_chunks(text)):
-        files += tts_chunk(ch, kind, out_wav.with_name(f"{out_wav.stem}_c{j:02d}.wav"))
+    """Whole scene. The library itself puts natural pauses between sentences; pieces are joined only on fallback."""
+    files = tts_pieces(text, kind, out_wav)
+    if len(files) == 1:
+        if files[0] != out_wav:
+            shutil.copy(files[0], out_wav)
+        return
     cmd = ["ffmpeg", "-y", "-loglevel", "error"]
     labels = []
     n = 0
@@ -411,7 +408,7 @@ def tts_text(text, kind, out_wav):
         labels.append(f"[{n}:a]aresample=24000,aformat=channel_layouts=mono[a{n}]")
         n += 1
         if k < len(files) - 1:
-            cmd += ["-f", "lavfi", "-t", "0.18", "-i", "anullsrc=r=24000:cl=mono"]
+            cmd += ["-f", "lavfi", "-t", "0.2", "-i", "anullsrc=r=24000:cl=mono"]
             labels.append(f"[{n}:a]aresample=24000,aformat=channel_layouts=mono[a{n}]")
             n += 1
     ins = "".join(f"[a{i}]" for i in range(n))
