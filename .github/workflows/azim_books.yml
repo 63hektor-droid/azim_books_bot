@@ -1,50 +1,65 @@
-name: Azim Books
+name: azim-book-video
 
 on:
-  schedule:
-    # Iran time (UTC+3:30): 08:00, 10:00, 13:00, 17:00, 21:00
-    - cron: "30 4,6,9,13,17 * * *"
   workflow_dispatch:
+  schedule:
+    # Iran time (UTC+3:30): 08:00, 11:00, 15:00, 18:00, 21:00
+    - cron: "30 4,7,11,14,17 * * *"
 
 permissions:
   contents: write
 
 concurrency:
-  group: azim-books
+  group: azim-book-video
   cancel-in-progress: false
 
 jobs:
-  post:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install tools
+      - name: System packages (ffmpeg + Arabic font for subtitles)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-noto-core
-          fc-cache -f
-          pip install -r azim_requirements.txt
 
-      - name: Make and send video
+      - name: Cache Pocket TTS model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: azim-pocket-tts-farsi-v2
+
+      - name: Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          pip install "sokhanvar[pocket] @ git+https://github.com/tavallaie/sokhanvar.git" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Check reference voice files
+        run: |
+          test -f azim_voice_female.wav || { echo "azim_voice_female.wav is missing"; exit 1; }
+          test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
+
+      - name: Make the video and post it
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: python azim_books_bot.py
+        run: python azim_book_video_bot.py
 
-      - name: Save list of posted books
+      - name: Save the list of posted books
         run: |
-          git config user.name "azim-bot"
-          git config user.email "azim-bot@users.noreply.github.com"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
           git add azim_posted.json
-          git commit -m "posted book" || exit 0
-          git pull --rebase
+          git diff --cached --quiet || git commit -m "azim: update posted books"
           git push
