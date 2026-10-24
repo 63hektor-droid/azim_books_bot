@@ -58,6 +58,16 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: python azim_book_video_bot.py
 
+      - name: Save the voice report and script (for checking)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azim-voice-report
+          path: |
+            azim_voice_report.txt
+            azim_last_script.json
+          if-no-files-found: ignore
+
       - name: Save the list of posted books
         run: |
           git config user.name "github-actions"
