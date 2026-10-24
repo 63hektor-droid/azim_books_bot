@@ -42,10 +42,12 @@ jobs:
           pip install "sokhanvar[pocket] @ git+https://github.com/tavallaie/sokhanvar.git" \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
-      - name: Check reference voice files
+      - name: Check reference voices
         run: |
-          test -f azim_voice_female.wav || { echo "azim_voice_female.wav is missing"; exit 1; }
-          test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
+          if [ ! -f azim_voices_data.py ]; then
+            test -f azim_voice_female.wav || { echo "azim_voice_female.wav is missing"; exit 1; }
+            test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
+          fi
 
       - name: Make the video and post it
         env:
