@@ -195,6 +195,9 @@ Rules for the narration:
   Persian word «جمع‌بندی» (for example «در جمع‌بندی») and restate the book's central message and its main
   takeaways in order; the very last sentence of the video is a memorable closing sentence.
 - Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
+- The voice engine is fragile with long noun chains, so: every sentence at most 12 words; at most TWO
+  consecutive ezafe links in a noun phrase (never "noun of noun of noun of noun"); prefer verbs and simple
+  clauses over long genitive chains; no comma inside a noun phrase; use 3 or 4 short sentences per scene.
 - Natural, fluent, elegant SPOKEN Iranian Persian, like a skilled podcast host. Not a literal translation.
   Correct grammar and spelling, proper half-spaces. Mix short and medium sentences; no childish tone.
 - It will be read aloud: write numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
@@ -236,7 +239,9 @@ Rewrite them so they are flawless, natural, elegant, engaging SPOKEN Persian, no
 - keep exactly the same number of items in the same order and keep each item's meaning and its information;
 - the closing wrap-up items at the end (they contain the word «جمع‌بندی») must stay a clear, complete conclusion
   and must keep the word «جمع‌بندی»;
-- each item 2-3 sentences, at most 45 words; smooth transitions between items; confident, warm, adult tone;
+- each item 2-4 sentences, at most 45 words; every sentence at most 12 words; at most TWO consecutive ezafe
+  links in any noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase;
+  smooth transitions between items; confident, warm, adult tone;
 - numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
 Return JSON: {{"narration": [ ...the rewritten items... ]}}
 JSON: {json.dumps(texts, ensure_ascii=False)}"""
@@ -366,36 +371,64 @@ def tts_try(text, kind, out_wav):
             except Exception as e:  # noqa: BLE001
                 last = str(e)
             print(f"  TTS failed (seed {seed}) for: {variant[:60]} -> {last[:90]}", flush=True)
+            if "ezafe" in last:
+                raise RuntimeError(f"Pocket TTS failed: {last}")   # deterministic: other forms/seeds do not help
             if "length cap" not in last and "silence" not in last:
                 break          # another seed does not help for this kind of error
     raise RuntimeError(f"Pocket TTS failed: {last}")
 
 
-def tts_pieces(text, kind, out_wav, level=0, skip=False):
-    """Whole text first; if it fails: sentences, then phrases (commas), then smaller and smaller word groups."""
+def rewrite_sentence(text):
+    """Ask Gemini to say the same thing in simpler, shorter sentences (used when the voice cannot read a sentence)."""
+    prompt = f"""Rewrite this Persian sentence for a voice engine that cannot handle long noun chains.
+Keep exactly the same meaning and information. Use 1 or 2 short, simple sentences (each at most 10 words),
+spoken Iranian Persian, correct grammar and half-spaces. Avoid more than two consecutive ezafe links
+(noun of noun of noun), avoid commas inside noun phrases, no Latin letters, no digits, no brackets.
+Return JSON: {{"text": "..."}}
+Sentence: {text}"""
+    try:
+        out = gemini_json(prompt, minutes=3, models=WRITE_MODELS).get("text", "").strip()
+        return out if out and out != text else None
+    except Exception as e:  # noqa: BLE001
+        print("Rewrite skipped:", e, flush=True)
+        return None
+
+
+def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrite_ok=True):
+    """Whole text first; if it fails: sentences (with one simpler rewrite), then phrases, then word groups."""
     if not skip:
         try:
             tts_try(text, kind, out_wav)
             return [out_wav]
         except RuntimeError:
             pass
+    if level == 1 and rewrite_ok:
+        new = rewrite_sentence(text)
+        if new:
+            print(f"  Rewrote a sentence the voice could not read:\n    {text[:70]}\n -> {new[:70]}", flush=True)
+            try:
+                return tts_pieces(new, kind, out_wav.with_name(out_wav.stem + "_rw.wav"),
+                                  level=0, rewrite_ok=False)
+            except RuntimeError:
+                pass
     if level == 0:
         parts = [x.strip() for x in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if x.strip()]
     elif level == 1:
         parts = [x.strip() for x in re.split(r"(?<=[،,;؛:])\s+", text.strip()) if x.strip()]
     else:
         words = text.split()
-        if len(words) <= 2:
+        if len(words) <= 1:
             raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
         mid = (len(words) + 1) // 2
         parts = [" ".join(words[:mid]), " ".join(words[mid:])]
     if len(parts) <= 1:
         if level >= 2:
             raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
-        return tts_pieces(text, kind, out_wav, level + 1, skip=True)
+        return tts_pieces(text, kind, out_wav, level + 1, skip=True, rewrite_ok=rewrite_ok)
     files = []
     for j, part in enumerate(parts):
-        files += tts_pieces(part, kind, out_wav.with_name(f"{out_wav.stem}_{level}{j}.wav"), level + 1)
+        files += tts_pieces(part, kind, out_wav.with_name(f"{out_wav.stem}_{level}{j}.wav"),
+                            level + 1, rewrite_ok=rewrite_ok)
     return files
 
 
