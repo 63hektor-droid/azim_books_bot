@@ -330,6 +330,7 @@ def get_speaker(kind, seed=42):
             "language: fa\n"
             f"reference_audio: {ref}\n"
             "reference_seconds: 5.0\n"
+            "eos_threshold: -4.0\n"
             f"seed: {seed}\n"
             "retries: 1\n"
             f"output_dir: {(WORK / 'tts_out').resolve()}\n", encoding="utf-8")
@@ -371,20 +372,25 @@ def tts_try(text, kind, out_wav):
 
 
 def tts_pieces(text, kind, out_wav, level=0, skip=False):
-    """Whole text first; if it fails, sentence by sentence; then phrase by phrase."""
+    """Whole text first; if it fails: sentences, then phrases (commas), then smaller and smaller word groups."""
     if not skip:
         try:
             tts_try(text, kind, out_wav)
             return [out_wav]
         except RuntimeError:
-            if level >= 2:
-                raise
+            pass
     if level == 0:
         parts = [x.strip() for x in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if x.strip()]
-    else:
+    elif level == 1:
         parts = [x.strip() for x in re.split(r"(?<=[،,;؛:])\s+", text.strip()) if x.strip()]
+    else:
+        words = text.split()
+        if len(words) <= 2:
+            raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
+        mid = (len(words) + 1) // 2
+        parts = [" ".join(words[:mid]), " ".join(words[mid:])]
     if len(parts) <= 1:
-        if level >= 1:
+        if level >= 2:
             raise RuntimeError(f"Pocket TTS could not read: {text[:80]}")
         return tts_pieces(text, kind, out_wav, level + 1, skip=True)
     files = []
