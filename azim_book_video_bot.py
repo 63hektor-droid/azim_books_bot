@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 from datetime import date
@@ -32,6 +33,9 @@ VOICE_PREP = os.environ.get("AZIM_VOICE_PREP", "1") != "0"
 
 ROOT = Path(__file__).parent
 POSTED_FILE = ROOT / "azim_posted.json"
+BOOKS_FILE = ROOT / "azim_books_list.json"        # 2000 novels, built once by azim_make_booklist.py
+REJECTED_FILE = ROOT / "azim_rejected.json"       # books that can never be used (no source / blocked)
+PENDING_FILE = ROOT / "azim_pending.json"         # finished script of a run that failed later: resumed next run
 WORK = ROOT / "azim_work"
 
 START_TIME = time.time()
@@ -40,7 +44,7 @@ JOB_BUDGET = 340 * 60     # seconds; GitHub Actions default job limit is 360 min
 W, H = 1280, 720
 FPS = 25
 PAD = 0.25                # pause after each scene (seconds)
-TOTAL_BOOKS = 10000
+TOTAL_BOOKS = 2000              # only novels
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 SUB_FONT_SIZE = 23        # subtitle size (was 22)
@@ -52,7 +56,7 @@ REF_AUDIO = {
     "female": Path(os.environ.get("AZIM_REF_FEMALE", Path(__file__).parent / "azim_voice_female.wav")),
     "male": Path(os.environ.get("AZIM_REF_MALE", Path(__file__).parent / "azim_voice_male.wav")),
 }
-FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
+# The voice alternates: one video with the female voice, the next with the male voice (all books are novels).
 
 DIAC = re.compile(r"[\u064B-\u0652\u0670]")   # Persian/Arabic short-vowel marks (fatha, kasra, damma, shadda, sukun...)
 
@@ -81,7 +85,35 @@ def has_wrapup(scenes):
 
 
 # ---------------------------------------------------------------- Gemini text
-def gemini_json(prompt, minutes=12, models=None, image=None):
+class GeminiBlocked(RuntimeError):
+    """Gemini refused the prompt (content/safety block): the same book would fail again."""
+
+
+class GeminiQuotaExhausted(RuntimeError):
+    """The DAILY quota of every model is finished: stop quickly instead of waiting for nothing."""
+
+
+DEAD_MODELS = set()      # models whose daily quota is finished (not tried again in this run)
+SAFETY = [{"category": c, "threshold": "BLOCK_ONLY_HIGH"} for c in (
+    "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT")]
+BLOCK_FINISH = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY"}
+
+
+def short_error(text):
+    """A short readable summary of a Gemini error body (message + which quota + retry time)."""
+    ids = re.findall(r'"quotaId":\s*"([^"]+)"', text)
+    delay = re.findall(r'"retryDelay":\s*"([^"]+)"', text)
+    msg = re.findall(r'"message":\s*"([^"]{0,160})', text)
+    out = [msg[0] if msg else text[:160]]
+    if ids:
+        out.append("quota: " + ", ".join(sorted(set(ids))))
+    if delay:
+        out.append("retry in " + delay[0])
+    return " | ".join(out)
+
+
+def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150):
     parts = [{"text": prompt}]
     if image is not None:
         parts.insert(0, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(image).decode()}})
@@ -89,68 +121,137 @@ def gemini_json(prompt, minutes=12, models=None, image=None):
         "contents": [{"parts": parts}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
     }
+    if os.environ.get("AZIM_GEMINI_SAFETY", "relaxed") != "default":
+        body["safetySettings"] = SAFETY       # fewer false blocks on the plots of famous novels
     headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
     models = models or [GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"]
-    dead = set()
+    dead = set()          # not usable at all (400/404)
+    blocked = set()       # models that blocked this prompt
     deadline = time.time() + minutes * 60
     last = None
     round_no = 0
-    while time.time() < deadline and len(dead) < len(models):
+    while time.time() < deadline:
+        alive = [m for m in models if m not in dead and m not in DEAD_MODELS]
+        if not alive:
+            if any(m in DEAD_MODELS for m in models):
+                raise GeminiQuotaExhausted(last or "daily quota finished")
+            break
         round_no += 1
-        for model in models:
-            if model in dead or time.time() >= deadline:
-                continue
+        for model in alive:
+            if time.time() >= deadline:
+                break
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 print(f"Gemini: round={round_no} model={model}", flush=True)
-                r = requests.post(url, headers=headers, json=body, timeout=(30, 240))
+                r = requests.post(url, headers=headers, json=body, timeout=(30, read_timeout))
                 if r.status_code == 200:
-                    text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    data = json.loads(text)
-                    if isinstance(data, list):
-                        data = data[0]
-                    print(f"Gemini OK with {model}", flush=True)
-                    return data
-                last = f"{model}: {r.status_code} {r.text[:200]}"
-                print(last, flush=True)
-                if r.status_code in (400, 404) or (r.status_code == 429 and "limit: 0" in r.text):
-                    dead.add(model)
+                    j = r.json()
+                    cands = j.get("candidates") or []
+                    text = ""
+                    if cands:
+                        pts = (cands[0].get("content") or {}).get("parts") or []
+                        text = "".join(p.get("text", "") for p in pts)
+                    if text.strip():
+                        data = json.loads(text)
+                        if isinstance(data, list):
+                            data = data[0]
+                        print(f"Gemini OK with {model}", flush=True)
+                        return data
+                    block = (j.get("promptFeedback") or {}).get("blockReason", "")
+                    finish = cands[0].get("finishReason", "") if cands else ""
+                    last = f"{model}: empty answer (blockReason={block or '-'}, finishReason={finish or '-'})"
+                    print(last, flush=True)
+                    if block or finish in BLOCK_FINISH:
+                        blocked.add(model)
+                        if len(blocked) >= min(2, len(models)):
+                            raise GeminiBlocked(last)
+                else:
+                    last = f"{model}: {r.status_code} {short_error(r.text)}"
+                    print(last, flush=True)
+                    if r.status_code == 429 and ("PerDay" in r.text or "limit: 0" in r.text):
+                        DEAD_MODELS.add(model)
+                        print(f"  -> the daily quota of {model} is finished: not used again in this run.", flush=True)
+                        continue
+                    if r.status_code in (400, 404):
+                        dead.add(model)
+            except GeminiBlocked:
+                raise
             except Exception as e:  # noqa: BLE001
                 last = f"{model}: {e}"
                 print(last, flush=True)
             time.sleep(8)
+        if not [m for m in models if m not in dead and m not in DEAD_MODELS]:
+            continue                      # nothing left to wait for: the loop start decides what to raise
         time.sleep(min(30 * round_no, 120))
     raise RuntimeError(f"Gemini failed: {last}")
 
 
 WRITE_MODELS = ["gemini-pro-latest", GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"]
-CHECK_MODELS = ["gemini-flash-latest", GEMINI_MODEL, "gemini-flash-lite-latest"]
+# cheap jobs (picture check, simple rewrites) go to the lite model first: every model has its own quota
+CHEAP_MODELS = ["gemini-flash-lite-latest", GEMINI_MODEL, "gemini-flash-latest"]
 
 
 # ---------------------------------------------------------------- the book and its reliable source
+def load_json(path, default):
+    try:
+        return json.loads(path.read_text("utf-8")) if path.exists() else default
+    except Exception as e:  # noqa: BLE001
+        print(f"Could not read {path.name}: {e}", flush=True)
+        return default
+
+
+def save_json(path, obj):
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def rejected_titles(rejected):
+    return [r["title_en"] if isinstance(r, dict) else str(r) for r in rejected]
+
+
+def reject_book(rejected, book, reason):
+    """A book that can never work (no Wikipedia source, blocked by Gemini...) is never chosen again."""
+    rejected.append({"title_en": book["title_en"], "reason": str(reason)[:200], "date": date.today().isoformat()})
+    save_json(REJECTED_FILE, rejected)
+    print(f"Book rejected for good: {book['title_en']} ({str(reason)[:120]})", flush=True)
+
+
 def pick_book(posted, rejected):
-    """Step A: choose a new famous book. Only its name and details: the content comes from Wikipedia."""
-    used = {norm(p["title_en"]) for p in posted} | {norm(x) for x in rejected}
+    """Step A: the next novel of azim_books_list.json (ordered by fame). Without that file Gemini picks a novel."""
+    used = {norm(p["title_en"]) for p in posted} | {norm(x) for x in rejected_titles(rejected)}
     used_fa = {norm_fa(p["title_fa"]) for p in posted if p.get("title_fa")}
-    all_titles = [p["title_en"] for p in posted] + list(rejected)
+    listed = load_json(BOOKS_FILE, [])
+    if isinstance(listed, dict):
+        listed = listed.get("books", [])
+    if listed:
+        for b in listed:
+            try:
+                if norm(b["title_en"]) in used or norm_fa(b["title_fa"]) in used_fa:
+                    continue
+                return {"title_en": b["title_en"], "title_fa": b["title_fa"],
+                        "author_en": b["author_en"], "author_fa": b["author_fa"],
+                        "wikipedia_title_en": b.get("wiki_en", ""), "wikipedia_title_fa": b.get("wiki_fa", ""),
+                        "book_type": "novel"}
+            except (KeyError, TypeError):
+                continue
+        raise RuntimeError("Every novel of azim_books_list.json is used or rejected")
+    print("azim_books_list.json not found: Gemini picks the novel (slower, uses quota).", flush=True)
+    all_titles = [p["title_en"] for p in posted] + rejected_titles(rejected)
     number = len(posted) + 1
     for _ in range(4):
-        prompt = f"""You are the editor of a Persian channel that summarizes the most famous books in the world.
-This is video number {number} of {TOTAL_BOOKS}. Choose ONE very famous, world-renowned book that is NOT in
+        prompt = f"""You are the editor of a Persian channel that summarizes the most famous novels in the world.
+This is video number {number} of {TOTAL_BOOKS}. Choose ONE very famous, world-renowned NOVEL that is NOT in
 this already-used list: {json.dumps(all_titles, ensure_ascii=False)}.
-Pick the most famous remaining ones first (world classics, global bestsellers, books everybody knows).
-Prefer a book whose English Wikipedia article has a detailed "Plot", "Synopsis", "Summary" or "Contents" section.
+Pick the most famous remaining ones first (world classics, global bestsellers, novels everybody knows).
+Prefer a novel whose English Wikipedia article has a detailed "Plot" or "Synopsis" section.
 
 Return JSON with exactly these keys:
 - "title_en": English title
 - "title_fa": Persian title (the form commonly used in Iran)
 - "author_en": author name in English
 - "author_fa": author name in Persian
-- "wikipedia_title_en": the exact title of the English Wikipedia article about the book
-- "wikipedia_title_fa": the exact title of the Persian Wikipedia article about the book, or "" if you are not sure
-- "book_type": one of "novel", "psychology", "other"
-    (novel = fiction/novels, psychology = psychology books, other = everything else)"""
-        data = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
+- "wikipedia_title_en": the exact title of the English Wikipedia article about the novel
+- "wikipedia_title_fa": the exact title of the Persian Wikipedia article about the novel, or "" if you are not sure"""
+        data = gemini_json(prompt, minutes=8, models=CHEAP_MODELS)
         try:
             ok = (
                 norm(data["title_en"]) not in used
@@ -160,11 +261,10 @@ Return JSON with exactly these keys:
         except Exception:  # noqa: BLE001
             ok = False
         if ok:
-            if data.get("book_type") not in ("novel", "psychology", "other"):
-                data["book_type"] = "other"
+            data["book_type"] = "novel"
             return data
         time.sleep(5)
-    raise RuntimeError("Could not get a valid new book from Gemini")
+    raise RuntimeError("Could not get a valid new novel from Gemini")
 
 
 WIKI_HEADERS = {"User-Agent": "azim-book-video-bot/1.0 (educational book summaries; GitHub Actions)"}
@@ -316,7 +416,7 @@ def write_scenes(book, src, plan):
     min_sc, max_sc, words = plan
     for _ in range(4):
         prompt = f"""You are a gifted Iranian writer and radio host. Write the script of a video that summarizes the
-book "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience.
+novel "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience.
 
 Use ONLY the facts in the SOURCE TEXT below (taken from Wikipedia). Never add a fact, name, date, number,
 quote or opinion that is not in the source. If the source says nothing about something, say nothing about it.
@@ -388,97 +488,104 @@ Rules for the visuals:
             data.setdefault("characters", [])
             if not has_wrapup(data["scenes"]):
                 continue
-            data = polish(data)
+            data = review_script(data, book, src)       # ONE call: facts + wording/tone + voice text
             data = sanitize_narration(data, book)
-            data = verify_facts(data, book, src)
-            data = sanitize_narration(data, book)
-            data = prepare_spoken(data, book)
             return align_visuals(data, book)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
 
 
-def polish(data):
-    """Step C: a strict Persian editor improves the wording only (skipped if it fails)."""
-    texts = [s["narration_fa"] for s in data["scenes"]]
-    prompt = f"""You are a senior Persian (Iranian) editor and radio narrator.
-Below is a JSON list of Persian narration paragraphs for one video; a voice will read them aloud, in order.
-Improve ONLY the wording so it is flawless, natural, elegant SPOKEN Persian, not a literal translation.
-Do NOT add, remove or change any fact, name, number or idea; do not add new sentences.
-- fix grammar, word choice, awkward phrasing and spelling; use proper half-spaces;
-- keep exactly the same number of items in the same order and keep each item's meaning and its information;
-- the closing wrap-up items at the end (they contain the word «جمع‌بندی») must stay a clear, complete conclusion
-  and must keep the word «جمع‌بندی»;
-- each item 2-4 sentences, at most 36 words; every sentence at most 12 words; at most TWO consecutive ezafe
-  links in any noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase;
-  smooth transitions between items;
-{TONE_RULES}
-- numbers as words, no Latin letters, no emojis, no brackets, no abbreviations;
-- no English or Latin word anywhere, and no English loanword (such as «پادکست»، «ویدئو»، «آنلاین»): replace each with a
-  plain Persian word;
-- replace any rare, archaic, heavy or hard-to-pronounce word with a simple everyday word every listener understands.
-Return JSON: {{"narration": [ ...the rewritten items... ]}}
-JSON: {json.dumps(texts, ensure_ascii=False)}"""
-    try:
-        new = gemini_json(prompt, minutes=6, models=WRITE_MODELS)["narration"]
-        if len(new) == len(texts) and all(isinstance(x, str) and x.strip() for x in new):
-            check = [{"narration_fa": x} for x in new]
-            if has_wrapup(check):
-                for s, t in zip(data["scenes"], new):
-                    s["narration_fa"] = t.strip()
-                print("Narration polished.", flush=True)
-            else:
-                print("Polish dropped the wrap-up word: kept the original narration.", flush=True)
-    except Exception as e:  # noqa: BLE001
-        print("Polish skipped:", e, flush=True)
-    return data
+def valid_spoken(txt, plain):
+    """The voice-only text must be the same text (same sentences, similar length), with no Latin letters or digits."""
+    if not txt or LATIN.search(txt) or DIGITS.search(txt):
+        return False
+    plain_len = max(len(plain), 1)
+    new_len = len(DIAC.sub("", txt))
+    if not (0.8 * plain_len <= new_len <= 1.35 * plain_len):
+        return False
+    return len(split_sentences(txt)) == len(split_sentences(plain))
 
 
-def verify_facts(data, book, src):
-    """Step C2: a fact checker compares every paragraph with the source and fixes or drops unsupported claims."""
+def review_script(data, book, src):
+    """Step C (ONE Gemini call instead of three): fact check + wording/tone polish + the voice-only text.
+    "narration_fa" is shown as subtitle; "spoken_fa" (diacritics on ambiguous words, phonetic foreign names)
+    is only read by the voice. If the call fails, the original narration is kept."""
     scenes = data["scenes"]
     items = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
-    prompt = f"""You are a strict fact checker. SOURCE TEXT (the only truth):
+    prompt = f"""You are, at the same time, a strict fact checker, a senior Persian (Iranian) editor and a pronunciation
+editor for a text-to-speech voice.
+
+SOURCE TEXT (the only truth):
 {src['text']}
 
-Below are Persian narration paragraphs of a video about the book "{book['title_en']}". For EACH paragraph decide if
-every fact, name, number and claim in it is supported by the SOURCE TEXT.
-A paragraph is NOT ok if it contains a fact, name, date, number, quote or interpretation that is not in the source,
-a wrong fact, or filler that carries no information.
-Return JSON {{"results": [{{"i": 0, "ok": true, "fixed": ""}}, ...]}} with one item per paragraph, in order.
-For a paragraph that is not ok, put in "fixed" the same paragraph rewritten in Persian so that it keeps only the
-supported facts (same spoken style, 2-4 short sentences, no Latin letters, no digits). If nothing supported
-remains, put "" in "fixed". Keep the word «جمع‌بندی» in a paragraph that contains it.
+Below are Persian narration paragraphs, in order, of a video about the novel "{book['title_en']}". A voice reads them
+aloud. For EACH paragraph return two texts.
+
+A) "narration_fa" (also shown as the subtitle)
+1. FACTS: keep only what the SOURCE TEXT supports. Remove or fix every fact, name, date, number, quote or interpretation
+   that is not in the source, every wrong fact, and every sentence that is filler without information. If nothing
+   supported remains, return "" for both texts of that paragraph.
+2. WORDING: improve the wording only (grammar, word choice, awkward phrasing, spelling, half-spaces). Do NOT add new
+   facts and do NOT add new sentences. Keep the order and the number of paragraphs.
+{TONE_RULES}
+   Each paragraph 2-4 sentences, at most 36 words; every sentence at most 12 words; at most TWO consecutive ezafe links
+   in a noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase.
+   Numbers as words, no Latin letters, no emojis, no brackets, no abbreviations, no English loanword; replace rare,
+   archaic or heavy words with simple everyday words. A paragraph that contains the word «جمع‌بندی» must keep it and
+   stay a clear conclusion.
+
+B) "spoken_fa" (read by the voice only, never shown): exactly the same final text as "narration_fa", prepared so the
+voice cannot misread it:
+1. Same words, same sentences, same order. Add nothing, remove nothing, reword nothing.
+2. Put short-vowel marks (فتحه، کسره، ضمه، تشدید) ONLY on words whose reading is ambiguous or often misread, such as
+   «کِشت / کُشت»، «مَرد / مُرد»، «گُل / گِل»، «بَرد / بُرد»، «عِلم / عَلَم»، «دَر / دُر»، «پُر / پِر»، «کُرد / کَرد».
+   Never mark clear, common words: too many marks make the voice sound broken.
+3. Ezafe (the «-e» link between two words): mark it with a kasra only when the voice could miss or misread it.
+4. Foreign names (people, places) and the novel's title: spell them exactly the way an Iranian says them aloud, in
+   Persian letters with the needed vowel marks, and keep the SAME spelling in every paragraph.
+5. Keep all punctuation and the final full stop of every sentence. Keep half-spaces. No Latin letters, no digits.
+
+The novel is «{book['title_fa']}» by «{book['author_fa']}».
+Return JSON {{"results": [{{"i": 0, "narration_fa": "...", "spoken_fa": "..."}}, ...]}}, one item per paragraph, in order.
 Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
+    for s in scenes:
+        s["spoken_fa"] = s["narration_fa"]
     try:
-        res = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["results"]
+        res = gemini_json(prompt, minutes=10, models=WRITE_MODELS)["results"]
         by_i = {int(r["i"]): r for r in res}
-        before = [s["narration_fa"] for s in scenes]
+        originals = [dict(s) for s in scenes]
         keep = []
-        fixed_n = dropped_n = 0
+        edited = dropped = spoken_ok = 0
         for i, s in enumerate(scenes):
             r = by_i.get(i)
-            if not r or r.get("ok", True):
+            if not r or not isinstance(r.get("narration_fa"), str):
                 keep.append(s)
                 continue
-            fx = (r.get("fixed") or "").strip()
-            if fx:
-                s["narration_fa"] = fx
-                keep.append(s)
-                fixed_n += 1
+            txt = " ".join(r["narration_fa"].replace("ي", "ی").replace("ك", "ک").split())
+            if not txt:
+                dropped += 1
+                continue
+            if txt != s["narration_fa"]:
+                edited += 1
+            s["narration_fa"] = txt
+            sp = " ".join(str(r.get("spoken_fa", "")).replace("ي", "ی").replace("ك", "ک").split())
+            if valid_spoken(sp, txt):
+                s["spoken_fa"] = sp
+                spoken_ok += 1
             else:
-                dropped_n += 1
-        if len(keep) >= 8:
+                s["spoken_fa"] = txt
+            keep.append(s)
+        if len(keep) >= 8 and has_wrapup(keep):
             data["scenes"] = keep
-            if not has_wrapup(data["scenes"]):          # never lose the closing wrap-up
-                data["scenes"] = scenes
-                for s, old in zip(scenes, before):
-                    s["narration_fa"] = old
-                print("Fact check would remove the wrap-up: kept the previous narration.", flush=True)
-            else:
-                print(f"Fact check: {fixed_n} paragraph(s) fixed, {dropped_n} dropped.", flush=True)
+            print(f"Review: {edited} paragraph(s) edited, {dropped} dropped, voice text ready for "
+                  f"{spoken_ok}/{len(keep)}.", flush=True)
+        else:
+            data["scenes"] = originals
+            print("Review would remove too much or the wrap-up: kept the original narration.", flush=True)
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
     except Exception as e:  # noqa: BLE001
-        print("Fact check skipped:", e, flush=True)
+        print("Review skipped:", e, flush=True)
     return data
 
 
@@ -486,7 +593,7 @@ LATIN = re.compile(r"[A-Za-z]")
 DIGITS = re.compile(r"[0-9\u06f0-\u06f9]")
 
 
-def sanitize_narration(data, book):
+def _sanitize_core(data, book):
     """Make sure the narration has no English/Latin words and no digits (the voice reads them badly)."""
     scenes = data["scenes"]
     for sc in scenes:
@@ -510,7 +617,7 @@ Use everyday words that every listener understands.
 Return JSON: {{"fixed": [{{"i": 0, "narration_fa": "..."}}, ...]}}
 Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
         try:
-            fixed = gemini_json(prompt, minutes=5, models=WRITE_MODELS)["fixed"]
+            fixed = gemini_json(prompt, minutes=5, models=CHEAP_MODELS)["fixed"]
             for f in fixed:
                 i = int(f["i"])
                 txt = f.get("narration_fa", "").strip()
@@ -527,56 +634,12 @@ Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
     return data
 
 
-def prepare_spoken(data, book):
-    """Step C3: a voice-only version of every paragraph ("spoken_fa").
-    Same words and same order, but: short-vowel marks (diacritics) only on ambiguous words, and foreign names
-    spelled the way they are pronounced. The subtitles keep the clean "narration_fa". Skipped if it fails."""
-    scenes = data["scenes"]
-    for s in scenes:
-        s["spoken_fa"] = s["narration_fa"]
-    if not VOICE_PREP:
-        return data
-    items = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
-    prompt = f"""You are a Persian (Iranian) pronunciation editor for a text-to-speech voice. The voice reads text exactly as
-written and often guesses wrongly. For EACH paragraph below write "spoken_fa": the SAME paragraph, prepared for the voice.
-
-What to do:
-1. Keep every word, every sentence and the same order. Do NOT add, remove, reorder or reword anything.
-2. Put short-vowel marks (فتحه، کسره، ضمه، تشدید) ONLY on words whose reading is ambiguous or often misread, such as
-   «کِشت / کُشت»، «شِکَن / شُکُن»، «مَرد / مُرد»، «گُل / گِل»، «بَرد / بُرد»، «خوان / خان»، «عِلم / عَلَم»،
-   «دَر / دُر»، «پُر / پِر»، «کُرد / کَرد»، «بِه / بَه»، «رَسید / رِسید» and similar.
-   Do NOT put marks on clear, common words: too many marks make the voice sound broken and slow.
-3. Ezafe (the «-e» link between two words): mark it with a kasra on the first word ONLY when the voice could miss it
-   or read it wrongly (for example a word ending with a vowel or «ه»: «خانه‌ی» stays «خانه‌ی»). Never more than needed.
-4. Foreign names (people, places) and the book title: spell them exactly the way an Iranian reads them aloud, with
-   Persian letters and the needed vowel marks (for example «دارسی» as «دارسی»، «ایزابِل»، «ریمون»), so the voice cannot
-   misread them. Keep the SAME name in every paragraph.
-5. Keep all punctuation and the final full stop of every sentence exactly. Keep half-spaces.
-6. Keep the word «جمع‌بندی» if it exists. No Latin letters, no digits, no brackets, no emojis.
-
-The book is «{book['title_fa']}» by «{book['author_fa']}».
-Return JSON: {{"spoken": [{{"i": 0, "spoken_fa": "..."}}, ...]}} with one item per paragraph, in order.
-Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
-    try:
-        res = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["spoken"]
-        by_i = {int(r["i"]): r for r in res}
-        used = 0
-        for i, s in enumerate(scenes):
-            txt = " ".join(str((by_i.get(i) or {}).get("spoken_fa", "")).replace("ي", "ی").replace("ك", "ک").split())
-            if not txt or LATIN.search(txt) or DIGITS.search(txt):
-                continue
-            plain_len = len(s["narration_fa"])
-            new_len = len(DIAC.sub("", txt))
-            if not (0.8 * plain_len <= new_len <= 1.35 * plain_len):
-                continue                                           # it changed the text too much: do not trust it
-            if len(split_sentences(txt)) != len(split_sentences(s["narration_fa"])):
-                continue                                           # the sentence structure must stay the same
-            s["spoken_fa"] = txt
-            used += 1
-        print(f"Voice text prepared: {used} of {len(scenes)} paragraph(s) with diacritics/phonetic spelling.",
-              flush=True)
-    except Exception as e:  # noqa: BLE001
-        print("Voice text preparation skipped:", e, flush=True)
+def sanitize_narration(data, book):
+    before = [s["narration_fa"].replace("ي", "ی").replace("ك", "ک") for s in data["scenes"]]
+    data = _sanitize_core(data, book)
+    for s, b in zip(data["scenes"], before):
+        if s["narration_fa"] != b or not s.get("spoken_fa"):
+            s["spoken_fa"] = s["narration_fa"]       # the narration changed: the old voice text no longer fits
     return data
 
 
@@ -737,7 +800,7 @@ spoken Iranian Persian, correct grammar and half-spaces. Avoid more than two con
 Return JSON: {{"text": "..."}}
 Sentence: {text}"""
     try:
-        out = gemini_json(prompt, minutes=3, models=WRITE_MODELS).get("text", "").strip()
+        out = gemini_json(prompt, minutes=3, models=CHEAP_MODELS).get("text", "").strip()
         return out if out and out != text else None
     except Exception as e:  # noqa: BLE001
         print("Rewrite skipped:", e, flush=True)
@@ -978,7 +1041,7 @@ Look at the image. Score from 0 to 10 how clearly it shows the main subject and 
 (10 = a viewer understands what is said just by looking; 0 = unrelated).
 Return JSON: {{"score": 7, "missing": "short English phrase: the key thing that is missing or wrong"}}"""
     try:
-        r = gemini_json(prompt, minutes=2, models=CHECK_MODELS, image=path.read_bytes())
+        r = gemini_json(prompt, minutes=2, models=CHEAP_MODELS, image=path.read_bytes())
         time.sleep(3)
         return int(r.get("score", 10)), str(r.get("missing", "")).strip()
     except Exception as e:  # noqa: BLE001
@@ -1101,22 +1164,23 @@ def send_video(path, caption):
 
 
 # ---------------------------------------------------------------- main
-def get_book_and_source(posted):
-    """Pick a book that has a usable Wikipedia article. A book without one is skipped (never summarized from memory)."""
-    rejected = []
-    for _ in range(8):
+def get_book_and_source(posted, rejected):
+    """Next novel that has a usable Wikipedia article. A novel without one is rejected for good
+    (never summarized from memory, never tried again)."""
+    tries = 40 if BOOKS_FILE.exists() else 6
+    for _ in range(tries):
         book = pick_book(posted, rejected)
         print("Book candidate:", book["title_en"], "|", book["book_type"], flush=True)
         src = fetch_source(book)
         if src:
             return book, src
-        rejected.append(book["title_en"])
-        print(f"Skipping '{book['title_en']}': no reliable source text.", flush=True)
-    raise RuntimeError("Could not find a book with a usable Wikipedia source")
+        reject_book(rejected, book, "no reliable Wikipedia source")
+    raise RuntimeError("Could not find a novel with a usable Wikipedia source")
 
 
 def main():
-    posted = json.loads(POSTED_FILE.read_text("utf-8")) if POSTED_FILE.exists() else []
+    posted = load_json(POSTED_FILE, [])
+    rejected = load_json(REJECTED_FILE, [])
     if len(posted) >= TOTAL_BOOKS:
         print("All books are done.")
         return
@@ -1128,12 +1192,50 @@ def main():
     print(f"Image service: {'Cloudflare FLUX' if USE_CF else 'Pollinations (slow)'}; "
           f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
           flush=True)
-    book, src = get_book_and_source(posted)
-    print("Book:", book["title_en"], "| source:", src["url"], flush=True)
-    plan = plan_length(src)
-    print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from {src['en_words']} source words)", flush=True)
+
+    # a script that was finished in an earlier run which failed later (voice/images/video): resume it,
+    # so the Gemini quota is not spent twice. After 3 failed resumes the book is rejected.
+    book = src = script = None
+    pending = load_json(PENDING_FILE, None)
+    if pending:
+        done = {norm(p["title_en"]) for p in posted}
+        try:
+            if norm(pending["book"]["title_en"]) in done:
+                pending = None
+            else:
+                attempts = int(pending.get("attempts", 0)) + 1
+                if attempts > 3:
+                    reject_book(rejected, pending["book"], "failed 3 times after the script was written")
+                    pending = None
+                else:
+                    pending["attempts"] = attempts
+                    save_json(PENDING_FILE, pending)
+                    book, src, script = pending["book"], pending["src"], pending["script"]
+                    print(f"Resuming the saved script of '{book['title_en']}' (resume {attempts} of 3).", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print("Saved script ignored:", e, flush=True)
+            pending = None
+        if not pending:
+            PENDING_FILE.unlink(missing_ok=True)
+
+    if not pending:
+        for _ in range(4):
+            book, src = get_book_and_source(posted, rejected)
+            print("Book:", book["title_en"], "| source:", src["url"], flush=True)
+            plan = plan_length(src)
+            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from {src['en_words']} source words)",
+                  flush=True)
+            try:
+                script = write_scenes(book, src, plan)
+                break
+            except GeminiBlocked as e:
+                reject_book(rejected, book, f"Gemini blocked the prompt: {e}")
+        else:
+            raise RuntimeError("Gemini blocked 4 books in a row")
+        save_json(PENDING_FILE, {"book": book, "src": src, "script": script, "attempts": 0,
+                                 "date": date.today().isoformat()})
+
     (WORK / "azim_source.txt").write_text(src["text"], encoding="utf-8")
-    script = write_scenes(book, src, plan)
     scenes = script["scenes"]
     words = sum(len(s["narration_fa"].split()) for s in scenes)
     print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
@@ -1142,7 +1244,13 @@ def main():
     (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
     REPORT_FILE.write_text(f"Book: {book['title_en']}\nSource: {src['url']}\n", encoding="utf-8")
 
-    kind = "female" if book["book_type"] in FEMALE_TYPES else "male"
+    # the voice alternates: female, male, female, male...
+    last_voice = posted[-1].get("voice") if posted else None
+    if last_voice in ("female", "male"):
+        kind = "male" if last_voice == "female" else "female"
+    else:
+        kind = "female" if len(posted) % 2 == 0 else "male"
+    print(f"Voice of this video: {kind}", flush=True)
     durs = make_voice(scenes, kind)
 
     seed = int(time.time()) % 100000
@@ -1167,11 +1275,17 @@ def main():
     send_video(final, caption)
 
     posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
-                   "type": book["book_type"], "wiki": src["title"], "date": date.today().isoformat()})
-    POSTED_FILE.write_text(json.dumps(posted, ensure_ascii=False, indent=1), encoding="utf-8")
+                   "type": "novel", "voice": kind, "wiki": src["title"], "date": date.today().isoformat()})
+    save_json(POSTED_FILE, posted)
+    PENDING_FILE.unlink(missing_ok=True)
     shutil.rmtree(WORK, ignore_errors=True)
     print("Done.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except GeminiQuotaExhausted as exc:
+        print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
+              "No video now; the next run continues.", flush=True)
+        sys.exit(1)
