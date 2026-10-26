@@ -26,6 +26,10 @@ USE_CF = bool(CF_ACCOUNT_ID and CF_API_TOKEN)
 # Only used with the fast Cloudflare images. Set AZIM_IMAGE_CHECK=0 to turn it off.
 IMAGE_CHECK = USE_CF and os.environ.get("AZIM_IMAGE_CHECK", "1") != "0"
 
+# A separate "voice-only" text (diacritics on ambiguous words + phonetic spelling of foreign names) is prepared
+# for the voice. The subtitles always keep the clean original text. Set AZIM_VOICE_PREP=0 to turn it off.
+VOICE_PREP = os.environ.get("AZIM_VOICE_PREP", "1") != "0"
+
 ROOT = Path(__file__).parent
 POSTED_FILE = ROOT / "azim_posted.json"
 WORK = ROOT / "azim_work"
@@ -39,6 +43,7 @@ PAD = 0.25                # pause after each scene (seconds)
 TOTAL_BOOKS = 10000
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
+SUB_FONT_SIZE = 23        # subtitle size (was 22)
 
 # ----- voices: Pocket TTS Farsi v2 via the "sokhanvar" library (free, offline, CPU).
 # Each voice is cloned from a reference recording of at most 5 seconds (WAV), placed next to this script.
@@ -48,6 +53,8 @@ REF_AUDIO = {
     "male": Path(os.environ.get("AZIM_REF_MALE", Path(__file__).parent / "azim_voice_male.wav")),
 }
 FEMALE_TYPES = {"novel", "psychology"}   # novels + psychology = female voice, rest = male voice
+
+DIAC = re.compile(r"[\u064B-\u0652\u0670]")   # Persian/Arabic short-vowel marks (fatha, kasra, damma, shadda, sukun...)
 
 
 def sh(cmd, cwd=None):
@@ -295,6 +302,15 @@ def plan_length(src):
 
 
 # ---------------------------------------------------------------- script
+TONE_RULES = """- TONE: a warm, calm, friendly storyteller who talks to ONE listener, like a close friend telling a story in the
+  evening. Not a news anchor, not a textbook, not a lecturer, not childish, not dramatic or theatrical.
+  Natural spoken Iranian Persian in clean standard form (no slang contractions such as «میگم» or «اون»).
+  Use simple connectors the way people really talk («اما»، «بعد»، «برای همین»، «تا این‌که»، «حالا»).
+  Never use stiff written-style verbs or forms such as «نمود»، «گردید»، «می‌باشد»، «بدین سبب»، «لذا»، «مذکور».
+  Start sentences with the subject or the action, not with long clauses. Vary the rhythm: short, then a bit longer.
+  No exaggerated praise words and no advertising tone."""
+
+
 def write_scenes(book, src, plan):
     """Step B: write the Persian narration from the source text only (no outside facts)."""
     min_sc, max_sc, words = plan
@@ -340,8 +356,8 @@ Rules for the narration:
 - The voice engine is fragile with long noun chains, so: every sentence at most 12 words; at most TWO
   consecutive ezafe links in a noun phrase (never "noun of noun of noun of noun"); prefer verbs and simple
   clauses over long genitive chains; no comma inside a noun phrase.
-- Natural, fluent, elegant SPOKEN Iranian Persian, like a skilled radio host. Correct grammar and spelling,
-  proper half-spaces. Mix short and medium sentences; no childish tone.
+{TONE_RULES}
+  Correct grammar and spelling, proper half-spaces. Mix short and medium sentences.
 - It will be read aloud: write numbers as words, no Latin letters, no emojis, no brackets, no abbreviations.
 - Write EVERYTHING in Persian script, with no English or Latin word at all, not even for names and titles. Use the
   Iranian forms: the book is «{book['title_fa']}» and the author is «{book['author_fa']}». Write other foreign names
@@ -376,6 +392,7 @@ Rules for the visuals:
             data = sanitize_narration(data, book)
             data = verify_facts(data, book, src)
             data = sanitize_narration(data, book)
+            data = prepare_spoken(data, book)
             return align_visuals(data, book)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
@@ -394,7 +411,8 @@ Do NOT add, remove or change any fact, name, number or idea; do not add new sent
   and must keep the word «جمع‌بندی»;
 - each item 2-4 sentences, at most 36 words; every sentence at most 12 words; at most TWO consecutive ezafe
   links in any noun phrase (split long noun chains into separate short sentences); no comma inside a noun phrase;
-  smooth transitions between items; confident, warm, adult tone;
+  smooth transitions between items;
+{TONE_RULES}
 - numbers as words, no Latin letters, no emojis, no brackets, no abbreviations;
 - no English or Latin word anywhere, and no English loanword (such as «پادکست»، «ویدئو»، «آنلاین»): replace each with a
   plain Persian word;
@@ -509,6 +527,59 @@ Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
     return data
 
 
+def prepare_spoken(data, book):
+    """Step C3: a voice-only version of every paragraph ("spoken_fa").
+    Same words and same order, but: short-vowel marks (diacritics) only on ambiguous words, and foreign names
+    spelled the way they are pronounced. The subtitles keep the clean "narration_fa". Skipped if it fails."""
+    scenes = data["scenes"]
+    for s in scenes:
+        s["spoken_fa"] = s["narration_fa"]
+    if not VOICE_PREP:
+        return data
+    items = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
+    prompt = f"""You are a Persian (Iranian) pronunciation editor for a text-to-speech voice. The voice reads text exactly as
+written and often guesses wrongly. For EACH paragraph below write "spoken_fa": the SAME paragraph, prepared for the voice.
+
+What to do:
+1. Keep every word, every sentence and the same order. Do NOT add, remove, reorder or reword anything.
+2. Put short-vowel marks (فتحه، کسره، ضمه، تشدید) ONLY on words whose reading is ambiguous or often misread, such as
+   «کِشت / کُشت»، «شِکَن / شُکُن»، «مَرد / مُرد»، «گُل / گِل»، «بَرد / بُرد»، «خوان / خان»، «عِلم / عَلَم»،
+   «دَر / دُر»، «پُر / پِر»، «کُرد / کَرد»، «بِه / بَه»، «رَسید / رِسید» and similar.
+   Do NOT put marks on clear, common words: too many marks make the voice sound broken and slow.
+3. Ezafe (the «-e» link between two words): mark it with a kasra on the first word ONLY when the voice could miss it
+   or read it wrongly (for example a word ending with a vowel or «ه»: «خانه‌ی» stays «خانه‌ی»). Never more than needed.
+4. Foreign names (people, places) and the book title: spell them exactly the way an Iranian reads them aloud, with
+   Persian letters and the needed vowel marks (for example «دارسی» as «دارسی»، «ایزابِل»، «ریمون»), so the voice cannot
+   misread them. Keep the SAME name in every paragraph.
+5. Keep all punctuation and the final full stop of every sentence exactly. Keep half-spaces.
+6. Keep the word «جمع‌بندی» if it exists. No Latin letters, no digits, no brackets, no emojis.
+
+The book is «{book['title_fa']}» by «{book['author_fa']}».
+Return JSON: {{"spoken": [{{"i": 0, "spoken_fa": "..."}}, ...]}} with one item per paragraph, in order.
+Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
+    try:
+        res = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["spoken"]
+        by_i = {int(r["i"]): r for r in res}
+        used = 0
+        for i, s in enumerate(scenes):
+            txt = " ".join(str((by_i.get(i) or {}).get("spoken_fa", "")).replace("ي", "ی").replace("ك", "ک").split())
+            if not txt or LATIN.search(txt) or DIGITS.search(txt):
+                continue
+            plain_len = len(s["narration_fa"])
+            new_len = len(DIAC.sub("", txt))
+            if not (0.8 * plain_len <= new_len <= 1.35 * plain_len):
+                continue                                           # it changed the text too much: do not trust it
+            if len(split_sentences(txt)) != len(split_sentences(s["narration_fa"])):
+                continue                                           # the sentence structure must stay the same
+            s["spoken_fa"] = txt
+            used += 1
+        print(f"Voice text prepared: {used} of {len(scenes)} paragraph(s) with diacritics/phonetic spelling.",
+              flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("Voice text preparation skipped:", e, flush=True)
+    return data
+
+
 def align_visuals(data, book):
     """Step D: write each picture from the FINAL narration and its source sentence (skipped if it fails)."""
     scenes = data["scenes"]
@@ -597,15 +668,17 @@ def get_speaker(kind, seed=SEED):
 
 
 def text_variants(text):
-    """The same text written in 3 safe ways. The model needs a final full stop to know where to end."""
+    """The same text written in safe ways. The model needs a final full stop to know where to end.
+    The last variant has no diacritics at all, in case the voice model does not like them."""
     base = " ".join(text.split())
     core = base.rstrip(" .،,;؛:!?؟…")
     v1 = core + "."                                                  # always ends with a full stop
     v2 = core.replace("\u200c", "") + "."                            # without half-spaces
     v3 = re.sub(r"[،,;؛:!?؟…«»\"'()\-]", " ", v2.rstrip("."))         # without punctuation inside
     v3 = " ".join(v3.split()) + "."
+    v4 = DIAC.sub("", v1)                                            # without diacritics
     out = []
-    for v in (v1, v2, v3):
+    for v in (v1, v2, v3, v4):
         if v not in out:
             out.append(v)
     return out
@@ -635,7 +708,7 @@ def suspicious(text, dur):
 
 
 def tts_try(text, kind, out_wav):
-    """Read one text with Pocket TTS (always the same seed). Tries 3 written forms of the text."""
+    """Read one text with Pocket TTS (always the same seed). Tries several written forms of the text."""
     last = "unknown error"
     for variant in text_variants(text):
         try:
@@ -752,10 +825,25 @@ def make_voice(scenes, kind):
     wavs = []
     for i, s in enumerate(scenes):
         p = WORK / f"raw_{i:02d}.wav"
+        plain = s["narration_fa"].strip()
+        spoken = (s.get("spoken_fa") or plain).strip()
         REWRITTEN.clear()
-        tts_text(s["narration_fa"].strip(), kind, p)
-        for orig, spoken in REWRITTEN:
-            s["narration_fa"] = s["narration_fa"].replace(orig, spoken)
+        key = "spoken_fa" if spoken != plain else "narration_fa"
+        try:
+            tts_text(spoken, kind, p)
+        except RuntimeError as e:
+            if spoken == plain:
+                raise
+            # the voice could not read the prepared text: use the plain text of this scene
+            note(f"  Scene {i}: voice text failed ({str(e)[:80]}); using the plain text.")
+            REWRITTEN.clear()
+            key = "narration_fa"
+            tts_text(plain, kind, p)
+        # a simpler rewrite was spoken: keep the text that matches the voice
+        for orig, new in REWRITTEN:
+            s[key] = s[key].replace(orig, new)
+            if key == "narration_fa":
+                s["spoken_fa"] = s["narration_fa"]
         wavs.append(p)
     # trimmed copies (no long silences at start/end), then speed up a little only if too long
     trimmed = []
@@ -963,7 +1051,8 @@ def build_video(scenes, durs, out_path):
             clip.name], cwd=WORK)
         clips.append(clip.name)
 
-        sents = split_sentences(s["narration_fa"])
+        # subtitles: always the clean text (no diacritics), cut into sentences
+        sents = split_sentences(DIAC.sub("", s["narration_fa"]))
         weights = [max(len(x), 1) for x in sents]
         total_w = sum(weights)
         acc = 0
@@ -980,7 +1069,7 @@ def build_video(scenes, durs, out_path):
     sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
         "-i", "list.txt", "-c", "copy", "joined.mp4"], cwd=WORK)
 
-    style = ("FontName=Noto Sans Arabic,FontSize=22,PrimaryColour=&H00FFFFFF,"
+    style = (f"FontName=Noto Sans Arabic,FontSize={SUB_FONT_SIZE},PrimaryColour=&H00FFFFFF,"
              "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=28")
     # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
     fits = False
@@ -1037,7 +1126,8 @@ def main():
     WORK.mkdir(parents=True)
 
     print(f"Image service: {'Cloudflare FLUX' if USE_CF else 'Pollinations (slow)'}; "
-          f"image check: {'on' if IMAGE_CHECK else 'off'}", flush=True)
+          f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
+          flush=True)
     book, src = get_book_and_source(posted)
     print("Book:", book["title_en"], "| source:", src["url"], flush=True)
     plan = plan_length(src)
