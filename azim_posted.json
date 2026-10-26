@@ -61,5 +61,13 @@
   "voice": "male",
   "wiki": "Moby-Dick",
   "date": "2026-10-26"
+ },
+ {
+  "title_en": "War and Peace",
+  "title_fa": "جنگ و صلح",
+  "type": "novel",
+  "voice": "female",
+  "wiki": "War and Peace",
+  "date": "2026-10-26"
  }
 ]
