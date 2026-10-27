@@ -33,12 +33,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: azim-pocket-tts-farsi-v2
+          key: azim-pocket-tts-v3   # v3: also holds the English model used for names
 
       - name: Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests fonttools
           pip install "sokhanvar[pocket] @ git+https://github.com/tavallaie/sokhanvar.git" \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -49,6 +49,26 @@ jobs:
             test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
           fi
 
+      # first run only: builds azim_books_list.json (the 2000 most famous novels) - no manual step needed
+      - name: Build the list of 2000 novels (only if it does not exist yet)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ ! -f azim_books_list.json ]; then
+            python azim_make_booklist.py || echo "List could not be built now: the bot asks Gemini for the next novel instead."
+          fi
+
+      - name: Save the list of novels
+        run: |
+          if [ -f azim_books_list.json ]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add -- azim_books_list.json
+            git diff --cached --quiet || git commit -m "azim: list of 2000 novels"
+            git pull --rebase origin main || true
+            git push || true
+          fi
+
       - name: Make the video and post it
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -56,6 +76,13 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          # switches: Settings -> Secrets and variables -> Actions -> Variables (empty = default)
+          AZIM_TTS: ${{ vars.AZIM_TTS }}                                  # gemini (default) or pocket
+          AZIM_GEMINI_TTS_MODEL: ${{ vars.AZIM_GEMINI_TTS_MODEL }}        # gemini-3.8-flash-tts (default)
+          AZIM_GEMINI_VOICE_FEMALE: ${{ vars.AZIM_GEMINI_VOICE_FEMALE }}  # Sulafat (default)
+          AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Gacrux (default)
+          AZIM_GEMINI_TTS_TEXT: ${{ vars.AZIM_GEMINI_TTS_TEXT }}          # plain (default) or spoken
+          AZIM_GUTENBERG: ${{ vars.AZIM_GUTENBERG }}                      # 0 = Wikipedia only
         run: python azim_book_video_bot.py
 
       - name: Save the voice report and script (for checking)
