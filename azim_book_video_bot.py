@@ -34,7 +34,7 @@ VOICE_PREP = os.environ.get("AZIM_VOICE_PREP", "1") != "0"
 
 ROOT = Path(__file__).parent
 POSTED_FILE = ROOT / "azim_posted.json"
-BOOKS_FILE = ROOT / "azim_books_list.json"        # 2000 novels, built once by azim_make_booklist.py
+BOOKS_FILE = ROOT / "azim_books_list.json"        # the most famous novels, built once by azim_make_booklist.py
 REJECTED_FILE = ROOT / "azim_rejected.json"       # books that can never be used (no source / blocked)
 PENDING_FILE = ROOT / "azim_pending.json"         # finished script of a run that failed later: resumed next run
 WORK = ROOT / "azim_work"
@@ -50,7 +50,14 @@ MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 SUB_FONT_SIZE = 23        # subtitle size (was 22)
 SUB_FONT = "Noto Sans Arabic"
-SCRIPT_VERSION = 4        # a saved script of another version is not resumed
+SCRIPT_VERSION = 5        # a saved script of another version is not resumed
+
+# ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
+# It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
+# (CC BY-SA). The bot retells it in Persian; it never summarizes the book on its own.
+# The list builder already keeps only novels with a Plot of 350-900 words; these limits are a wider safety net.
+PLOT_MIN_WORDS = int(os.environ.get("AZIM_PLOT_MIN") or 250)
+PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 1100)
 
 # ----- narrator engine: "gemini" (Gemini TTS, default; any failure or finished quota -> Pocket TTS for that scene)
 # ----- or "pocket" (offline Pocket TTS only). Switch without editing code: repository variable AZIM_TTS.
@@ -63,10 +70,6 @@ GEMINI_TTS_STYLE = os.environ.get("AZIM_GEMINI_TTS_STYLE") or (
     "a warm, calm storyteller telling a story to one close listener, with real feeling that follows the story: "
     "curious at the start, tense when things get hard, tender or sad where the story is, quietly hopeful at the "
     "end; natural pace and breathing, never a news-reader voice")
-
-# ----- sources: full text of public-domain novels (Project Gutenberg) + other-language Wikipedia plots
-USE_GUTENBERG = os.environ.get("AZIM_GUTENBERG", "1") != "0"
-MAX_FULLTEXT_WORDS = int(os.environ.get("AZIM_FULLTEXT_MAX_WORDS") or 130000)
 
 # ----- voices: Pocket TTS Farsi v2 via the "sokhanvar" library (free, offline, CPU).
 # Each voice is cloned from a reference recording of at most 5 seconds (WAV), placed next to this script.
@@ -287,13 +290,11 @@ Return JSON with exactly these keys:
 
 
 WIKI_HEADERS = {"User-Agent": "azim-book-video-bot/1.0 (educational book summaries; GitHub Actions)"}
-EN_KEYS = re.compile(r"\b(plot|synopsis|summary|contents?|overview|premise|story|narrative|themes?|"
-                     r"main ideas?|ideas|structure|chapters?|argument|thesis|characters?|description)\b", re.I)
-EN_SKIP = re.compile(r"adaptation|film|television|reception|legacy|influence|critic|award|sequel|cultural|"
-                     r"publication|translation|see also|references", re.I)
-FA_KEYS = ("خلاصه", "داستان", "محتوا", "مضمون", "درون", "موضوع", "طرح", "نگاه کلی", "ساختار", "فصل", "شخصیت")
-FA_SKIP = ("اقتباس", "فیلم", "نقد", "پذیرش", "جوایز", "ترجمه", "پانویس", "منابع", "جستارهای وابسته")
 HEAD = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.M)
+# level-2 headings that hold the story: "Plot", "Plot summary", "Plot introduction", "Synopsis", "Summary", "Story"
+PLOT_HEAD = re.compile(r"^(plot|synopsis|summary|story|storyline)\b", re.I)
+PLOT_SKIP = re.compile(r"adaptation|film|television|reception|translation|publication|criticism|history", re.I)
+SIG_KEYS = re.compile(r"legacy|influence|reception|critical|significance|impact|awards?|controvers|cultural|themes?", re.I)
 
 
 def wiki_api(lang, params):
@@ -349,44 +350,30 @@ def split_wiki(text):
     return lead, secs
 
 
-SIG_KEYS = re.compile(r"legacy|influence|reception|critical|significance|impact|awards?|controvers|cultural|themes?", re.I)
-
-
 def pick_significance(text):
-    """Reception / legacy / influence sections: facts for the closing wrap-up (why the novel matters)."""
+    """Reception / legacy / influence / themes sections: facts for the closing wrap-up (why the novel matters)."""
     lead, secs = split_wiki(text)
-    chosen = [(t, b) for t, b in secs if len(b) >= 80 and SIG_KEYS.search(t)]
-    return "\n\n".join(f"[{t}]\n{b}" for t, b in chosen)
+    chosen = [(t, b) for t, b in secs if len(b) >= 80 and SIG_KEYS.search(t) and not PLOT_HEAD.match(t)]
+    return "\n\n".join(f"[{t}]\n{b[:800]}" for t, b in chosen)
 
 
-def pick_sections(text, lang):
+def pick_plot(text):
+    """(lead, plot text) of an article: only the level-2 sections that tell the story."""
     lead, secs = split_wiki(text)
-    chosen = []
-    for t, b in secs:
-        if len(b) < 80:
-            continue
-        if lang == "en":
-            hit = EN_KEYS.search(t) and not EN_SKIP.search(t)
-        else:
-            hit = any(k in t for k in FA_KEYS) and not any(k in t for k in FA_SKIP)
-        if hit:
-            chosen.append((t, b))
-    body = "\n\n".join(f"[{t}]\n{b}" for t, b in chosen)
-    return lead, body
+    chosen = [b for t, b in secs if len(b) >= 80 and PLOT_HEAD.match(t) and not PLOT_SKIP.search(t)]
+    return lead, "\n\n".join(chosen)
 
 
-def fetch_wiki(book, lang):
-    key = "title_en" if lang == "en" else "title_fa"
-    author = book["author_en" if lang == "en" else "author_fa"].replace("\u200c", "").lower()
-    last = author.split()[-1] if author.split() else ""
-    cands = [book.get("wikipedia_title_" + lang), book[key]]
+def fetch_wiki(book):
+    """The English Wikipedia article of the novel: lead, Plot section and a short 'significance' text."""
+    last = (book["author_en"].replace("\u200c", "").lower().split() or [""])[-1]
     found = None
-    for c in cands:
+    for c in (book.get("wikipedia_title_en"), book["title_en"]):
         if c:
-            found = wiki_fulltext(lang, c)
+            found = wiki_fulltext("en", c)
             if found:
                 break
-    if not found and lang == "en":
+    if not found:
         for t in wiki_search("en", f'{book["title_en"]} {book["author_en"]}'):
             found = wiki_fulltext("en", t)
             if found:
@@ -395,203 +382,44 @@ def fetch_wiki(book, lang):
         return None
     title, text = found
     if last and last not in text.replace("\u200c", "").lower():
-        print(f"Wikipedia ({lang}) page '{title}' does not mention the author: ignored.", flush=True)
+        print(f"Wikipedia page '{title}' does not mention the author: ignored.", flush=True)
         return None
-    lead, body = pick_sections(text, lang)
-    return {"title": title, "lead": lead, "body": body, "sig": pick_significance(text) if lang == "en" else ""}
-
-
-def _ascii_words(s):
-    s = unicodedata.normalize("NFKD", s.lower())
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return re.findall(r"[a-z0-9]+", s)
-
-
-def gutenberg_find(book):
-    """The Project Gutenberg edition of a public-domain novel (via the Gutendex catalog API), or None."""
-    title_words = [w for w in _ascii_words(book["title_en"]) if w not in ("the", "a", "an")]
-    last = (_ascii_words(book["author_en"]) or [""])[-1]
-    if not title_words or not last:
-        return None
-    try:
-        r = requests.get("https://gutendex.com/books/", headers=WIKI_HEADERS, timeout=40,
-                         params={"search": f"{book['title_en']} {book['author_en']}", "languages": "en"})
-        if r.status_code != 200:
-            return None
-        results = r.json().get("results", [])
-    except Exception as e:  # noqa: BLE001
-        print("Gutendex error:", e, flush=True)
-        return None
-    best = None
-    for it in results:
-        got = set(_ascii_words(it.get("title", "")))
-        authors = " ".join(a.get("name", "") for a in it.get("authors", []))
-        if not set(title_words) <= got or last not in _ascii_words(authors) or it.get("copyright") is True:
-            continue
-        fmts = it.get("formats", {})
-        url = next((u for k, u in fmts.items() if k.startswith("text/plain") and not u.endswith(".zip")), None)
-        cand = (it.get("download_count", 0), it["id"], url)
-        if best is None or cand[0] > best[0]:
-            best = cand
-    return {"id": best[1], "url": best[2]} if best else None
-
-
-def gutenberg_text(found):
-    """Plain text of the book without the Gutenberg license header/footer. Mirror first, politely (2 s delay)."""
-    gid = str(found["id"])
-    path = "/".join(gid[:-1]) if len(gid) > 1 else "0"
-    base = f"https://aleph.gutenberg.org/{path}/{gid}/"
-    urls = [base + f"{gid}-0.txt", base + f"{gid}.txt", base + f"{gid}-8.txt"]
-    if found.get("url"):
-        urls.append(found["url"])
-    for u in urls:
-        time.sleep(2)
-        try:
-            r = requests.get(u, headers=WIKI_HEADERS, timeout=90)
-            if r.status_code == 200 and len(r.content) > 50000:
-                r.encoding = r.encoding if r.encoding and r.encoding.lower() != "iso-8859-1" else "utf-8"
-                text = r.text
-                m = re.search(r"\*\*\* ?START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*?\*\*\*", text, re.I | re.S)
-                if m:
-                    text = text[m.end():]
-                m = re.search(r"\*\*\* ?END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK", text, re.I)
-                if m:
-                    text = text[:m.start()]
-                return text.strip()
-        except requests.RequestException as e:
-            print(f"Gutenberg download error ({u}): {e}", flush=True)
-    return None
-
-
-def fetch_fulltext_summary(book):
-    """For a public-domain novel: ONE Gemini call reads the whole novel and writes a detailed chronological
-    plot summary (English). Any failure -> None (the Wikipedia source is used). Quota exhaustion is raised."""
-    found = gutenberg_find(book)
-    if not found:
-        return None
-    text = gutenberg_text(found)
-    if not text:
-        print("Gutenberg text could not be downloaded: Wikipedia only.", flush=True)
-        return None
-    words = len(text.split())
-    if words < 8000 or words > MAX_FULLTEXT_WORDS:
-        print(f"Gutenberg text has {words} words: outside the limits, Wikipedia only.", flush=True)
-        return None
-    print(f"Gutenberg full text: {words} words (ebook {found['id']}). Summarizing it with Gemini...", flush=True)
-    prompt = f"""You are a careful literary analyst. Below is the COMPLETE text of the novel "{book['title_en']}" by
-{book['author_en']}. Write, in English:
-1. "plot_summary": a detailed, strictly chronological plot summary of 700 to 1000 words that a storyteller can retell:
-   the main characters (names exactly as in the text), where and when the story begins, every important event in order
-   with its cause and consequence, the turning points, and how it ends. Show what the characters feel when the text
-   shows it.
-2. "themes": 3 to 5 short sentences about the central themes that the text itself makes visible.
-Use ONLY what the text says: no outside knowledge, no opinions about fame or reception, nothing invented.
-Return JSON {{"plot_summary": "...", "themes": "..."}}
-
-NOVEL TEXT:
-{text}"""
-    try:
-        out = gemini_json(prompt, minutes=8, models=WRITE_MODELS, read_timeout=300)
-        plot = str(out.get("plot_summary", "")).strip()
-        if len(plot.split()) < 400:
-            print("Full-text summary too short: Wikipedia only.", flush=True)
-            return None
-        return {"summary": plot, "themes": str(out.get("themes", "")).strip(), "words": len(plot.split()),
-                "id": found["id"]}
-    except GeminiQuotaExhausted:
-        raise
-    except Exception as e:  # noqa: BLE001
-        print(f"Full-text summary failed ({str(e)[:100]}): Wikipedia only.", flush=True)
-        return None
-
-
-OTHER_LANG_KEYS = {
-    "fr": r"résumé|intrigue|synopsis|argument|histoire|trame|contenu",
-    "de": r"handlung|inhalt|zusammenfassung|inhaltsangabe",
-    "es": r"argumento|resumen|sinopsis|trama|contenido",
-    "ru": r"сюжет|содержание|краткое",
-    "it": r"trama|riassunto|sinossi|contenuto",
-    "ar": r"ملخص|القصة|الحبكة|الأحداث|قصة",
-}
-OTHER_LANG_SKIP = re.compile(r"adaptation|adaptaci|adattament|экранизац|اقتباس|réception|critique|rezeption|recepci|"
-                             r"recension|kritik|влияние|ترجمة|édition|ausgabe|référence|einzelnachweise", re.I)
-
-
-def fetch_other_languages(en_title, limit=2):
-    """Plot sections of the same novel in other Wikipedias (often longer than the English one)."""
-    try:
-        d = wiki_api("en", {"action": "query", "prop": "langlinks", "lllimit": "max", "redirects": 1,
-                            "titles": en_title})
-        links = {ll["lang"]: ll["title"] for ll in d["query"]["pages"][0].get("langlinks", [])}
-    except Exception as e:  # noqa: BLE001
-        print("Language links error:", e, flush=True)
-        return []
-    out = []
-    for lang, pattern in OTHER_LANG_KEYS.items():
-        if lang not in links:
-            continue
-        found = wiki_fulltext(lang, links[lang])
-        if not found:
-            continue
-        lead, secs = split_wiki(found[1])
-        body = "\n\n".join(f"[{t}]\n{b}" for t, b in secs
-                           if len(b) >= 200 and re.search(pattern, t, re.I) and not OTHER_LANG_SKIP.search(t))
-        if len(body) >= 700:
-            out.append((lang, body))
-    out.sort(key=lambda x: -len(x[1]))
-    return out[:limit]
+    lead, plot = pick_plot(text)
+    return {"title": title, "lead": lead, "plot": plot, "plot_words": len(plot.split()),
+            "sig": pick_significance(text)}
 
 
 def fetch_source(book):
-    """Facts for the video: the FULL TEXT summary (public-domain novels) + the novel's Wikipedia articles
-    (English, Persian and other languages). Nothing comes from memory."""
-    en = fetch_wiki(book, "en")
-    full = fetch_fulltext_summary(book) if USE_GUTENBERG else None
-    en_ok = bool(en) and len(en["body"]) >= 1200
-    if not en_ok and not full:
-        print("No usable plot source for this novel.", flush=True)
+    """Facts for the video: ONLY the Plot section of the English Wikipedia article (+ its introduction and a short
+    significance text for the closing wrap-up). Nothing comes from memory. None if the novel has no usable Plot."""
+    en = fetch_wiki(book)
+    if not en or not en["plot"]:
+        print("No Plot section on Wikipedia for this novel.", flush=True)
         return None
-    fa = fetch_wiki(book, "fa")
-    parts = []
-    if en:
-        parts.append("ENGLISH WIKIPEDIA - INTRODUCTION:\n" + en["lead"][:1600])
-    if full:
-        parts.append("FULL-TEXT SUMMARY (written from the complete text of the novel; the most detailed and reliable "
-                     "source for the events):\n" + full["summary"]
-                     + ("\n\nTHEMES SEEN IN THE TEXT:\n" + full["themes"] if full["themes"] else ""))
-    if en_ok:
-        parts.append("ENGLISH WIKIPEDIA - CONTENT SECTIONS:\n" + en["body"][:(4000 if full else 7000)])
-    if en and en.get("sig"):
-        parts.append("ENGLISH WIKIPEDIA - SIGNIFICANCE (reception, legacy, influence: use ONLY for the closing "
-                     "wrap-up, to say why the novel matters):\n" + en["sig"][:1800])
-    others = fetch_other_languages(en["title"]) if en else []
-    for lang, body in others:
-        parts.append(f"WIKIPEDIA ({lang}) PLOT - extra details; use only what does not contradict the sources above:\n"
-                     + body[:3000])
-    if fa and len(fa["body"]) > 400:
-        parts.append("PERSIAN WIKIPEDIA (use its Persian names and wording when it agrees with the English):\n"
-                     + fa["lead"][:700] + "\n" + fa["body"][:2500])
-    title = en["title"] if en else book["title_en"]
-    url = ("https://en.wikipedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_"))) if en else ""
-    credit = "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"
-    if full:
-        url = (url + "\n" if url else "") + f"https://www.gutenberg.org/ebooks/{full['id']}"
-        credit = "منبع خلاصه: متن کامل رمان از پروژه گوتنبرگ (دامنهٔ عمومی) و ویکی‌پدیا (CC BY-SA)"
-    langs = ", ".join(l for l, _ in others)
-    print(f"Source: wikipedia={'yes' if en_ok else 'no'}, full text={'yes' if full else 'no'}, "
-          f"other languages=[{langs}]", flush=True)
-    return {"text": "\n\n".join(parts),
-            "en_words": max(len(en["body"].split()) if en_ok else 0, full["words"] if full else 0),
-            "url": url, "title": title, "credit": credit}
+    pw = en["plot_words"]
+    if pw < PLOT_MIN_WORDS or pw > PLOT_MAX_WORDS:
+        print(f"The Plot section has {pw} words (allowed {PLOT_MIN_WORDS}-{PLOT_MAX_WORDS}): novel skipped.",
+              flush=True)
+        return None
+    parts = ["INTRODUCTION (what the novel is, who wrote it, when):\n" + en["lead"][:900],
+             f"PLOT (an editor-reviewed concise summary of the whole story, {pw} words; the ONLY source of "
+             "the events):\n" + en["plot"]]
+    if en["sig"]:
+        parts.append("SIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the "
+                     "novel matters):\n" + en["sig"][:1500])
+    url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(en["title"].replace(" ", "_"))
+    print(f"Source: Wikipedia Plot section, {pw} words.", flush=True)
+    return {"text": "\n\n".join(parts), "en_words": pw, "url": url, "title": en["title"],
+            "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"}
 
 
 def plan_length(src):
-    """Shorter and denser: every paragraph (scene) is 45-75 words of flowing story."""
-    target = max(260, min(520, int(src["en_words"] * 0.6)))
+    """The narration is about as long as the Plot summary itself: short, dense, nothing added."""
+    target = int(max(300, min(620, src["en_words"] * 0.9)))
     if not USE_CF:                    # slow free images: fewer scenes
         target = min(target, 360)
-    n = max(5, round(target / 55))
-    lo, hi = max(5, n - 1), n + 2
+    n = max(5, round(target / 58))
+    lo, hi = max(5, n - 1), n + 1
     return lo, hi, f"{int(target * 0.9)} to {int(target * 1.1)}"
 
 
@@ -626,6 +454,8 @@ novel "{book['title_en']}" by {book['author_en']} for a Persian-speaking audienc
 
 Use ONLY the facts in the SOURCE TEXT below (taken from Wikipedia). Never add a fact, name, date, number,
 quote or opinion that is not in the source. If the source says nothing about something, say nothing about it.
+The PLOT part of the source is already a concise, editor-reviewed summary of the whole story: RETELL it. Keep every
+key event in the same order, including the ending, leave out only minor details, and add nothing.
 
 SOURCE TEXT:
 {src['text']}
@@ -647,20 +477,19 @@ Return JSON with exactly these keys:
     "mood_en": the mood and color atmosphere.
 
 Rules for the narration:
-- Total narration: {words} Persian words. Short and dense: if the source has less to say, write less.
+- Total narration: {words} Persian words. The source is already short: stay close to it, never pad.
 - NO FILLER. Every sentence must carry a new concrete fact, event or idea from the source. No generic praise, no
   rhetorical questions, no empty transitions, no repeating the same point, no moral or lesson that is not in the source.
-- Structure: (1) the first paragraph: what the novel is, who wrote it and when (only if the source says so) and the
-  situation where the story begins; (2) the story in the SAME ORDER as the source, covering ALL its key events, including
+- Structure: (1) the first paragraph: what the novel is, who wrote it and when (only if the INTRODUCTION says so) and the
+  situation where the story begins; (2) the story in the SAME ORDER as the PLOT, covering ALL its key events, including
   the ending; (3) the closing wrap-up (next rule).
 - MANDATORY, USEFUL wrap-up in the LAST 2 or 3 scenes. The first of them starts with the Persian words «در جمع‌بندی».
   It must give the listener something to keep, not repeat sentences: (a) in 2 or 3 flowing sentences tell the whole arc
-  of the story from beginning to end; (b) then what the novel is really about and why it matters, ONLY from the source
-  (its themes, its reception, its influence: see the SIGNIFICANCE part of the source if present); (c) the very last
+  of the story from beginning to end; (b) then what the novel is really about and why it matters, ONLY from the
+  INTRODUCTION and SIGNIFICANCE parts of the source (its themes, its reception, its influence); (c) the very last
   sentence is short and memorable. No new plot events, no empty praise.
 - Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
-- Translate the MEANING faithfully into natural Persian, never word by word. If a Persian Wikipedia text is given,
-  use its Persian terms when they agree with the English.
+- Translate the MEANING faithfully into natural Persian, never word by word.
 {TONE_RULES}
 {NAMES_RULE}
 - The voice engine can fail on very long noun chains: at most TWO consecutive ezafe links in a noun phrase (never
@@ -695,9 +524,6 @@ Rules for the visuals:
             return align_visuals(data, book)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
-
-
-
 
 
 def letters_only(s):
@@ -1641,17 +1467,17 @@ def send_video(path, caption):
 
 # ---------------------------------------------------------------- main
 def get_book_and_source(posted, rejected):
-    """Next novel that has a usable Wikipedia article. A novel without one is rejected for good
+    """Next novel that has a usable Plot section on Wikipedia. A novel without one is rejected for good
     (never summarized from memory, never tried again)."""
-    tries = 40 if BOOKS_FILE.exists() else 6
+    tries = 60 if BOOKS_FILE.exists() else 6
     for _ in range(tries):
         book = pick_book(posted, rejected)
         print("Book candidate:", book["title_en"], "|", book["book_type"], flush=True)
         src = fetch_source(book)
         if src:
             return book, src
-        reject_book(rejected, book, "no reliable Wikipedia source")
-    raise RuntimeError("Could not find a novel with a usable Wikipedia source")
+        reject_book(rejected, book, "no usable Plot section on Wikipedia")
+    raise RuntimeError("Could not find a novel with a usable Plot section on Wikipedia")
 
 
 def main():
@@ -1703,7 +1529,7 @@ def main():
             book, src = get_book_and_source(posted, rejected)
             print("Book:", book["title_en"], "| source:", src["url"].replace("\n", " + "), flush=True)
             plan = plan_length(src)
-            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from {src['en_words']} source words)",
+            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from a {src['en_words']}-word Plot)",
                   flush=True)
             try:
                 script = write_scenes(book, src, plan)
