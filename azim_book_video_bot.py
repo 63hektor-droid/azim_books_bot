@@ -2,6 +2,7 @@ import base64
 import json
 import math
 import os
+import zlib
 import re
 import shutil
 import subprocess
@@ -49,9 +50,10 @@ TOTAL_BOOKS = 2000              # only novels
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 SUB_FONT_SIZE = 23        # subtitle size (was 22)
-SUB_FONT = "Noto Sans Arabic"
+SUB_FONT = "DejaVu Sans"      # tested: «لا» in «تلاش، کلاه، کلاسیک» is drawn correctly (Noto Sans Arabic drew a rectangle)
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
-SCRIPT_VERSION = 6        # a saved script of another version is not resumed
+MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
+SCRIPT_VERSION = 8        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -416,7 +418,7 @@ def fetch_source(book):
 
 def plan_length(src):
     """The narration is about as long as the Plot summary itself: short, dense, nothing added."""
-    target = int(max(300, min(620, src["en_words"] * 0.9)))
+    target = int(max(300, min(MAX_WORDS, src["en_words"] * 0.9)))
     if not USE_CF:                    # slow free images: fewer scenes
         target = min(target, 360)
     n = max(5, round(target / 58))
@@ -466,13 +468,21 @@ Return JSON with exactly these keys:
   (for example "digital oil painting, rich colors, clean sharp brushwork") or cartoon
   (for example "stylish 2D cartoon illustration, bold clean outlines, flat vibrant colors"), chosen to fit this novel.
   The style must be crisp and clean: never use words like glow, haze, bloom, dreamy, soft focus or mist.
-- "characters": a list of the recurring characters, each {{"name": "...", "look_en": "detailed fixed visual
-  description in English: age, face, hair, clothes, colors"}}. Empty list if there are no characters.
+- "characters": a list of ALL the important characters of the story (at most 6), each {{"name": "...", "look_en":
+  "..."}}. "name" is the name in English letters exactly as in the source. "look_en" is ONE fixed look sheet in English
+  of 35 to 55 words that will be pasted into EVERY picture of this character, so the face is always the same: gender,
+  exact age, face shape, skin tone, eye color, hair (color, length, style), facial hair, ONE distinctive feature (scar,
+  glasses, freckles, hat...) and the usual clothes with colors. Empty list if there are no characters.
   Base the look on what the source says; if it says nothing, choose a fitting look for the era and keep it fixed.
+- "outline": the 8 to 14 key events of the PLOT in order, each {{"event": "short English sentence", "because": "what
+  caused it or what it leads to"}}. The scenes must tell ALL of them, in this order, so the whole book is covered.
+- "cast": the same important characters in order of importance (at most 5), each {{"name": "...", "sentence_fa": "..."}}:
+  ONE Persian sentence of 8 to 18 words that introduces the character to the viewer (who he or she is and his or her
+  role in the story, only from the source). The sentence STARTS with the name in English letters. Empty list if none.
 - "scenes": a list of {min_sc} to {max_sc} objects, each with:
     "narration_fa": 3 to 5 flowing sentences of Persian narration (45-75 words) about ONE single idea or event,
     "source_en": the English sentence or two from the SOURCE TEXT that this paragraph is based on (copy it, at most 45 words),
-    "characters_present": list of character names (from "characters") visible in the picture, may be empty,
+    "characters_present": list of character names (from "characters") that this paragraph is about or that are visible in the picture (the character's fixed look is then drawn automatically), may be empty,
     "setting_en": where the picture takes place (concrete place, time, light),
     "action_en": exactly what is happening in the picture: who is doing what,
     "mood_en": the mood and color atmosphere.
@@ -490,6 +500,12 @@ Rules for the narration:
   INTRODUCTION and SIGNIFICANCE parts of the source (its themes, its reception, its influence); (c) the very last
   sentence is short and memorable. No new plot events, no empty praise.
 - Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
+- COVERAGE: follow your "outline": every one of its events must be told, in order, with its cause (the "because"), so a viewer who never read the book understands the WHOLE story, the cause of each event, how the main
+  character changes, and the ending. Skip only minor details.
+- CONTINUITY: the first sentence of every paragraph picks up exactly where the last sentence of the previous paragraph
+  stopped (same person, time or problem) through a connector that shows cause or time («برای همین»، «چند روز بعد»،
+  «در نتیجه»، «اما»، «تا این‌که»); never start a paragraph from nowhere and never jump to a new subject without a bridge.
+  Whenever a person appears for the first time after a gap, remind the viewer who he or she is in a few words.
 - Translate the MEANING faithfully into natural Persian, never word by word.
 {TONE_RULES}
 {NAMES_RULE}
@@ -521,6 +537,7 @@ Rules for the visuals:
             if not has_wrapup(data["scenes"]):
                 continue
             data = review_script(data, book, src)       # ONE call: facts + wording/tone + voice text
+            data = add_cast_scene(data)
             data = sanitize_narration(data, book)
             return align_visuals(data, book)
         time.sleep(5)
@@ -719,6 +736,32 @@ def sanitize_narration(data, book):
     return data
 
 
+def add_cast_scene(data):
+    """Right after the first paragraph: every important character is introduced by name and his or her face is shown
+    (one portrait per sentence)."""
+    chars = {c.get("name"): c for c in data.get("characters", []) if isinstance(c, dict) and c.get("name")}
+    cast = []
+    for c in data.get("cast") or []:
+        if isinstance(c, dict) and c.get("name") in chars and str(c.get("sentence_fa", "")).strip():
+            cast.append((c["name"], " ".join(str(c["sentence_fa"]).split())))
+    cast = cast[:5]
+    if len(cast) < 2 or len(data["scenes"]) < 3:
+        return data
+    data["scenes"].insert(1, {
+        "narration_fa": " ".join(t for _, t in cast), "spoken_fa": " ".join(t for _, t in cast),
+        "source_en": "", "characters_present": [n for n, _ in cast],
+        "setting_en": "portraits of the main characters", "action_en": "portraits of the main characters",
+        "mood_en": "calm curiosity", "cast_names": [n for n, _ in cast]})
+    return data
+
+
+def cast_visual(chars, name):
+    look = next((c["look_en"] for c in chars if isinstance(c, dict) and c.get("name") == name), "")
+    return {"visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a "
+                         "calm expression, simple plain background.",
+            "characters_present": [name]}
+
+
 def make_beats(text):
     """Cut a paragraph into beats of about BEAT_WORDS words (whole sentences): one picture per beat."""
     sents = split_sentences(DIAC.sub("", text))
@@ -742,8 +785,15 @@ def align_visuals(data, book):
     chars = data.get("characters", [])
     items = []
     for i, s in enumerate(scenes):
-        s["beats"] = make_beats(s["narration_fa"])
         s.pop("beat_visuals", None)
+        if s.get("cast_names"):
+            sents = split_sentences(s["narration_fa"])
+            if len(sents) == len(s["cast_names"]):
+                s["beats"] = sents
+                s["beat_visuals"] = [cast_visual(chars, n) for n in s["cast_names"]]
+                continue
+            s.pop("cast_names")                       # sentences were changed: treat as an ordinary paragraph
+        s["beats"] = make_beats(s["narration_fa"])
         for j, b in enumerate(s["beats"]):
             items.append({"i": len(items), "scene": i, "narration_fa": b, "source_en": s.get("source_en", "")})
     prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration parts, in order, of a video
@@ -761,8 +811,10 @@ Rules for "visual_en":
 - Show LITERALLY what the part says at that moment, not a mood and not a general idea. One clear subject,
   one clear action, one place per picture. Two neighbouring parts must not get the same picture.
   For the closing wrap-up parts, show a symbolic scene of the book's central message.
-- The image model does not know names: describe people by their fixed look (use the characters' looks below)
-  and never write book titles or names in the picture description.
+- The image model does not know names: never write names or book titles in the picture description. When a part is
+  about a character (even only as "he", "she" or by name), list him or her in "characters_present" and write only what
+  the character DOES ("the boy sits alone on a bench"): his fixed look sheet is added automatically, so the face is
+  the same in every picture. Show the character in the situation of that part (place, action, feeling).
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
 - Do not write an art style (it is added separately).
 "characters_present": names (from the characters list) visible in the picture, may be empty.
@@ -775,6 +827,8 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                                           for v in vis):
             k = 0
             for s in scenes:
+                if s.get("cast_names"):
+                    continue
                 n = len(s["beats"])
                 s["beat_visuals"] = [{"visual_en": v["visual_en"].strip(),
                                       "characters_present": v.get("characters_present") or []}
@@ -1232,8 +1286,8 @@ def build_prompt(art, chars, scene):
     looks = "; ".join(f"{c['name']}: {c['look_en']}" for c in chars
                       if isinstance(c, dict) and c.get("name") in names)
     if scene.get("visual_en"):
-        return (f"{scene['visual_en']} "
-                + (f"Characters: {looks}. " if looks else "")
+        return ((f"Characters (always with exactly this face and clothes): {looks}. " if looks else "")
+                + f"{scene['visual_en']} "
                 + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
     return (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
             + (f"Characters: {looks}. " if looks else "")
@@ -1435,13 +1489,56 @@ def fa_typo(t):
     return " ".join(t.split())
 
 
+def setup_sub_font():
+    """Copies ONE tested font into azim_work/azim_fonts: the lam-alef «لا» ligature (U+FEFB) and all Persian letters
+    must exist in it, otherwise another installed font that has them is chosen. Returns the font family name."""
+    from fontTools.ttLib import TTFont
+    need = [0xFEFB, 0x0644, 0x0627, 0x067E, 0x0686, 0x0698, 0x06A9, 0x06AF, 0x06CC, 0x200C]
+    cands = []
+    try:
+        cands.append(subprocess.check_output(["fc-match", "-f", "%{file}", SUB_FONT], text=True).strip())
+        out = subprocess.check_output(["fc-list", ":charset=fefb 644 627 67e 686 698 6a9 6af 6cc", "file"], text=True)
+        cands += [x.strip().rstrip(":") for x in out.splitlines() if x.strip()]
+    except Exception as e:  # noqa: BLE001
+        print("Font search failed:", e, flush=True)
+    cands.append("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    pref = ("dejavusans.ttf", "vazir", "notonaskharabic", "notosansarabic")
+    cands.sort(key=lambda f: next((k for k, x in enumerate(pref) if x in Path(f).name.lower()), 99))
+    for path in cands:
+        try:
+            if not Path(path).is_file() or Path(path).suffix.lower() not in (".ttf", ".otf"):
+                continue
+            f = TTFont(path, fontNumber=0, lazy=True)
+            cm = f.getBestCmap()
+            if not all(c in cm for c in need[:-1]):
+                continue
+            fam = f["name"].getBestFamilyName()
+            d = WORK / "azim_fonts"
+            d.mkdir(parents=True, exist_ok=True)
+            shutil.copy(path, d / Path(path).name)
+            print(f"Subtitle font: {fam} ({path})", flush=True)
+            note(f"Subtitle font = {fam} ({path}); ZWNJ in font: {need[-1] in cm}")
+            return fam
+        except Exception as e:  # noqa: BLE001
+            print("Font skipped:", path, e, flush=True)
+    return SUB_FONT
+
+
 def subtitle_text(text, names=None):
     """Subtitle: no diacritics; English names stay in English (Latin) letters exactly as the voice says them.
     A line that starts with a Latin name gets a right-to-left mark so the Persian line keeps its direction."""
-    t = fa_typo(clean_subtitle(DIAC.sub("", text)))
-    if t and re.match(r"[A-Za-z]", t):
-        t = "\u200f" + t
-    return t
+    return fa_typo(clean_subtitle(DIAC.sub("", text)))
+
+
+_LATIN_RUN = re.compile(r"[A-Za-z](?:[A-Za-z0-9'\u2019\-]|\.(?=[A-Za-z]))*(?:\.? (?=[A-Za-z])[A-Za-z](?:[A-Za-z0-9'\u2019\-]|\.(?=[A-Za-z]))*)*")
+
+
+def bidi_wrap(line):
+    """A line with English names: the whole line is a right-to-left paragraph (RLI...PDI) and every English name is
+    an isolated left-to-right run (LRI...PDI), so the order of the Persian sentence is never scrambled."""
+    if not _LATIN_RUN.search(line):
+        return line
+    return "\u2067" + _LATIN_RUN.sub(lambda m: "\u2066" + m.group(0) + "\u2069", line) + "\u2069"
 
 
 def ensure_names(data, book):
@@ -1515,7 +1612,7 @@ def build_video(scenes, durs, out_path, names=None):
             acc += w
             end = t + d * acc / total_w + (PAD * 0.5 if acc == total_w else 0)
             n += 1
-            srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{x}\n")
+            srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
         t += length
 
     if _dropped_chars:
@@ -1526,13 +1623,14 @@ def build_video(scenes, durs, out_path, names=None):
     sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
         "-i", "list.txt", "-c", "copy", "joined.mp4"], cwd=WORK)
 
-    style = (f"FontName=Noto Sans Arabic,FontSize={SUB_FONT_SIZE},PrimaryColour=&H00FFFFFF,"
+    font_family = setup_sub_font()
+    style = (f"FontName={font_family},FontSize={SUB_FONT_SIZE},PrimaryColour=&H00FFFFFF,"
              "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=28")
     # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
     fits = False
     for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
         sh(["ffmpeg", "-y", "-loglevel", "error", "-i", "joined.mp4",
-            "-vf", f"subtitles=subs.srt:force_style='{style}'",
+            "-vf", f"subtitles=subs.srt:fontsdir=azim_fonts:force_style='{style}'",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
             "-maxrate", maxrate, "-bufsize", "1440k", "-c:a", "copy",
             "-movflags", "+faststart", out_path.name], cwd=WORK)
@@ -1667,7 +1765,10 @@ def main():
             prompt = build_prompt(script["art_style_en"], script.get("characters", []), sc)
             img = WORK / f"img_{i:02d}_{j}.jpg"
             try:
-                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
+                present = [n for n in (sc.get("characters_present") or []) if isinstance(n, str)]
+                pic_seed = (zlib.crc32(present[0].encode()) % 100000 if len(present) == 1
+                            else seed + i * 10 + j)      # one character alone: always the same seed = the same face
+                make_checked_image(prompt, img, pic_seed, n_pics - done_pics - 1, sc)
             except Exception as e:  # noqa: BLE001
                 if last_img is None:
                     raise
