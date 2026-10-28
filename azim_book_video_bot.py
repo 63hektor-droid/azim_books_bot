@@ -427,6 +427,33 @@ def plan_length(src):
 
 
 # ---------------------------------------------------------------- script
+# The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
+# the robot can never invent a wrong or mixed style.
+STYLES = {
+    "cartoon": ("stylish 2D cartoon illustration, bold clean outlines, flat vibrant colors",
+                "light, funny, whimsical or children's stories; fairy-tale and nonsense worlds; talking animals "
+                "(for example Alice in Wonderland, Pinocchio, The Little Prince, The Wizard of Oz)"),
+    "anime": ("anime style illustration, large expressive eyes, clean cel shading, vivid colors, detailed backgrounds",
+              "young heroes, coming-of-age, first love, school life, magic and adventure for teenagers "
+              "(for example Anne of Green Gables, Harry Potter, The Hobbit, Little Women)"),
+    "pencil": ("black and white pencil and charcoal drawing, detailed graphite shading, cross-hatching, monochrome, "
+               "only shades of gray",
+               "dark, tragic, psychological, crime, war, poverty, prison, dystopia, gothic horror "
+               "(for example Crime and Punishment, 1984, Les Miserables, Frankenstein, Dracula)"),
+    "ink_watercolor": ("delicate ink and watercolor illustration, fine ink linework, transparent watercolor washes, "
+                       "gentle muted colors",
+                       "quiet, poetic, nostalgic, pastoral, tender love stories and slow literary novels "
+                       "(for example Pride and Prejudice, Jane Eyre, Wuthering Heights, Madame Bovary)"),
+    "oil": ("classical oil painting, rich deep colors, visible brushwork, dramatic lighting, museum quality",
+            "grand historical epics, big family sagas, aristocratic and 19th-century realist novels, "
+            "serious social panoramas (for example War and Peace, Anna Karenina, The Count of Monte Cristo)"),
+    "comic": ("comic book illustration, thick black outlines, dynamic angles, bold shadows, halftone shading, "
+              "saturated colors",
+              "fast action, pirates, duels, thrillers, detective stories, science fiction, superhero-like adventure "
+              "(for example Treasure Island, The Three Musketeers, Journey to the Center of the Earth, Sherlock Holmes)"),
+}
+STYLE_GUIDE = "\n".join(f'  * "{k}": use for {v[1]}.' for k, v in STYLES.items())
+
 TONE_RULES = """- TONE AND FLOW: a warm storyteller who tells the story to ONE listener, like a friend on a quiet evening, with
   real feeling that follows the story: curiosity at the start, tension when things get hard, sadness or tenderness
   where the story is sad or tender, quiet hope or irony at the end. The feeling lives in the choice of words and in the
@@ -464,10 +491,15 @@ SOURCE TEXT:
 {src['text']}
 
 Return JSON with exactly these keys:
-- "art_style_en": ONE consistent visual style for all images of this video, either painterly
-  (for example "digital oil painting, rich colors, clean sharp brushwork") or cartoon
-  (for example "stylish 2D cartoon illustration, bold clean outlines, flat vibrant colors"), chosen to fit this novel.
-  The style must be crisp and clean: never use words like glow, haze, bloom, dreamy, soft focus or mist.
+- "style_key": ONE picture style for the WHOLE video, exactly one of these keys (write the key only):
+{STYLE_GUIDE}
+  How to choose: decide by the OVERALL mood of the whole book, never by one scene. Check in this order and take the
+  first rule that fits: (1) the book is mainly for children or is a light fairy-tale/nonsense story -> "cartoon";
+  (2) the book is dark, tragic, criminal, about war, prison, poverty or a grim future -> "pencil";
+  (3) the book is a grand historical epic or a large social saga -> "oil";
+  (4) the book is mainly action, adventure on the sea, duels, detective or science fiction -> "comic";
+  (5) the hero is a teenager or young person growing up, or the story is magical youth adventure -> "anime";
+  (6) otherwise (quiet, poetic, romantic, literary) -> "ink_watercolor".
 - "characters": a list of ALL the important characters of the story (at most 6), each {{"name": "...", "look_en":
   "..."}}. "name" is the name in English letters exactly as in the source. "look_en" is ONE fixed look sheet in English
   of 35 to 55 words that will be pasted into EVERY picture of this character, so the face is always the same: gender,
@@ -521,6 +553,12 @@ Rules for the visuals:
 - Each picture must show EXACTLY what the narration says at that moment (concrete scene, people, objects, action).
 - No text, letters, numbers, charts or logos in the pictures. No real celebrities. No scenes copied from films."""
         data = gemini_json(prompt, minutes=15, models=WRITE_MODELS)
+        key = str(data.get("style_key") or "").strip().lower().replace(" ", "_").replace("-", "_")
+        if key not in STYLES:
+            key = "cartoon"                               # the robot named no valid style: safe default
+        data["style_key"] = key
+        data["art_style_en"] = STYLES[key][0]             # the exact words come from the fixed table
+        print(f"Picture style: {key}", flush=True)
         try:
             scenes = data["scenes"]
             ok = (
@@ -537,7 +575,8 @@ Rules for the visuals:
             if not has_wrapup(data["scenes"]):
                 continue
             data = review_script(data, book, src)       # ONE call: facts + wording/tone + voice text
-            data = add_cast_scene(data)
+            if CAST_SCENE:
+                data = add_cast_scene(data)
             data = sanitize_narration(data, book)
             return align_visuals(data, book)
         time.sleep(5)
@@ -734,6 +773,9 @@ def sanitize_narration(data, book):
         if s["narration_fa"] != b or not s.get("spoken_fa"):
             s["spoken_fa"] = s["narration_fa"]       # the narration changed: the old voice text no longer fits
     return data
+
+
+CAST_SCENE = False   # OFF: the image model cannot guarantee that a face stays the same, so no portrait scene is shown
 
 
 def add_cast_scene(data):
@@ -1295,16 +1337,39 @@ def phonetic_text(text, names):
     return re.sub(r"[A-Za-z][A-Za-z'’\-]*", lambda m: latin_to_fa(m.group(0)), text)
 
 
+GEMINI_VIDEOS_PER_DAY = int(os.environ.get("AZIM_GEMINI_VIDEOS") or 2)   # free Gemini TTS: 10 requests/day = 2 videos
+POSTED_REF = []                 # the list of posted videos (set in main), used to count today's Gemini videos
+VOICE_USED = {"engine": None}
+
+
+def pacific_today():
+    """Gemini's daily limits reset at midnight Pacific time."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+
+
+def gemini_voice_allowed():
+    n = sum(1 for p in POSTED_REF if p.get("engine") == "gemini" and p.get("date_pt") == pacific_today())
+    return n < GEMINI_VIDEOS_PER_DAY
+
+
 def make_voice(scenes, kind, names=None):
     """ONE engine and ONE voice for the WHOLE video. If Gemini TTS fails on any paragraph, the whole video is
     read again by Pocket TTS (never one paragraph with one voice and the next with another)."""
-    if gemini_tts_ready():
+    if gemini_tts_ready() and gemini_voice_allowed():
         try:
-            return _make_voice(scenes, kind, names, True)
+            durs = _make_voice(scenes, kind, names, True)
+            VOICE_USED["engine"] = "gemini"
+            return durs
         except GeminiTTSUnavailable as e:
             note(f"Gemini TTS could not read the whole video ({str(e)[:100]}): the WHOLE video is read again "
                  "with Pocket TTS, so only one voice is heard.")
             _gtts["dead"] = True
+    if gemini_tts_ready():
+        note("Gemini voice is used for only %d videos a day: this video uses the uploaded voices (Pocket TTS)."
+             % GEMINI_VIDEOS_PER_DAY)
+    VOICE_USED["engine"] = "pocket"
     return _make_voice(scenes, kind, names, False)
 
 
@@ -1838,6 +1903,8 @@ def main():
                                  "date": date.today().isoformat()})
 
     (WORK / "azim_source.txt").write_text(src["text"], encoding="utf-8")
+    if not CAST_SCENE:      # a saved script from an older run may still contain the portrait scene: remove it
+        script["scenes"] = [sc for sc in script["scenes"] if not sc.get("cast_names")]
     scenes = script["scenes"]
     words = sum(len(s["narration_fa"].split()) for s in scenes)
     print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
@@ -1853,6 +1920,7 @@ def main():
     else:
         kind = "female" if len(posted) % 2 == 0 else "male"
     print(f"Voice of this video: {kind}", flush=True)
+    POSTED_REF[:] = posted
     durs = make_voice(scenes, kind, script.get("names") or {})
 
     seed = int(time.time()) % 100000
@@ -1872,9 +1940,7 @@ def main():
             img = WORK / f"img_{i:02d}_{j}.jpg"
             try:
                 present = [n for n in (sc.get("characters_present") or []) if isinstance(n, str)]
-                pic_seed = (zlib.crc32(present[0].encode()) % 100000 if len(present) == 1
-                            else seed + i * 10 + j)      # one character alone: always the same seed = the same face
-                make_checked_image(prompt, img, pic_seed, n_pics - done_pics - 1, sc)
+                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
             except Exception as e:  # noqa: BLE001
                 if last_img is None:
                     raise
@@ -1893,7 +1959,7 @@ def main():
     send_video(final, caption)
 
     posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
-                   "type": "novel", "voice": kind, "wiki": src["title"], "date": date.today().isoformat()})
+                   "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
     save_json(POSTED_FILE, posted)
     PENDING_FILE.unlink(missing_ok=True)
     shutil.rmtree(WORK, ignore_errors=True)
