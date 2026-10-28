@@ -78,10 +78,11 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           # switches: Settings -> Secrets and variables -> Actions -> Variables (empty = default)
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}                                # optional: English words in the Pocket voice
           AZIM_TTS: ${{ vars.AZIM_TTS }}                                  # gemini (default) or pocket
           AZIM_GEMINI_TTS_MODEL: ${{ vars.AZIM_GEMINI_TTS_MODEL }}        # gemini-3.8-flash-tts (default)
           AZIM_GEMINI_VOICE_FEMALE: ${{ vars.AZIM_GEMINI_VOICE_FEMALE }}  # Sulafat (default)
-          AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Gacrux (default)
+          AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Charon (default)
           AZIM_GEMINI_TTS_TEXT: ${{ vars.AZIM_GEMINI_TTS_TEXT }}          # plain (default) or spoken
         run: python azim_book_video_bot.py
 
@@ -106,5 +107,5 @@ jobs:
             git add -A -- "$f" 2>/dev/null || true
           done
           git diff --cached --quiet || git commit -m "azim: update posted/rejected books and saved script"
-          git pull --rebase origin main || true
-          git push
+          git pull --rebase --autostash origin main || true
+          git push || (git pull --rebase --autostash origin main && git push)
