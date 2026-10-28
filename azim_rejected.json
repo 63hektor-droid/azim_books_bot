@@ -1,0 +1,12 @@
+[
+ {
+  "title_en": "The Handmaid's Tale",
+  "reason": "Gemini blocked the prompt: gemini-flash-latest: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-10-28"
+ },
+ {
+  "title_en": "The Catcher in the Rye",
+  "reason": "Gemini blocked the prompt: gemini-flash-latest: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-10-28"
+ }
+]
