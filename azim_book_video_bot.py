@@ -1094,6 +1094,71 @@ def gemini_tts(text, kind, out_wav, style=""):
     raise GeminiTTSUnavailable(f"Gemini TTS failed: {last[:120]}")
 
 
+GEMINI_GROUP_WORDS = int(os.environ.get("AZIM_GEMINI_GROUP_WORDS") or 260)   # words per Gemini TTS request
+
+
+def split_by_silence(path, weights):
+    """Cuts ONE long recording of several paragraphs back into paragraphs: every cut goes to the longest pause that is
+    near the expected place (expected place = share of the characters). Returns [(start, end), ...] in seconds."""
+    total = probe_duration(path)
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af",
+                          "silencedetect=noise=-35dB:d=0.3", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", out)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", out)]
+    sil = [(a, b) for a, b in zip(starts, ends)]
+    wsum = float(sum(weights))
+    cuts, acc, prev = [], 0.0, 0.0
+    window = max(4.0, 0.08 * total)
+    for w in weights[:-1]:
+        acc += w
+        t = total * acc / wsum
+        best, best_score = t, None
+        for a, b in sil:
+            mid = (a + b) / 2
+            if abs(mid - t) <= window and mid > prev + 1.0:
+                score = (b - a) - 0.15 * abs(mid - t)
+                if best_score is None or score > best_score:
+                    best, best_score = mid, score
+        best = max(best, prev + 1.0)
+        cuts.append(best)
+        prev = best
+    edges = [0.0] + cuts + [total]
+    return list(zip(edges[:-1], edges[1:]))
+
+
+def gemini_voice_groups(scenes, kind):
+    """The free Gemini TTS allows only 10 requests a day: the paragraphs are read in a few GROUPS (about
+    GEMINI_GROUP_WORDS words per request), then the recording is cut back into paragraphs at the pauses."""
+    groups, cur, words = [], [], 0
+    for i, sc in enumerate(scenes):
+        w = len(sc["narration_fa"].split())
+        if cur and words + w > GEMINI_GROUP_WORDS:
+            groups.append(cur)
+            cur, words = [], 0
+        cur.append(i)
+        words += w
+    if cur:
+        groups.append(cur)
+    print(f"Gemini TTS: {len(groups)} request(s) for {len(scenes)} paragraphs", flush=True)
+    for gi, idxs in enumerate(groups):
+        texts = []
+        for i in idxs:
+            sc = scenes[i]
+            texts.append(((sc.get("spoken_fa") or sc["narration_fa"]) if GEMINI_TTS_TEXT == "spoken"
+                          else sc["narration_fa"]).strip())
+        full = WORK / f"graw_{gi:02d}.wav"
+        gemini_tts("\n\n".join(texts), kind, full, GEMINI_TTS_STYLE)
+        cuts = split_by_silence(full, [max(len(t), 1) for t in texts])
+        note("  Gemini group %d: cuts at %s s" % (gi, ", ".join(f"{b:.1f}" for _, b in cuts[:-1])))
+        for i, (a, b) in zip(idxs, cuts):
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(full), "-ss", f"{a:.2f}", "-to", f"{b:.2f}",
+                str(WORK / f"raw_{i:02d}.wav")])
+        if gi < len(groups) - 1:
+            time.sleep(25)                       # free tier: 3 requests per minute
+    return [WORK / f"raw_{i:02d}.wav" for i in range(len(scenes))]
+
+
 def reference_wav(kind):
     """The 5-second reference recording of a voice (built from azim_voices_data.py if the WAV is not in the repo)."""
     ref = REF_AUDIO[kind].resolve()
@@ -1187,11 +1252,47 @@ def tts_mixed(text, kind, out_wav):
         concat_wavs(files, out_wav)
 
 
+_DIGRAPHS = (("sh", "ش"), ("ch", "چ"), ("kh", "خ"), ("th", "ت"), ("ph", "ف"), ("ck", "ک"), ("oo", "و"),
+             ("ee", "ی"), ("ea", "ی"), ("ou", "او"), ("ai", "ی"), ("ay", "ی"), ("ow", "او"), ("qu", "کو"))
+_LETTERS = dict(b="ب", c="ک", d="د", f="ف", g="گ", h="ه", j="ج", k="ک", l="ل", m="م", n="ن", p="پ", q="ک", r="ر",
+                s="س", t="ت", v="و", w="و", x="کس", y="ی", z="ز")
+
+
+def latin_to_fa(word):
+    """Last-resort Persian spelling of an English word (only when the English voice is not available and Gemini
+    gave no spelling): the voice must never crash on Latin letters."""
+    w = word.lower()
+    out, i = [], 0
+    while i < len(w):
+        ch = w[i]
+        if not ch.isalpha():
+            i += 1
+            continue
+        two = next((fa for d, fa in _DIGRAPHS if w.startswith(d, i)), None)
+        if two:
+            out.append(two)
+            i += 2
+            continue
+        first = not out
+        if ch in "aeou":
+            out.append({"a": "آ" if first else "َ", "e": "ا" if first else "ِ", "o": "ا" if first else "ُ",
+                        "u": "ا" if first else "ُ"}[ch])
+        elif ch == "i":
+            out.append("ا" if first else "ی")
+        elif ch == "c" and w[i + 1:i + 2] in ("e", "i", "y"):
+            out.append("س")
+        elif ch in _LETTERS:
+            if not (out and out[-1] == _LETTERS[ch] and ch not in "ln"):     # collapse doubled letters
+                out.append(_LETTERS[ch])
+        i += 1
+    return "".join(out)
+
+
 def phonetic_text(text, names):
-    """Fallback: English names replaced by their Persian phonetic spelling (read by the Persian voice)."""
+    """Fallback: every English word replaced by Persian letters (the Persian voice reads it)."""
     for k in sorted(names, key=len, reverse=True):
         text = text.replace(k, names[k])
-    return text
+    return re.sub(r"[A-Za-z][A-Za-z'’\-]*", lambda m: latin_to_fa(m.group(0)), text)
 
 
 def make_voice(scenes, kind, names=None):
@@ -1213,24 +1314,29 @@ def _make_voice(scenes, kind, names, use_gemini):
     names = names or {}
     wavs = []
 
+    en_dead = [False]
+
     def speak(text, p):
+        if en_dead[0] and LATIN.search(text):
+            tts_text(phonetic_text(text, names), kind, p)
+            return
         try:
             tts_mixed(text, kind, p)
         except EnglishVoiceError:
+            en_dead[0] = True        # do not try the English voice again in this video
             ph = phonetic_text(text, names)
-            note("  English voice not available: this scene uses the Persian phonetic spelling of the names.")
+            note("  English voice not available: English words are read with their Persian spelling.")
             tts_text(ph, kind, p)
 
+    if use_gemini:
+        wavs = gemini_voice_groups(scenes, kind)
     for i, s in enumerate(scenes):
         p = WORK / f"raw_{i:02d}.wav"
         plain = s["narration_fa"].strip()
         spoken = (s.get("spoken_fa") or plain).strip()
         REWRITTEN.clear()
         if use_gemini:
-            gemini_tts(spoken if GEMINI_TTS_TEXT == "spoken" else plain, kind, p, tts_style(s))
-            wavs.append(p)
-            time.sleep(3)
-            continue
+            continue                                  # already read (and cut) by gemini_voice_groups
         key = "spoken_fa" if spoken != plain else "narration_fa"
         try:
             speak(spoken, p)
