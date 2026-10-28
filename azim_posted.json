@@ -85,5 +85,13 @@
   "voice": "female",
   "wiki": "Blood Meridian",
   "date": "2026-10-28"
+ },
+ {
+  "title_en": "Alice's Adventures in Wonderland",
+  "title_fa": "ماجراهای آلیس در سرزمین عجایب",
+  "type": "novel",
+  "voice": "male",
+  "wiki": "Alice's Adventures in Wonderland",
+  "date": "2026-10-28"
  }
 ]
