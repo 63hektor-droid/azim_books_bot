@@ -49,13 +49,14 @@ jobs:
             test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
           fi
 
-      # first run only: builds azim_books_list.json (the 2000 most famous novels) - no manual step needed
-      - name: Build the list of 2000 novels (only if it does not exist yet)
+      # first run only: builds azim_books_list.json (the most famous novels). It is fast now (about 10-25 minutes)
+      # and can never eat the whole job: after 60 minutes it is stopped and the bot picks novels with Gemini instead.
+      - name: Build the list of novels (only if it does not exist yet)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           if [ ! -f azim_books_list.json ]; then
-            python azim_make_booklist.py || echo "List could not be built now: the bot asks Gemini for the next novel instead."
+            timeout 60m python azim_make_booklist.py || echo "List could not be built now: the bot asks Gemini for the next novel instead."
           fi
 
       - name: Save the list of novels
@@ -64,7 +65,7 @@ jobs:
             git config user.name "github-actions"
             git config user.email "github-actions@users.noreply.github.com"
             git add -- azim_books_list.json
-            git diff --cached --quiet || git commit -m "azim: list of 2000 novels"
+            git diff --cached --quiet || git commit -m "azim: list of novels"
             git pull --rebase origin main || true
             git push || true
           fi
@@ -82,7 +83,6 @@ jobs:
           AZIM_GEMINI_VOICE_FEMALE: ${{ vars.AZIM_GEMINI_VOICE_FEMALE }}  # Sulafat (default)
           AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Gacrux (default)
           AZIM_GEMINI_TTS_TEXT: ${{ vars.AZIM_GEMINI_TTS_TEXT }}          # plain (default) or spoken
-          AZIM_GUTENBERG: ${{ vars.AZIM_GUTENBERG }}                      # 0 = Wikipedia only
         run: python azim_book_video_bot.py
 
       - name: Save the voice report and script (for checking)
@@ -93,6 +93,7 @@ jobs:
           path: |
             azim_voice_report.txt
             azim_last_script.json
+            azim_last_source.txt
           if-no-files-found: ignore
 
       # always (even when the video failed): rejected books and the saved script must not be lost

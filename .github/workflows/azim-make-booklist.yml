@@ -1,7 +1,8 @@
 name: azim-make-booklist
 
-# Run this ONCE by hand (Actions -> azim-make-booklist -> Run workflow).
-# It builds azim_books_list.json (the 2000 most famous novels) and commits it.
+# You do NOT need to run this: the video workflow builds the list by itself on its first run.
+# Run it by hand (Actions -> azim-make-booklist -> Run workflow) only to rebuild the list from scratch:
+# delete azim_books_list.json first, or the new list simply replaces it.
 
 on:
   workflow_dispatch:
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +38,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add azim_books_list.json
-          git diff --cached --quiet || git commit -m "azim: list of 2000 novels"
+          git diff --cached --quiet || git commit -m "azim: list of novels"
           git pull --rebase origin main || true
           git push
