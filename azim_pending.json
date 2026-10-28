@@ -20,55 +20,123 @@
   "characters": [
    {
     "name": "Alice",
-    "look_en": "Young girl around seven years old with fair skin, chin-length blonde hair, blue pinafore dress over a white shirt, white stockings, black shoes"
+    "look_en": "young girl, age seven, round face, fair skin, blue eyes, blonde hair tied with a black ribbon, wearing a simple blue dress with a white pinafore and black shoes"
    },
    {
     "name": "White Rabbit",
-    "look_en": "White rabbit wearing a red waistcoat and holding a pocket watch"
+    "look_en": "anthropomorphic white rabbit, pink eyes, long ears, wearing a red waistcoat and holding a pocket watch"
    },
    {
     "name": "Caterpillar",
-    "look_en": "Green caterpillar sitting on a mushroom and smoking a hookah"
+    "look_en": "blue caterpillar sitting on a red mushroom, holding a hookah pipe"
    },
    {
-    "name": "Mad Hatter",
-    "look_en": "Man with messy hair wearing a large top carded hat and a bow tie at a tea party"
+    "name": "Cheshire Cat",
+    "look_en": "purple and pink striped cat with a wide, permanent grin"
    },
    {
     "name": "Queen of Hearts",
-    "look_en": "Strict queen with a crown wearing a red and black dress adorned with hearts"
+    "look_en": "stern royal woman, angry face, wearing a red and black dress adorned with heart symbols and a small golden crown"
+   }
+  ],
+  "outline": [
+   {
+    "event": "Alice follows a White Rabbit down a rabbit hole.",
+    "because": "she is bored and spots him hurrying by with a pocket watch."
+   },
+   {
+    "event": "Alice drinks from a bottle and shrinks.",
+    "because": "she needs to fit through a tiny door leading to a garden."
+   },
+   {
+    "event": "Alice eats a cake and grows to a tremendous size.",
+    "because": "she needs to reach the key on the table."
+   },
+   {
+    "event": "Alice shrinks again by using a fan dropped by the White Rabbit.",
+    "because": "she cools herself down after crying in distress."
+   },
+   {
+    "event": "Alice swims in a pool of her own tears and meets various animals.",
+    "because": "her giant tears created a large pool around her."
+   },
+   {
+    "event": "Alice gets stuck inside the White Rabbit's house.",
+    "because": "she drinks another bottle and grows too large."
+   },
+   {
+    "event": "Alice meets a Caterpillar smoking a hookah.",
+    "because": "she flees into the forest after eating a small cake to shrink."
+   },
+   {
+    "event": "Alice visits a tea party with the Hatter, March Hare, and Dormouse.",
+    "because": "the Cheshire Cat directs her toward them."
+   },
+   {
+    "event": "Alice plays a croquet game using hedgehogs and flamingos.",
+    "because": "she opens the door to the garden of the Queen of Hearts."
+   },
+   {
+    "event": "Alice attends a trial where the Knave of Hearts is accused of stealing tarts.",
+    "because": "the Gryphon drags her away after she meets the Mock Turtle."
+   },
+   {
+    "event": "Alice wakes from her dream on a bank.",
+    "because": "the playing cards swarm down upon her and she opens her eyes."
+   }
+  ],
+  "cast": [
+   {
+    "name": "Alice",
+    "sentence_fa": "Alice دختر کوچکی است که به درون یک دنیای خیالی سقوط می‌کند."
+   },
+   {
+    "name": "White Rabbit",
+    "sentence_fa": "White Rabbit خرگوش سفیدی است که با ساعت جیبی‌اش باعث شروع ماجرا می‌شود."
+   },
+   {
+    "name": "Caterpillar",
+    "sentence_fa": "Caterpillar موجودی است که روی قارچ نشسته و به سوال درباره هویت Alice پاسخ می‌دهد."
+   },
+   {
+    "name": "Cheshire Cat",
+    "sentence_fa": "Cheshire Cat گربه‌ای است که همیشه لبخند می‌زند و راه را نشان می‌دهد."
+   },
+   {
+    "name": "Queen of Hearts",
+    "sentence_fa": "Queen of Hearts ملکه تندخویی است که مدام فرمان گردن‌زدن صادر می‌کند."
    }
   ],
   "scenes": [
    {
-    "narration_fa": "کتاب Alice's Adventures in Wonderland یک رمان کودکانه انگلیسی اثر Lewis Carroll است که در سال هجده و شصت و پنج میلادی منتشر شد. این داستان ماجرای دختر کوچکی به نام Alice را روایت می‌کند که از طریق یک لانه خرگوش به درون دنیایی پر از موجودات شگفت‌انگیز سقوط می‌کند. در شروع روزی خواب‌آلود، Alice در کنار خواهر بزرگترش روی زمین نشسته بود و حوصله‌اش سر رفته بود. ناگهان یک White Rabbit با جلیقه و ساعت جیبی از کنارش رد شد که نگران دیر کردن بود و عجله داشت.",
+    "narration_fa": "کتاب Alice's Adventures in Wonderland داستانی است که توسط Lewis Carroll در سال هزار و هشتصد و شصت و پنج میلادی نوشته شده است. این اثر درباره دختر کوچکی به نام Alice است که از یک سوراخ خرگوش به درون یک دنیای خیالی سقوط می‌کند. روزی او در حالی که با خواهر بزرگترش روی چمن نشسته بود، حس خواب‌آلودگی و خستگی می‌کرد. ناگهان یک White Rabbit با ساعت جیبی و جلیقه از کنارش گذشت و نگران دیر کردنش بود. با تعجب، Alice به دنبال او به درون سوراخ خرگوش رفت.",
     "source_en": "Alice's Adventures in Wonderland (also known as Alice in Wonderland) is an 1865 English children's novel by Lewis Carroll. It tells the story of a little girl named Alice who falls through a rabbit hole into a fantasy world of anthropomorphic creatures. Sitting with her older sister on a bank, and feeling rather sleepy and bored, Alice suddenly spots a White Rabbit with a pocket watch and waistcoat hurrying by, lamenting that he is late.",
     "characters_present": [
      "Alice",
      "White Rabbit"
     ],
-    "setting_en": "Sunny grassy riverbank with green trees in the background",
-    "action_en": "Alice is sitting on the grass while the White Rabbit runs past her looking at his pocket watch",
-    "mood_en": "Calm atmosphere suddenly turning into curious surprise",
-    "spoken_fa": "کتاب Alice's Adventures in Wonderland یک رمان کودکانه انگلیسی اثر Lewis Carroll است که در سال هجده و شصت و پنج میلادی منتشر شد. این داستان ماجرای دختر کوچکی به نام Alice را روایت می‌کند که از طریق یک لانه خرگوش به درون دنیایی پر از موجودات شگفت‌انگیز سقوط می‌کند. در شروع روزی خواب‌آلود، Alice در کنار خواهر بزرگترش روی زمین نشسته بود و حوصله‌اش سر رفته بود. ناگهان یک White Rabbit با جلیقه و ساعت جیبی از کنارش رد شد که نگران دیر کردن بود و عجله داشت.",
+    "setting_en": "A grassy riverbank under a bright afternoon sun.",
+    "action_en": "Alice sits bored on the grass while a White Rabbit with a pocket watch hurries past her.",
+    "mood_en": "Calm and curious with a bright daylight atmosphere.",
+    "spoken_fa": "کتاب Alice's Adventures in Wonderland داستانی است که توسط Lewis Carroll در سال هزار و هشتصد و شصت و پنج میلادی نوشته شده است. این اثر درباره دختر کوچکی به نام Alice است که از یک سوراخ خرگوش به درون یک دنیای خیالی سقوط می‌کند. روزی او در حالی که با خواهر بزرگترش روی چمن نشسته بود، حس خواب‌آلودگی و خستگی می‌کرد. ناگهان یک White Rabbit با ساعت جیبی و جلیقه از کنارش گذشت و نگران دیر کردنش بود. با تعجب، Alice به دنبال او به درون سوراخ خرگوش رفت.",
     "beats": [
-     "کتاب Alice's Adventures in Wonderland یک رمان کودکانه انگلیسی اثر Lewis Carroll است که در سال هجده و شصت و پنج میلادی منتشر شد.",
-     "این داستان ماجرای دختر کوچکی به نام Alice را روایت می‌کند که از طریق یک لانه خرگوش به درون دنیایی پر از موجودات شگفت‌انگیز سقوط می‌کند.",
-     "در شروع روزی خواب‌آلود، Alice در کنار خواهر بزرگترش روی زمین نشسته بود و حوصله‌اش سر رفته بود. ناگهان یک White Rabbit با جلیقه و ساعت جیبی از کنارش رد شد که نگران دیر کردن بود و عجله داشت."
+     "کتاب Alice's Adventures in Wonderland داستانی است که توسط Lewis Carroll در سال هزار و هشتصد و شصت و پنج میلادی نوشته شده است.",
+     "این اثر درباره دختر کوچکی به نام Alice است که از یک سوراخ خرگوش به درون یک دنیای خیالی سقوط می‌کند. روزی او در حالی که با خواهر بزرگترش روی چمن نشسته بود، حس خواب‌آلودگی و خستگی می‌کرد.",
+     "ناگهان یک White Rabbit با ساعت جیبی و جلیقه از کنارش گذشت و نگران دیر کردنش بود. با تعجب، Alice به دنبال او به درون سوراخ خرگوش رفت."
     ],
     "beat_visuals": [
      {
-      "visual_en": "A book rests open on a wooden table outdoors on a sunny day, featuring vintage illustrations of fantastic creatures, surrounded by green grass and falling autumn leaves.",
+      "visual_en": "An open antique book lies on a wooden desk, displaying vintage illustrations and english text under warm lamplight, surrounded by scattered autumn leaves and a silver pocket watch.",
       "characters_present": []
      },
      {
-      "visual_en": "Alice falls downward through a dark, swirling rabbit hole, surrounded by floating antique furniture, glowing clocks, and maps on the stone walls.",
+      "visual_en": "Alice sits sleepy on a green grassy riverbank on a sunny afternoon, leaning against her older sister while green trees and a flowing river fill the background landscape.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "White Rabbit running across green grass, holding a golden pocket watch, while Alice sits nearby on the riverbank looking surprised under a large tree.",
+      "visual_en": "Alice runs across the grassy meadow, chasing the White Rabbit who holds a pocket watch near a large open rabbit hole in the ground under bright daylight.",
       "characters_present": [
        "Alice",
        "White Rabbit"
@@ -77,28 +145,96 @@
     ]
    },
    {
-    "narration_fa": "از روی تعجب، Alice به دنبال او درون لانه خرگوش دوید و سفری طولانی را به سمت پایین آغاز کرد. وقتی به سلامت فرود آمد، خودش را درون اتاقی دید که در آن کلیدی برای یک در بسیار کوچک وجود داشت. پشت آن در کوچک، باغی سرسبز قرار داشت اما او برای رد شدن از در خیلی بزرگ بود. برای همین او از بطری کوچکی که رویش نوشته بود مرا بنوش مقداری نوشید و به اندازه کافی کوچک شد.",
-    "source_en": "Surprised, Alice follows him down a rabbit hole, which sends her onto a lengthy fall. Landing safely, she finds herself inside a room where she discovers a key to a tiny door, beyond which is a garden. Alice drinks some of the contents and, to her astonishment, shrinks small enough to enter the door.",
+    "narration_fa": "Alice دختر کوچکی است که به درون یک دنیای خیالی سقوط می‌کند. White Rabbit خرگوش سفیدی است که با ساعت جیبی‌اش باعث شروع ماجرا می‌شود. Caterpillar موجودی است که روی قارچ نشسته و به سوال درباره هویت Alice پاسخ می‌دهد. Cheshire Cat گربه‌ای است که همیشه لبخند می‌زند و راه را نشان می‌دهد. Queen of Hearts ملکه تندخویی است که مدام فرمان گردن‌زدن صادر می‌کند.",
+    "spoken_fa": "Alice دختر کوچکی است که به درون یک دنیای خیالی سقوط می‌کند. White Rabbit خرگوش سفیدی است که با ساعت جیبی‌اش باعث شروع ماجرا می‌شود. Caterpillar موجودی است که روی قارچ نشسته و به سوال درباره هویت Alice پاسخ می‌دهد. Cheshire Cat گربه‌ای است که همیشه لبخند می‌زند و راه را نشان می‌دهد. Queen of Hearts ملکه تندخویی است که مدام فرمان گردن‌زدن صادر می‌کند.",
+    "source_en": "",
+    "characters_present": [
+     "Alice",
+     "White Rabbit",
+     "Caterpillar",
+     "Cheshire Cat",
+     "Queen of Hearts"
+    ],
+    "setting_en": "portraits of the main characters",
+    "action_en": "portraits of the main characters",
+    "mood_en": "calm curiosity",
+    "cast_names": [
+     "Alice",
+     "White Rabbit",
+     "Caterpillar",
+     "Cheshire Cat",
+     "Queen of Hearts"
+    ],
+    "beats": [
+     "Alice دختر کوچکی است که به درون یک دنیای خیالی سقوط می‌کند.",
+     "White Rabbit خرگوش سفیدی است که با ساعت جیبی‌اش باعث شروع ماجرا می‌شود.",
+     "Caterpillar موجودی است که روی قارچ نشسته و به سوال درباره هویت Alice پاسخ می‌دهد.",
+     "Cheshire Cat گربه‌ای است که همیشه لبخند می‌زند و راه را نشان می‌دهد.",
+     "Queen of Hearts ملکه تندخویی است که مدام فرمان گردن‌زدن صادر می‌کند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a calm expression, simple plain background.",
+      "characters_present": [
+       "Alice"
+      ]
+     },
+     {
+      "visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a calm expression, simple plain background.",
+      "characters_present": [
+       "White Rabbit"
+      ]
+     },
+     {
+      "visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a calm expression, simple plain background.",
+      "characters_present": [
+       "Caterpillar"
+      ]
+     },
+     {
+      "visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a calm expression, simple plain background.",
+      "characters_present": [
+       "Cheshire Cat"
+      ]
+     },
+     {
+      "visual_en": "Close-up face portrait of this character, head and shoulders, looking at the viewer with a calm expression, simple plain background.",
+      "characters_present": [
+       "Queen of Hearts"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "پایان این سقوط طولانی او را به اتاقی رساند که در آن کلیدی برای یک در بسیار کوچک پیدا کرد. ورودی آن در به یک باغ زیبا باز می‌شد اما او برای عبور از آن بزرگ بود. در همین هنگام، او بطری کوچکی با برچسب Drink پیدا کرد و از آن نوشید. با این کار، او به قدری کوچک شد که توانست از در رد شود. اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید.",
+    "source_en": "Landing safely, she finds herself inside a room where she discovers a key to a tiny door, beyond which is a garden. While pondering how to fit through the door, she notices a bottle labelled \"Drink me\". Alice drinks some of the contents and, to her astonishment, shrinks small enough to enter the door. However, she had left the key on a table and is now unable to reach it.",
     "characters_present": [
      "Alice"
     ],
-    "setting_en": "An underground room with stone walls, a tiny door, and a small glass table",
-    "action_en": "Alice is standing in the room looking at a small bottle on the table",
-    "mood_en": "Mysterious and strange room with soft daylight",
-    "spoken_fa": "از روی تعجب، Alice به دنبال او درون لانه خرگوش دوید و سفری طولانی را به سمت پایین آغاز کرد. وقتی به سلامت فرود آمد، خودش را درون اتاقی دید که در آن کلیدی برای یک در بسیار کوچک وجود داشت. پشت آن در کوچک، باغی سرسبز قرار داشت اما او برای رد شدن از در خیلی بزرگ بود. برای همین او از بطری کوچکی که رویش نوشته بود مرا بنوش مقداری نوشید و به اندازه کافی کوچک شد.",
+    "setting_en": "A strange underground room with stone walls and a tiny door.",
+    "action_en": "Alice looks at a small bottle on a table after shrinking down in size.",
+    "mood_en": "Mysterious and slightly tense indoor lighting.",
+    "spoken_fa": "پایان این سقوط طولانی او را به اتاقی رساند که در آن کلیدی برای یک در بسیار کوچک پیدا کرد. ورودی آن در به یک باغ زیبا باز می‌شد اما او برای عبور از آن بزرگ بود. در همین هنگام، او بطری کوچکی با برچسب Drink پیدا کرد و از آن نوشید. با این کار، او به قدری کوچک شد که توانست از در رد شود. اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید.",
     "beats": [
-     "از روی تعجب، Alice به دنبال او درون لانه خرگوش دوید و سفری طولانی را به سمت پایین آغاز کرد. وقتی به سلامت فرود آمد، خودش را درون اتاقی دید که در آن کلیدی برای یک در بسیار کوچک وجود داشت.",
-     "پشت آن در کوچک، باغی سرسبز قرار داشت اما او برای رد شدن از در خیلی بزرگ بود. برای همین او از بطری کوچکی که رویش نوشته بود مرا بنوش مقداری نوشید و به اندازه کافی کوچک شد."
+     "پایان این سقوط طولانی او را به اتاقی رساند که در آن کلیدی برای یک در بسیار کوچک پیدا کرد. ورودی آن در به یک باغ زیبا باز می‌شد اما او برای عبور از آن بزرگ بود.",
+     "در همین هنگام، او بطری کوچکی با برچسب Drink پیدا کرد و از آن نوشید. با این کار، او به قدری کوچک شد که توانست از در رد شود.",
+     "اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Alice stands in a small, dimly lit underground room, holding a golden key and looking at a tiny wooden door set into the brick wall.",
+      "visual_en": "Alice stands inside a dark subterranean brick room, looking at a golden key resting on a wooden table beside a tiny wooden door leading to a bright garden.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "Alice holds a small glass bottle labeled drink me in a brightly lit room, looking down at the wooden floorboards covered in dust.",
+      "visual_en": "Alice drinks from a small glass bottle labeled drink me on a wooden table inside the underground stone room, while holding the golden key in her hand.",
+      "characters_present": [
+       "Alice"
+      ]
+     },
+     {
+      "visual_en": "Alice shrinks to a tiny size on the stone floor of the room, staring helplessly up at a tall wooden table where the golden key rests out of reach.",
       "characters_present": [
        "Alice"
       ]
@@ -106,37 +242,37 @@
     ]
    },
    {
-    "narration_fa": "اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید و برای چاره‌جویی کیک کوچکی را خورد که روی آن نوشته بود مرا بخور. این بار او چنان بزرگ شد که قدش به سقف اتاق رسید و از شدت ناراحتی شروع به گریستن کرد. در همین حال، White Rabbit دوباره از آنجا رد شد و دستکش و بادبزن خود را به زمین انداخت. Alice با استفاده از بادبزن خنک شد و دوباره کوچک گشت تا جایی که در میان استخری از اشک‌های خودش شناور شد.",
-    "source_en": "However, she had left the key on a table and is now unable to reach it. She finds and eats a cake labelled \"Eat me\", which causes her to grow to a tremendous size. Distraught, Alice bursts into tears. As she cries, the White Rabbit rushes past, dropping a fan and gloves. Alice uses the fan to cool herself down, which causes her to shrink once more and leaves her swimming in a pool of her own tears.",
+    "narration_fa": "برای حل این مشکل، او کیکی با برچسب Eat پیدا کرد و از آن خورد. این بار اندازه او به طرز چشمگیری بزرگ شد تا جایی که به حد وحشتناکی رسید. با اندوه فراوان، اشک از چشمان Alice سرازیر شد و به گریه افتاد. در همین لحظه، White Rabbit بار دیگر شتاب‌زنان عبور کرد و بادبزن و دستکش‌هایش را بر زمین انداخت. Alice با استفاده از بادبزن خود را خنک کرد که این کار باعث کوچک شدن دوباره او شد.",
+    "source_en": "She finds and eats a cake labelled \"Eat me\", which causes her to grow to a tremendous size. Distraught, Alice bursts into tears. As she cries, the White Rabbit rushes past, dropping a fan and gloves. Alice uses the fan to cool herself down, which causes her to shrink once more and leaves her swimming in a pool of her own tears.",
     "characters_present": [
      "Alice",
      "White Rabbit"
     ],
-    "setting_en": "The same underground room flooded with a large pool of salty tears",
-    "action_en": "Alice is swimming in a pool of tears while the White Rabbit runs away dropping items",
-    "mood_en": "Sad and frantic moment with cool blue and white tones",
-    "spoken_fa": "اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید و برای چاره‌جویی کیک کوچکی را خورد که روی آن نوشته بود مرا بخور. این بار او چنان بزرگ شد که قدش به سقف اتاق رسید و از شدت ناراحتی شروع به گریستن کرد. در همین حال، White Rabbit دوباره از آنجا رد شد و دستکش و بادبزن خود را به زمین انداخت. Alice با استفاده از بادبزن خنک شد و دوباره کوچک گشت تا جایی که در میان استخری از اشک‌های خودش شناور شد.",
+    "setting_en": "A narrow underground hallway with hard stone floor.",
+    "action_en": "Alice holds a fan while crying as the White Rabbit rushes past her in a hurry.",
+    "mood_en": "Sad and frantic with cool blue and grey tones.",
+    "spoken_fa": "برای حل این مشکل، او کیکی با برچسب Eat پیدا کرد و از آن خورد. این بار اندازه او به طرز چشمگیری بزرگ شد تا جایی که به حد وحشتناکی رسید. با اندوه فراوان، اشک از چشمان Alice سرازیر شد و به گریه افتاد. در همین لحظه، White Rabbit بار دیگر شتاب‌زنان عبور کرد و بادبزن و دستکش‌هایش را بر زمین انداخت. Alice با استفاده از بادبزن خود را خنک کرد که این کار باعث کوچک شدن دوباره او شد.",
     "beats": [
-     "اما او کلید را روی میز جا گذاشته بود و دیگر دستش به آن نمی‌رسید و برای چاره‌جویی کیک کوچکی را خورد که روی آن نوشته بود مرا بخور.",
-     "این بار او چنان بزرگ شد که قدش به سقف اتاق رسید و از شدت ناراحتی شروع به گریستن کرد. در همین حال، White Rabbit دوباره از آنجا رد شد و دستکش و بادبزن خود را به زمین انداخت.",
-     "Alice با استفاده از بادبزن خنک شد و دوباره کوچک گشت تا جایی که در میان استخری از اشک‌های خودش شناور شد."
+     "برای حل این مشکل، او کیکی با برچسب Eat پیدا کرد و از آن خورد. این بار اندازه او به طرز چشمگیری بزرگ شد تا جایی که به حد وحشتناکی رسید.",
+     "با اندوه فراوان، اشک از چشمان Alice سرازیر شد و به گریه افتاد. در همین لحظه، White Rabbit بار دیگر شتاب‌زنان عبور کرد و بادبزن و دستکش‌هایش را بر زمین انداخت.",
+     "Alice با استفاده از بادبزن خود را خنک کرد که این کار باعث کوچک شدن دوباره او شد."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Alice sits on the floor of a cozy room next to a small glass table, looking at a frosted cake with the words eat me written on top in icing.",
+      "visual_en": "Alice grows to a massive height inside the underground room, her head nearly touching the stone ceiling as she cries large teardrops onto the floor.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "Alice grows extremely tall inside a small brick cottage, pressing her head against the wooden ceiling while White Rabbit runs away outside the window.",
+      "visual_en": "Alice cries sitting on the stone floor while the White Rabbit hurries past in panic, dropping a feathered fan and white gloves onto the wet ground.",
       "characters_present": [
        "Alice",
        "White Rabbit"
       ]
      },
      {
-      "visual_en": "Alice swims in a large, sparkling pool of water inside a cavern, holding a paper fan and splashing droplets under the dim cave light.",
+      "visual_en": "Alice fans herself rapidly with a feathered folding fan inside the underground hallway, her body visibly shrinking smaller as shimmering magical blue sparkles surround her feet.",
       "characters_present": [
        "Alice"
       ]
@@ -144,65 +280,68 @@
     ]
    },
    {
-    "narration_fa": "در آن استخر اشک، او با حیوانات و پرندگان گوناگونی روبه‌رو شد که در کنار ساحل جمع شده بودند تا با دویدن دور هم خشک شوند. اما او ناخواسته با حرف زدن از گربه خانگی‌اش، همه حیوانات را ترساند و فراری داد. سپس White Rabbit به اشتباه او را خدمتکار خودش پنداشت و دستور داد دستکش‌ها و بادبزن گمشده‌اش را به خانه او ببرد. Alice با نوشیدن بطری دیگری آن‌قدر بزرگ شد که درون خانه گیر افتاد و راه فرار نداشت.",
-    "source_en": "There she meets various animals and birds, who convene on a bank and engage in a Caucus Race to dry themselves. Alice inadvertently frightens the animals away by mentioning her cat. Mistaking her for his maidservant, the White Rabbit orders Alice to go to his house and retrieve his lost gloves and fan. Alice finds another bottle and drinks from it, causing her to grow to such an extent that she gets stuck in the house.",
+    "narration_fa": "کوچک شدن او باعث شد در استخری از اشک‌های خودش شناور شود و در آنجا با حیوانات و پرندگان گوناگونی برخورد کند. آن‌ها روی یک خشکی گرد هم آمدند و برای خشک کردن خود مسابقه‌ای به نام Caucus Race راه انداختند. در ادامه، Alice با نام بردن از گربه خود، ناخواسته باعث ترسیدن و فرار حیوانات شد. پس از آن، White Rabbit که او را با خدمتکار خود اشتباه گرفته بود، دستورش داد تا دستکش‌ها و بادبزن گم‌شده‌اش را بیاورد.",
+    "source_en": "There she meets various animals and birds, who convene on a bank and engage in a \"Caucus Race\" to dry themselves. Alice inadvertently frighten the animals away by mentioning her cat. Mistaking her for his maidservant, the White Rabbit orders Alice to go to his house and retrieve his lost gloves and fan.",
     "characters_present": [
      "Alice",
      "White Rabbit"
     ],
-    "setting_en": "A small cozy brick cottage with a rabbit hole nearby",
-    "action_en": "Alice's arm and leg are sticking out of the windows and door of the small house",
-    "mood_en": "Comical tension with warm yellow and red colors",
-    "spoken_fa": "در آن استخر اشک، او با حیوانات و پرندگان گوناگونی روبه‌رو شد که در کنار ساحل جمع شده بودند تا با دویدن دور هم خشک شوند. اما او ناخواسته با حرف زدن از گربه خانگی‌اش، همه حیوانات را ترساند و فراری داد. سپس White Rabbit به اشتباه او را خدمتکار خودش پنداشت و دستور داد دستکش‌ها و بادبزن گمشده‌اش را به خانه او ببرد. Alice با نوشیدن بطری دیگری آن‌قدر بزرگ شد که درون خانه گیر افتاد و راه فرار نداشت.",
+    "setting_en": "A damp bank beside a pool of water.",
+    "action_en": "Alice stands among several small animals and birds near the water edge.",
+    "mood_en": "Lively and slightly chaotic outdoor light.",
+    "spoken_fa": "کوچک شدن او باعث شد در استخری از اشک‌های خودش شناور شود و در آنجا با حیوانات و پرندگان گوناگونی برخورد کند. آن‌ها روی یک خشکی گرد هم آمدند و برای خشک کردن خود مسابقه‌ای به نام Caucus Race راه انداختند. در ادامه، Alice با نام بردن از گربه خود، ناخواسته باعث ترسیدن و فرار حیوانات شد. پس از آن، White Rabbit که او را با خدمتکار خود اشتباه گرفته بود، دستورش داد تا دستکش‌ها و بادبزن گم‌شده‌اش را بیاورد.",
     "beats": [
-     "در آن استخر اشک، او با حیوانات و پرندگان گوناگونی روبه‌رو شد که در کنار ساحل جمع شده بودند تا با دویدن دور هم خشک شوند.",
-     "اما او ناخواسته با حرف زدن از گربه خانگی‌اش، همه حیوانات را ترساند و فراری داد. سپس White Rabbit به اشتباه او را خدمتکار خودش پنداشت و دستور داد دستکش‌ها و بادبزن گمشده‌اش را به خانه او ببرد.",
-     "Alice با نوشیدن بطری دیگری آن‌قدر بزرگ شد که درون خانه گیر افتاد و راه فرار نداشت."
+     "کوچک شدن او باعث شد در استخری از اشک‌های خودش شناور شود و در آنجا با حیوانات و پرندگان گوناگونی برخورد کند. آن‌ها روی یک خشکی گرد هم آمدند و برای خشک کردن خود مسابقه‌ای به نام Caucus Race راه انداختند.",
+     "در ادامه، Alice با نام بردن از گربه خود، ناخواسته باعث ترسیدن و فرار حیوانات شد. پس از آن، White Rabbit که او را با خدمتکار خود اشتباه گرفته بود، دستورش داد تا دستکش‌ها و بادبزن گم‌شده‌اش را بیاورد."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Various birds and forest animals stand in a circle on a grassy riverbank, running together in a group on a bright afternoon.",
-      "characters_present": []
-     },
-     {
-      "visual_en": "White Rabbit hands a pair of white gloves and a folding fan to Alice, who stands looking confused on a woodland path.",
+      "visual_en": "Alice swims through a vast pool of her own salty tears inside a cavern, surrounded by various wet animals and birds paddling around her in the water.",
       "characters_present": [
-       "Alice",
-       "White Rabbit"
+       "Alice"
       ]
      },
      {
-      "visual_en": "Alice sits trapped inside a small brick house, her arm sticking out of the open window into the overgrown garden outside.",
+      "visual_en": "Alice stands on a grassy riverbank talking to the White Rabbit, who mistakes her for a servant and hands her a pair of white gloves and a fan.",
       "characters_present": [
-       "Alice"
+       "Alice",
+       "White Rabbit"
       ]
      }
     ]
    },
    {
-    "narration_fa": "برای نجات او، همسایگان و خرگوش شروع به پرتاب سنگریزه‌هایی کردند که به محض برخورد به کیک تبدیل می‌شدند. Alice یکی از آن‌ها را خورد و کوچک شد تا توانست به درون جنگل فرار کند و به راه خود ادامه دهد. در آنجا او با یک Caterpillar نشسته‌ روی قارچ روبه‌رو شد که مشغول کشیدن قلیان بود. این موجود او را زیر سوال برد و Alice با بحران هویت روبه‌رو شد چون توانایی به خاطر آوردن یک شعر را نداشت.",
-    "source_en": "Attempting to extract her, the White Rabbit and his neighbours eventually take to hurling pebbles that turn into small cakes. Alice eats one and shrinks herself, allowing her to flee into the forest. She meets a Caterpillar seated on a mushroom and smoking a hookah. Under the Caterpillar's questioning, Alice begins to admit to her current identity crisis, compounded by her inability to remember a poem.",
+    "narration_fa": "ورود به خانه خرگوش سفید و نوشیدن از بطری دیگری باعث شد که او دوباره به شدت بزرگ شود و این بار در خانه گیر بیفتد. برای بیرون آوردن او، همسایگان و White Rabbit شروع به پرتاب سنگریزه‌هایی کردند که به کیک‌های کوچکی تبدیل می‌شدند. با خوردن یکی از آن‌ها، Alice دوباره کوچک شد و توانست به داخل جنگل بگریزد. در آنجا او با Caterpillar مواجه شد که روی یک قارچ نشسته بود و قلیان می‌کشید.",
+    "source_en": "Alice finds another bottle and drinks from it, causing her to grow to such an extent that she gets stuck in the house. Attempting to extract her, the White Rabbit and his neighbours eventually take to hurling pebbles that turn into small cakes. Alice eats one and shrinks herself, allowing her to flee into the forest. She meets a Caterpillar seated on a mushroom and smoking a hookah.",
     "characters_present": [
      "Alice",
-     "Caterpillar"
+     "Caterpillar",
+     "White Rabbit"
     ],
-    "setting_en": "A deep dark green forest with giant spotted mushrooms",
-    "action_en": "Caterpillar is smoking a hookah on a mushroom while Alice talks to him",
-    "mood_en": "Calm, strange, and philosophical forest atmosphere",
-    "spoken_fa": "برای نجات او، همسایگان و خرگوش شروع به پرتاب سنگریزه‌هایی کردند که به محض برخورد به کیک تبدیل می‌شدند. Alice یکی از آن‌ها را خورد و کوچک شد تا توانست به درون جنگل فرار کند و به راه خود ادامه دهد. در آنجا او با یک Caterpillar نشسته‌ روی قارچ روبه‌رو شد که مشغول کشیدن قلیان بود. این موجود او را زیر سوال برد و Alice با بحران هویت روبه‌رو شد چون توانایی به خاطر آوردن یک شعر را نداشت.",
+    "setting_en": "A dark green forest with large mushrooms.",
+    "action_en": "Alice talks to a blue Caterpillar sitting on a red mushroom smoking a hookah.",
+    "mood_en": "Enigmatic and smoky atmosphere.",
+    "spoken_fa": "ورود به خانه خرگوش سفید و نوشیدن از بطری دیگری باعث شد که او دوباره به شدت بزرگ شود و این بار در خانه گیر بیفتد. برای بیرون آوردن او، همسایگان و White Rabbit شروع به پرتاب سنگریزه‌هایی کردند که به کیک‌های کوچکی تبدیل می‌شدند. با خوردن یکی از آن‌ها، Alice دوباره کوچک شد و توانست به داخل جنگل بگریزد. در آنجا او با Caterpillar مواجه شد که روی یک قارچ نشسته بود و قلیان می‌کشید.",
     "beats": [
-     "برای نجات او، همسایگان و خرگوش شروع به پرتاب سنگریزه‌هایی کردند که به محض برخورد به کیک تبدیل می‌شدند. Alice یکی از آن‌ها را خورد و کوچک شد تا توانست به درون جنگل فرار کند و به راه خود ادامه دهد.",
-     "در آنجا او با یک Caterpillar نشسته‌ روی قارچ روبه‌رو شد که مشغول کشیدن قلیان بود. این موجود او را زیر سوال برد و Alice با بحران هویت روبه‌رو شد چون توانایی به خاطر آوردن یک شعر را نداشت."
+     "ورود به خانه خرگوش سفید و نوشیدن از بطری دیگری باعث شد که او دوباره به شدت بزرگ شود و این بار در خانه گیر بیفتد.",
+     "برای بیرون آوردن او، همسایگان و White Rabbit شروع به پرتاب سنگریزه‌هایی کردند که به کیک‌های کوچکی تبدیل می‌شدند. با خوردن یکی از آن‌ها، Alice دوباره کوچک شد و توانست به داخل جنگل بگریزد.",
+     "در آنجا او با Caterpillar مواجه شد که روی یک قارچ نشسته بود و قلیان می‌کشید."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Alice runs frantically along a narrow dirt path through a dense green forest, dodging small stones scattered across the ground.",
+      "visual_en": "Alice grows extremely large inside a small rustic cottage, her arm bursting out of the living room window while terrified woodland animals watch from the yard outside.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "Caterpillar sits atop a large red toadstool in a dark forest, smoking from a long hookah pipe while looking at Alice standing nearby.",
+      "visual_en": "Alice eats a magical small cake on the grass outside the cottage, rapidly shrinking in size as pebble-turned cakes scatter across the dirt path near the forest.",
+      "characters_present": [
+       "Alice"
+      ]
+     },
+     {
+      "visual_en": "Alice stands in a dense magical forest looking up at the Caterpillar, who sits comfortably on a tall red spotted mushroom smoking a long wooden hookah pipe.",
       "characters_present": [
        "Alice",
        "Caterpillar"
@@ -211,35 +350,74 @@
     ]
    },
    {
-    "narration_fa": "قبل از اینکه Caterpillar خزیده و دور شود، به او گفت که یک طرف قارچ او را بزرگ‌تر و طرف دیگر او را کوچک‌تر می‌کند. پس از آزمون و خطاهای بسیار، گردن Alice آن‌قدر بلند شد که میان درختان جنگل قرار گرفت و کبوتری را ترساند که او را با یک مار اشتباه گرفته بود. بعد از اینکه قدش به اندازه معمول برگشت، او به خانه یک Duchess رسید که یک Cheshire Cat همیشه خندان را داشت.",
-    "source_en": "Before crawling away, the Caterpillar says that a bite of one side of the mushroom will make her larger, while a bite from the other side will make her smaller. During a period of trial and error, Alice's neck extends between the treetops, frightening a pigeon who mistakes her for a serpent. After shrinking to an appropriate height, Alice arrives at the home of a Duchess, who owns a perpetually grinning Cheshire Cat.",
+    "narration_fa": "زیر پرسش‌های Caterpillar، او به بحران هویت خود اعتراف کرد و نتوانست شعر مورد نظر را به یاد بیاورد. پیش از خزیدن به نقطه‌ای دیگر، Caterpillar به او گفت که یک سمت قارچ او را بزرگ‌تر و سمت دیگرش او را کوچک‌تر می‌کند. پس از کمی تلاش و خطا، گردن Alice تا بالای درختان امتداد یافت و کبوتری را که او را با مار اشتباه گرفته بود ترساند. بعد از بازگشت به اندازه مناسب، او به خانه یک Duchess رسید که صاحب یک Cheshire Cat با لبخند همیشگی بود.",
+    "source_en": "Under the Caterpillar's questioning, Alice begins to admit to her current identity crisis, compounded by her inability to remember a poem. Before crawling away, the Caterpillar says that a bite of one side of the mushroom will make her larger, while a bite from the other side will make her smaller. During a period of trial and error, Alice's neck extends between the treetops, frightening a pigeon who mistakes her for a serpent. After shrinking to an appropriate height, Alice arrives at the home of a Duchess, who owns a perpetually grinning Cheshire Cat.",
     "characters_present": [
-     "Alice"
+     "Alice",
+     "Caterpillar",
+     "Cheshire Cat"
     ],
-    "setting_en": "Outside a crooked old house with trees surrounding it",
-    "action_en": "Alice stands near the house with her neck stretching upwards out of the frame",
-    "mood_en": "Bizarre and surreal mood with deep greens and browns",
-    "spoken_fa": "قبل از اینکه Caterpillar خزیده و دور شود، به او گفت که یک طرف قارچ او را بزرگ‌تر و طرف دیگر او را کوچک‌تر می‌کند. پس از آزمون و خطاهای بسیار، گردن Alice آن‌قدر بلند شد که میان درختان جنگل قرار گرفت و کبوتری را ترساند که او را با یک مار اشتباه گرفته بود. بعد از اینکه قدش به اندازه معمول برگشت، او به خانه یک Duchess رسید که یک Cheshire Cat همیشه خندان را داشت.",
+    "setting_en": "A deep woodland filled with tall trees and oversized plants.",
+    "action_en": "Alice stands among giant trees with a grinning cat watching from a branch above.",
+    "mood_en": "Surreal and mysterious with soft daylight.",
+    "spoken_fa": "زیر پرسش‌های Caterpillar، او به بحران هویت خود اعتراف کرد و نتوانست شعر مورد نظر را به یاد بیاورد. پیش از خزیدن به نقطه‌ای دیگر، Caterpillar به او گفت که یک سمت قارچ او را بزرگ‌تر و سمت دیگرش او را کوچک‌تر می‌کند. پس از کمی تلاش و خطا، گردن Alice تا بالای درختان امتداد یافت و کبوتری را که او را با مار اشتباه گرفته بود ترساند. بعد از بازگشت به اندازه مناسب، او به خانه یک Duchess رسید که صاحب یک Cheshire Cat با لبخند همیشگی بود.",
     "beats": [
-     "قبل از اینکه Caterpillar خزیده و دور شود، به او گفت که یک طرف قارچ او را بزرگ‌تر و طرف دیگر او را کوچک‌تر می‌کند.",
-     "پس از آزمون و خطاهای بسیار، گردن Alice آن‌قدر بلند شد که میان درختان جنگل قرار گرفت و کبوتری را ترساند که او را با یک مار اشتباه گرفته بود.",
-     "بعد از اینکه قدش به اندازه معمول برگشت، او به خانه یک Duchess رسید که یک Cheshire Cat همیشه خندان را داشت."
+     "زیر پرسش‌های Caterpillar، او به بحران هویت خود اعتراف کرد و نتوانست شعر مورد نظر را به یاد بیاورد. پیش از خزیدن به نقطه‌ای دیگر، Caterpillar به او گفت که یک سمت قارچ او را بزرگ‌تر و سمت دیگرش او را کوچک‌تر می‌کند.",
+     "پس از کمی تلاش و خطا، گردن Alice تا بالای درختان امتداد یافت و کبوتری را که او را با مار اشتباه گرفته بود ترساند.",
+     "بعد از بازگشت به اندازه مناسب، او به خانه یک Duchess رسید که صاحب یک Cheshire Cat با لبخند همیشگی بود."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Caterpillar crawls slowly across the cap of a large spotted mushroom, surrounded by green ferns and damp soil on the forest floor.",
+      "visual_en": "The Caterpillar blows a thick ring of smoke into the air while sitting atop a red mushroom in the deep green forest, surrounded by tall ferns and moss.",
       "characters_present": [
        "Caterpillar"
       ]
      },
      {
-      "visual_en": "Alice stretches her long neck high up among the green branches and leaves of tall forest trees, looking down at startled birds.",
+      "visual_en": "Alice stretches her long neck high up through the green treetops of the forest, frightening a startled gray pigeon that flies away from its leafy nest.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "Alice stands outside a crooked country cottage with a thatched roof, looking at a grinning cat perched on a wooden fence post.",
+      "visual_en": "Alice stands in front of a rustic stone cottage in the woods, looking up at the Cheshire Cat whose purple and pink striped body rests on a tree branch.",
+      "characters_present": [
+       "Alice",
+       "Cheshire Cat"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "کودک Duchess در دستان Alice به یک خوک کوچک تبدیل شد و او حیوان را در جنگل آزاد کرد. سپس Cheshire Cat ظاهر شد و او را پیش از ناپدید شدن به سوی Hatter و March Hare هدایت کرد. در آنجا او Hatter و March Hare را به همراه یک Dormouse خواب‌آلود در میان یک مهمانی چای پیدا کرد. Hatter توضیح داد که زمان همیشه روی ساعت شش عصر متوقف مانده است چون او با Time دعوایش شده بود. از پاسخ دادن به معما بازماند و گروه را بی‌ادب یافت، پس با جمله‌ای تند مهمانی چای را ترک کرد.",
+    "source_en": "The Duchess's baby, whom she hands to Alice, transforms into a piglet, which Alice releases into the woods. The Cheshire Cat appears to Alice and directs her toward the Hatter and March Hare before disappearing, leaving his grin behind. Alice finds the Hatter, March Hare, and a sleepy Dormouse in the middle of a tea party. The Hatter explains that it is always 6 p.m. (tea time) – the consequence of his having quarrelled with Time. Unable to answer the riddle, and considering the company rude, Alice walks off, declaring it's the stupidest tea party she ever was at.",
+    "characters_present": [
+     "Alice",
+     "Cheshire Cat"
+    ],
+    "setting_en": "A long outdoor table set with teacups under the trees.",
+    "action_en": "Alice walks away from a tea table while a grinning cat head floats nearby.",
+    "mood_en": "Absurd and whimsical with warm afternoon light.",
+    "spoken_fa": "کودک Duchess در دستان Alice به یک خوک کوچک تبدیل شد و او حیوان را در جنگل آزاد کرد. سپس Cheshire Cat ظاهر شد و او را پیش از ناپدید شدن به سوی Hatter و March Hare هدایت کرد. در آنجا او Hatter و March Hare را به همراه یک Dormouse خواب‌آلود در میان یک مهمانی چای پیدا کرد. Hatter توضیح داد که زمان همیشه روی ساعت شش عصر متوقف مانده است چون او با Time دعوایش شده بود. از پاسخ دادن به معما بازماند و گروه را بی‌ادب یافت، پس با جمله‌ای تند مهمانی چای را ترک کرد.",
+    "beats": [
+     "کودک Duchess در دستان Alice به یک خوک کوچک تبدیل شد و او حیوان را در جنگل آزاد کرد. سپس Cheshire Cat ظاهر شد و او را پیش از ناپدید شدن به سوی Hatter و March Hare هدایت کرد.",
+     "در آنجا او Hatter و March Hare را به همراه یک Dormouse خواب‌آلود در میان یک مهمانی چای پیدا کرد. Hatter توضیح داد که زمان همیشه روی ساعت شش عصر متوقف مانده است چون او با Time دعوایش شده بود.",
+     "از پاسخ دادن به معما بازماند و گروه را بی‌ادب یافت، پس با جمله‌ای تند مهمانی چای را ترک کرد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Alice holds a small pink piglet in her arms outside a rustic cottage, while the Cheshire Cat hovers in the air above, leaving only a wide grinning smile behind.",
+      "characters_present": [
+       "Alice",
+       "Cheshire Cat"
+      ]
+     },
+     {
+      "visual_en": "The Hatter and the March Hare sit at a long outdoor tea table cluttered with teacups and teapots, while a sleepy dormouse slumbers between them under lanterns.",
+      "characters_present": []
+     },
+     {
+      "visual_en": "Alice turns away in annoyance and walks down a forest path, leaving behind a messy outdoor tea party with empty chairs, teacups, and a sleeping dormouse.",
       "characters_present": [
        "Alice"
       ]
@@ -247,96 +425,75 @@
     ]
    },
    {
-    "narration_fa": "پس از آن، او به یک مهمانی چای عجیب وارد شد که در آن Mad Hatter و March Hare و یک Dormouse خواب‌آلود حضور داشتند. Mad Hatter توضیح داد که زمان همیشه روی ساعت شش عصر متوقف مانده است چون او با زمان دعوا کرده بود. از آنجا که پاسخ معما را نمی‌دانست و رفتار میزبانان را بی‌ادبانه دید، Alice آنجا را ترک کرد. سپس او از درختی گذشت و دوباره به همان اتاق آغازین برگشت تا این‌که کلید را برداشت و وارد باغ شد.",
-    "source_en": "Alice finds the Hatter, March Hare, and a sleepy Dormouse in the middle of a tea party. The Hatter explains that it is always 6 p.m. (tea time) – the consequence of his having quarrelled with Time. Unable to answer the riddle Why is a raven like a writing desk?, and considering the company rude, Alice walks off, declaring It's the stupidest tea-party I ever was at in all my life! Noticing a door in a tree, Alice passes through and finds herself back in the room from the beginning of her journey. She takes the key and opens the door to the garden",
+    "narration_fa": "از طریق دری که روی یک درخت قرار داشت، او دوباره به همان اتاق آغاز سفر خود بازگشت. او کلید را برداشت و در را به سوی باغ گشود که در واقع زمین بازی کریکت Queen of Hearts بود. در این بازی عجیب، جوجه‌تیغی‌ها به عنوان توپ، فلامینگوها به عنوان چوب بازی و سربازان به عنوان حلقه استفاده می‌شدند. ملکه بسیار تندخو بود و مدام فرمان گردن‌زدن صادر می‌کرد. هنگامی که سر Cheshire Cat پدیدار شد، ملکه دستور داد او را گردن بزنند در حالی که بدنی وجود نداشت تا سر از آن جدا شود.",
+    "source_en": "Noticing a door in a tree, Alice passes through and finds herself back in the room from the beginning of her journey. She takes the key and opens the door to the garden, which turns out to be the croquet court of the Queen of Hearts, whose guard consists of living playing cards. Alice participates in a croquet game, in which hedgehogs are used as balls, flamingos are used as mallets, and soldiers act as hoops. The Queen is short-termpered, constantly ordering beheadings. When the Cheshire Cat's lone head appears, the Queen orders its beheading, an act which appears impossible in the absence of a body.",
     "characters_present": [
      "Alice",
-     "Mad Hatter"
+     "Queen of Hearts",
+     "Cheshire Cat"
     ],
-    "setting_en": "A long outdoor table set for tea under the trees",
-    "action_en": "Mad Hatter and friends are sitting at the table while Alice walks away in frustration",
-    "mood_en": "Nonsensical and eccentric tea party setting with pastel colors",
-    "spoken_fa": "پَس اَز آن، او بِه یک مهمانیِ چایِ عجیب وارد شُد کِه دَر آن Mad Hatter و March Hare و یک Dormouse خواب‌آلود حضور داشتند. Mad Hatter توضیح داد که زَمان هَمیشِه روی ساعتِ شِشِ عَصر مُتَوَقِف مانده است چون او با زَمان دَعوا کَردِه بود. اَز آنجا کِه پاسُخِ مَعما را نَمیدانست و رَفْتارِ میزبانان را بی‌ادبانِه دید، Alice آنجا را تَرک کَرد. سَپِس او اَز دِرَختی گُذَشت و دوباره بِه هَمان اتاقِ آغازین بَرگَشت تا این‌که کلید را برداشت و واردِ باغ شُد.",
+    "setting_en": "A manicured royal garden with hedge walls.",
+    "action_en": "Alice plays croquet using a flamingo as a mallet while the angry Queen of Hearts watches.",
+    "mood_en": "Tense and royal with bright contrasting colors.",
+    "spoken_fa": "از طریق دری که روی یک درخت قرار داشت، او دوباره به همان اتاق آغاز سفر خود بازگشت. او کلید را برداشت و در را به سوی باغ گشود که در واقع زمین بازی کریکت Queen of Hearts بود. در این بازی عجیب، جوجه‌تیغی‌ها به عنوان توپ، فلامینگوها به عنوان چوب بازی و سربازان به عنوان حلقه استفاده می‌شدند. ملکه بسیار تندخو بود و مدام فرمان گردن‌زدن صادر می‌کرد. هنگامی که سر Cheshire Cat پدیدار شد، ملکه دستور داد او را گردن بزنند در حالی که بدنی وجود نداشت تا سر از آن جدا شود.",
     "beats": [
-     "پس از آن، او به یک مهمانی چای عجیب وارد شد که در آن Mad Hatter و March Hare و یک Dormouse خواب‌آلود حضور داشتند.",
-     "Mad Hatter توضیح داد که زمان همیشه روی ساعت شش عصر متوقف مانده است چون او با زمان دعوا کرده بود. از آنجا که پاسخ معما را نمی‌دانست و رفتار میزبانان را بی‌ادبانه دید، Alice آنجا را ترک کرد.",
-     "سپس او از درختی گذشت و دوباره به همان اتاق آغازین برگشت تا این‌که کلید را برداشت و وارد باغ شد."
+     "از طریق دری که روی یک درخت قرار داشت، او دوباره به همان اتاق آغاز سفر خود بازگشت. او کلید را برداشت و در را به سوی باغ گشود که در واقع زمین بازی کریکت Queen of Hearts بود.",
+     "در این بازی عجیب، جوجه‌تیغی‌ها به عنوان توپ، فلامینگوها به عنوان چوب بازی و سربازان به عنوان حلقه استفاده می‌شدند. ملکه بسیار تندخو بود و مدام فرمان گردن‌زدن صادر می‌کرد.",
+     "هنگامی که سر Cheshire Cat پدیدار شد، ملکه دستور داد او را گردن بزنند در حالی که بدنی وجود نداشت تا سر از آن جدا شود."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Mad Hatter sits at a long outdoor table laden with teapots and cups, surrounded by scattered chairs in a shady garden.",
-      "characters_present": [
-       "Mad Hatter"
-      ]
-     },
-     {
-      "visual_en": "Mad Hatter pours hot tea from a metal teapot into a china cup on a wooden table, under the branches of an old willow tree.",
-      "characters_present": [
-       "Mad Hatter"
-      ]
-     },
-     {
-      "visual_en": "Alice opens a small wooden door built into the trunk of a massive ancient tree, revealing bright sunlight shining from the other side.",
+      "visual_en": "Alice opens a small wooden door set into the trunk of a giant forest tree, revealing a bright green garden filled with sculpted rose bushes and playing card guards.",
       "characters_present": [
        "Alice"
       ]
-     }
-    ]
-   },
-   {
-    "narration_fa": "آن باغ در واقع زمین بازی کروکت ملکه یعنی Queen of Hearts بود که سربازانش کارت‌های بازی زنده بودند. بازی کروکت با جوجه تیغی‌ها به عنوان توپ و فلامینگوها به عنوان چوب بازی انجام می‌شد و ملکه بسیار زودرنج بود و مدام دستور سر بریدن صادر می‌کرد. وقتی سر Cheshire Cat ظاهر شد، ملکه دستور داد سرش را بزنند در حالی که اصلا بدنی وجود نداشت. بعد از آن Alice به ملاقات یک موجود عجیب و Mock Turtle رفت و رقص لابس‌تر را تماشا کرد.",
-    "source_en": "which turns out to be the croquet court of the Queen of Hearts, whose guard consists of living playing cards. Alice participates in a croquet game, in which hedgehogs are used as balls, flamingos are used as mallets, and soldiers act as hoops. The Queen is short-tempered, constantly ordering beheadings. When the Cheshire Cat's lone head appears, the Queen orders its beheading, an act which appears impossible in the absence of a body from which to sever it. Alice meets a Gryphon and a Mock Turtle, who dance to the Lobster Quadrille",
-    "characters_present": [
-     "Alice",
-     "Queen of Hearts"
-    ],
-    "setting_en": "A bright royal garden with trimmed hedges and playing card guards",
-    "action_en": "Queen of Hearts is shouting angrily during a croquet game while Alice holds a flamingo",
-    "mood_en": "Tense and chaotic royal atmosphere with bright reds and greens",
-    "spoken_fa": "آن باغ در واقع زمین بازی کروکت ملکه یعنی Queen of Hearts بود که سربازانش کارت‌های بازی زنده بودند. بازی کروکت با جوجه تیغی‌ها به عنوان توپ و فلامینگوها به عنوان چوب بازی انجام می‌شد و ملکه بسیار زودرنج بود و مدام دستور سر بریدن صادر می‌کرد. وقتی سر Cheshire Cat ظاهر شد، ملکه دستور داد سرش را بزنند در حالی که اصلا بدنی وجود نداشت. بعد از آن Alice به ملاقات یک موجود عجیب و Mock Turtle رفت و رقص لابس‌تر را تماشا کرد.",
-    "beats": [
-     "آن باغ در واقع زمین بازی کروکت ملکه یعنی Queen of Hearts بود که سربازانش کارت‌های بازی زنده بودند. بازی کروکت با جوجه تیغی‌ها به عنوان توپ و فلامینگوها به عنوان چوب بازی انجام می‌شد و ملکه بسیار زودرنج بود و مدام دستور سر بریدن صادر می‌کرد.",
-     "وقتی سر Cheshire Cat ظاهر شد، ملکه دستور داد سرش را بزنند در حالی که اصلا بدنی وجود نداشت. بعد از آن Alice به ملاقات یک موجود عجیب و Mock Turtle رفت و رقص لابس‌تر را تماشا کرد."
-    ],
-    "beat_visuals": [
+     },
      {
-      "visual_en": "Queen of Hearts stands on a manicured lawn holding a wooden mallet, glaring angrily at living playing cards acting as soldiers.",
+      "visual_en": "The Queen of Hearts stands furiously on a green lawn holding a flamingo mallet, pointing a stern finger at living playing card soldiers on a croquet court.",
       "characters_present": [
        "Queen of Hearts"
       ]
      },
      {
-      "visual_en": "Alice watches a fantastical turtle-like creature dancing on a sandy beach near the ocean, under a bright sunny sky.",
+      "visual_en": "The Queen of Hearts yells in anger at the floating head of the Cheshire Cat, which grinds its wide smile in the air above a croquet court filled with rose bushes.",
       "characters_present": [
-       "Alice"
+       "Queen of Hearts",
+       "Cheshire Cat"
       ]
      }
     ]
    },
    {
-    "narration_fa": "سپس او به یک دادگاه کشیده شد که در آن Knave of Hearts متهم شده بود تارت‌های ملکه را دزدیده است. ریاست دادگاه بر عهده King of Hearts بود و هیئت منصفه را همان حیواناتی تشکیل می‌دادند که Alice قبلاً دیده بود. در جریان دادگاه، Alice به تدریج بزرگ‌تر شد و اعتمادبه‌نفس بیشتری پیدا کرد تا جایی که به بی‌منطقی این محاکمه اعتراض کرد. وقتی ملکه خشمگین دستور داد سر او را قطع کنند، Alice گفت آن‌ها فقط یک دست ورق بازی هستند.",
-    "source_en": "the Gryphon drags Alice away for a trial, in which the Knave of Hearts stands accused of stealing the Queen's tarts. The trial is conducted by the King of Hearts, and the jury is composed of animals that Alice previously met. Alice gradually grows in size and confidence, allowing herself increasingly frequent remarks on the irrationality of the proceedings. The Queen eventually commands Alice's beheading, but Alice scoffs that her guard is only a pack of playing cards.",
+    "narration_fa": "در ادامه، Alice با یک Gryphon و یک Mock Turtle دیدار کرد که به همراه هم رقصیدند و شعر خواندند. پس از آن، Gryphon او را برای شرکت در یک دادگاه با خود کشاند تا محاکمه Knave of Hearts را تماشا کند. این دادگاه به اتهام دزدیدن تارت‌های ملکه به ریاست King of Hearts و با هیئت منصفه‌ای از همان حیوانات پیشین برگزار شد. با افزایش اندازه و اعتمادبه‌نفس، Alice مدام به بی‌منقی روند دادگاه اعتراض کرد. ملکه خشمگین دستور گردن‌زدن او را صادر کرد اما او گفت آن‌ها تنها یک دسته ورق بازی بیش نیستند.",
+    "source_en": "Alice meets a Gryphon and a Mock Turtle, who dance to the Lobster Quadrille while Alice recites a poem. The Mock Turtle sings, during which the Gryphon drags Alice away for a trial, in which the Knave of Hearts stands accused of stealing the Queen's tarts. The trial is conducted by the King of Hearts, and the jury is composed of animals that Alice previously met. Alice gradually grows in size and confidence, allowing herself increasingly frequent remarks on the irrationality of the proceedings. The Queen eventually commands Alice's beheading, but Alice scoffs that her guard is only a pack of playing cards.",
     "characters_present": [
      "Alice",
      "Queen of Hearts"
     ],
-    "setting_en": "A large indoor courtroom with a raised throne and animal jury",
-    "action_en": "Alice stands tall in the courtroom looking down bravely at the angry Queen on her throne",
-    "mood_en": "Dramatic and climactic courtroom scene with stark red and black decor",
-    "spoken_fa": "سپس او به یک دادگاه کشیده شد که در آن Knave of Hearts متهم شده بود تارت‌های ملکه را دزدیده است. ریاست دادگاه بر عهده King of Hearts بود و هیئت منصفه را همان حیواناتی تشکیل می‌دادند که Alice قبلاً دیده بود. در جریان دادگاه، Alice به تدریج بزرگ‌تر شد و اعتمادبه‌نفس بیشتری پیدا کرد تا جایی که به بی‌منطقی این محاکمه اعتراض کرد. وقتی ملکه خشمگین دستور داد سر او را قطع کنند، Alice گفت آن‌ها فقط یک دست ورق بازی هستند.",
+    "setting_en": "A large courtroom filled with animal jurors and royal guards.",
+    "action_en": "Alice stands tall in front of the Queen of Hearts as playing cards rise up around her.",
+    "mood_en": "Chaotic and dramatic courtroom lighting.",
+    "spoken_fa": "در ادامه، Alice با یک Gryphon و یک Mock Turtle دیدار کرد که به همراه هم رقصیدند و شعر خواندند. پس از آن، Gryphon او را برای شرکت در یک دادگاه با خود کشاند تا محاکمه Knave of Hearts را تماشا کند. این دادگاه به اتهام دزدیدن تارت‌های ملکه به ریاست King of Hearts و با هیئت منصفه‌ای از همان حیوانات پیشین برگزار شد. با افزایش اندازه و اعتمادبه‌نفس، Alice مدام به بی‌منقی روند دادگاه اعتراض کرد. ملکه خشمگین دستور گردن‌زدن او را صادر کرد اما او گفت آن‌ها تنها یک دسته ورق بازی بیش نیستند.",
     "beats": [
-     "سپس او به یک دادگاه کشیده شد که در آن Knave of Hearts متهم شده بود تارت‌های ملکه را دزدیده است. ریاست دادگاه بر عهده King of Hearts بود و هیئت منصفه را همان حیواناتی تشکیل می‌دادند که Alice قبلا دیده بود.",
-     "در جریان دادگاه، Alice به تدریج بزرگ‌تر شد و اعتمادبه‌نفس بیشتری پیدا کرد تا جایی که به بی‌منطقی این محاکمه اعتراض کرد. وقتی ملکه خشمگین دستور داد سر او را قطع کنند، Alice گفت آن‌ها فقط یک دست ورق بازی هستند."
+     "در ادامه، Alice با یک Gryphon و یک Mock Turtle دیدار کرد که به همراه هم رقصیدند و شعر خواندند. پس از آن، Gryphon او را برای شرکت در یک دادگاه با خود کشاند تا محاکمه Knave of Hearts را تماشا کند.",
+     "این دادگاه به اتهام دزدیدن تارت‌های ملکه به ریاست King of Hearts و با هیئت منصفه‌ای از همان حیوانات پیشین برگزار شد. با افزایش اندازه و اعتمادبه‌نفس، Alice مدام به بی‌منقی روند دادگاه اعتراض کرد.",
+     "ملکه خشمگین دستور گردن‌زدن او را صادر کرد اما او گفت آن‌ها تنها یک دسته ورق بازی بیش نیستند."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Alice stands in a crowded courtroom with wooden benches, surrounded by animal jurors holding pencils and notepads during a trial.",
+      "visual_en": "Alice walks through a sunny seaside landscape, watching a mythical gryphon and a mock turtle dance joyfully together near the splashing waves of the blue ocean.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "Queen of Hearts points an accusing finger forward in a grand hall, while Alice stands bravely facing her with an expression of defiance.",
+      "visual_en": "Alice stands inside a crowded courtroom facing a king on a high throne, while a jury of woodland animals sits attentively listening to the dramatic trial proceedings.",
+      "characters_present": [
+       "Alice"
+      ]
+     },
+     {
+      "visual_en": "Alice grows tall and points defiantly at the angry Queen of Hearts inside a grand courtroom, while a flurry of paper playing cards swirls violently through the air.",
       "characters_present": [
        "Alice",
        "Queen of Hearts"
@@ -345,64 +502,61 @@
     ]
    },
    {
-    "narration_fa": "در جمع‌بندی، این سفر عجیب با فرود آمدن Alice از لانه خرگوش آغاز شد و با شورش او علیه کارت‌های بازی در دادگاه به نقطه اوج رسید. این رمان با چالش کشیدن منطق و پایان دادن به عصر ادبیات آموزشی کودکان، دوره جدیدی از سرگرمی را بنیان گذاشت که تا به امروز در فرهنگ عامه ماندگار است. با هجوم کارت‌های بازی به سمت او، Alice ناگهان از خواب بیدار شد و دید که خواهرش برگ‌ها را از روی صورتش پاک می‌کند. او ماجراهای خود را تعریف کرد و برای خوردن چای به خانه دوید و خوابش را تمام کرد.",
-    "source_en": "The cards rise up into the air and come swarming down upon her. Alice wakes from her dream to find her sister brushing leaves from her face. Alice tells her about her adventures, then runs in for her tea, leaving her sister on the bank to imagine all the curious happenings for herself.",
+    "narration_fa": "در جمع‌بندی، تمام این رویدادهای شگفت‌انگیز و سفرهای پرماجرا در این داستان به پایان می‌رسند و Alice بیدار می‌شود تا خواهرش را در حال پاک کردن برگ‌ها از روی صورتش ببیند. این اثر بی‌نظیر به عنوان یکی از آثار برجسته ادبیات ویکتوریایی شناخته می‌شود که ساختار و شخصیت‌های آن تأثیر عمیقی بر فرهنگ عامه گذاشته‌اند. این رمان جریان ادبی آموزش‌محور کودکان را دگرگون ساخت و دوره‌ای را آغاز کرد که هدف نوشته‌ها سرگرم کردن و لذت بخشیدن بود. این قصه با منطق بازی می‌کند و با جذابیت پایدار خود همواره زنده باقی می‌ماند.",
+    "source_en": "The cards rise up into the air and come swarming down upon her. Alice wakes from her dream to find her sister brushing leaves from her face. Alice tells her about her adventures, then runs in for her tea, leaving her sister on the bank to imagine all the curious happenings for herself. It has become one of the best-known works of Victorian literature; its narrative, structure, characters, and imagery have had a wide influence on popular culture and literature. It is credited as helping end an era of didacticism in children's literature, inaugurating an era in which writing for children aimed to \"delight or entertain\". The tale plays with logic, giving the story lasting popularity.",
     "characters_present": [
      "Alice"
     ],
-    "setting_en": "The same peaceful grassy riverbank from the very beginning of the story",
-    "action_en": "Alice wakes up rubbing her eyes while her sister gently brushes dry leaves from her hair",
-    "mood_en": "Peaceful, dreamy, and heartwarming conclusion with warm golden sunlight",
-    "spoken_fa": "در جمع‌بندی، این سفر عجیب با فرود آمدن Alice از لانه خرگوش آغاز شد و با شورش او علیه کارت‌های بازی در دادگاه به نقطه اوج رسید. این رمان با چالش کشیدن منطق و پایان دادن به عصر ادبیات آموزشی کودکان، دوره جدیدی از سرگرمی را بنیان گذاشت که تا به امروز در فرهنگ عامه ماندگار است. با هجوم کارت‌های بازی به سمت او، Alice ناگهان از خواب بیدار شد و دید که خواهرش برگ‌ها را از روی صورتش پاک می‌کند. او ماجراهای خود را تعریف کرد و برای خوردن چای به خانه دوید و خوابش را تمام کرد.",
+    "setting_en": "The same peaceful riverbank under the trees.",
+    "action_en": "Alice wakes up on the grass while her sister gently brushes leaves from her face.",
+    "mood_en": "Peaceful and serene concluding atmosphere.",
+    "spoken_fa": "در جمع‌بندی، تمام این رویدادهای شگفت‌انگیز و سفرهای پرماجرا در این داستان به پایان می‌رسند و Alice بیدار می‌شود تا خواهرش را در حال پاک کردن برگ‌ها از روی صورتش ببیند. این اثر بی‌نظیر به عنوان یکی از آثار برجسته ادبیات ویکتوریایی شناخته می‌شود که ساختار و شخصیت‌های آن تأثیر عمیقی بر فرهنگ عامه گذاشته‌اند. این رمان جریان ادبی آموزش‌محور کودکان را دگرگون ساخت و دوره‌ای را آغاز کرد که هدف نوشته‌ها سرگرم کردن و لذت بخشیدن بود. این قصه با منطق بازی می‌کند و با جذابیت پایدار خود همواره زنده باقی می‌ماند.",
     "beats": [
-     "در جمع‌بندی، این سفر عجیب با فرود آمدن Alice از لانه خرگوش آغاز شد و با شورش او علیه کارت‌های بازی در دادگاه به نقطه اوج رسید.",
-     "این رمان با چالش کشیدن منطق و پایان دادن به عصر ادبیات آموزشی کودکان، دوره جدیدی از سرگرمی را بنیان گذاشت که تا به امروز در فرهنگ عامه ماندگار است.",
-     "با هجوم کارت‌های بازی به سمت او، Alice ناگهان از خواب بیدار شد و دید که خواهرش برگ‌ها را از روی صورتش پاک می‌کند.",
-     "او ماجراهای خود را تعریف کرد و برای خوردن چای به خانه دوید و خوابش را تمام کرد."
+     "در جمع‌بندی، تمام این رویدادهای شگفت‌انگیز و سفرهای پرماجرا در این داستان به پایان می‌رسند و Alice بیدار می‌شود تا خواهرش را در حال پاک کردن برگ‌ها از روی صورتش ببیند.",
+     "این اثر بی‌نظیر به عنوان یکی از آثار برجسته ادبیات ویکتوریایی شناخته می‌شود که ساختار و شخصیت‌های آن تأثیر عمیقی بر فرهنگ عامه گذاشته‌اند.",
+     "این رمان جریان ادبی آموزش‌محور کودکان را دگرگون ساخت و دوره‌ای را آغاز کرد که هدف نوشته‌ها سرگرم کردن و لذت بخشیدن بود. این قصه با منطق بازی می‌کند و با جذابیت پایدار خود همواره زنده باقی می‌ماند."
     ],
     "beat_visuals": [
      {
-      "visual_en": "Playing cards swirl upward into the dark air like a tornado of paper, hovering above Alice who stands bewildered on a stone floor.",
+      "visual_en": "Alice wakes up lying on a green riverbank under a shady tree, blinking her eyes as her sister gently brushes falling autumn leaves away from her face.",
       "characters_present": [
        "Alice"
       ]
      },
      {
-      "visual_en": "An old open storybook lies on a grassy green lawn, its pages fluttering in a gentle breeze under the warm afternoon sun.",
+      "visual_en": "A stack of old Victorian storybooks rests on a wooden table next to a steaming porcelain teacup and a delicate silver spoon in a cozy, sunlit English room.",
       "characters_present": []
      },
      {
-      "visual_en": "Alice wakes up lying on the grass under a large tree, opening her eyes while her sister gently brushes green leaves from her hair.",
-      "characters_present": [
-       "Alice"
-      ]
-     },
-     {
-      "visual_en": "Alice runs excitedly across a sunny green lawn toward a country house, waving her hands and smiling brightly on a peaceful afternoon.",
-      "characters_present": [
-       "Alice"
-      ]
+      "visual_en": "A whimsical fantasy landscape glows under a warm golden sunset, featuring giant mushrooms, a winding river, and floating playing cards drifting through a magical misty forest.",
+      "characters_present": []
      }
     ]
    }
   ],
   "names": {
-   "Alice": "Alice",
-   "Lewis Carroll": "Lewis Carroll",
-   "White Rabbit": "White Rabbit",
-   "Caterpillar": "Caterpillar",
-   "Duchess": "Duchess",
-   "Cheshire Cat": "Cheshire Cat",
-   "Mad Hatter": "Mad Hatter",
-   "March Hare": "March Hare",
-   "Dormouse": "Dormouse",
-   "Queen of Hearts": "Queen of Hearts",
-   "Mock Turtle": "Mock Turtle",
-   "Knave of Hearts": "Knave of Hearts",
-   "King of Hearts": "King of Hearts"
+   "Alice": "آلیس",
+   "Alice's Adventures in Wonderland": "آلیسز آوِنچِرز این وُندِرلِند",
+   "Lewis Carroll": "لوئیس کارول",
+   "White Rabbit": "وایت رَبیت",
+   "Drink me": "دِرینک می",
+   "Eat me": "ایِت می",
+   "Caucus Race": "کوکوس ریس",
+   "Caterpillar": "کَتِریپیلار",
+   "Duchess": "داچِس",
+   "Cheshire Cat": "چِشایر کَت",
+   "Hatter": "هَتِر",
+   "March Hare": "مارچ هیر",
+   "Dormouse": "دُرمائوس",
+   "Time": "تایم",
+   "Queen of Hearts": "کویین اوو هارتس",
+   "Gryphon": "گریفُن",
+   "Mock Turtle": "ماک تِرتل",
+   "Knave of Hearts": "نیو اوو هارتس",
+   "King of Hearts": "کینگ اوو هارتس"
   }
  },
  "attempts": 0,
- "version": 6,
+ "version": 8,
  "date": "2026-10-28"
 }
