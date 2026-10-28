@@ -50,7 +50,8 @@ MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 SUB_FONT_SIZE = 23        # subtitle size (was 22)
 SUB_FONT = "Noto Sans Arabic"
-SCRIPT_VERSION = 5        # a saved script of another version is not resumed
+BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
+SCRIPT_VERSION = 6        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -64,7 +65,7 @@ PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 1100)
 TTS_ENGINE = (os.environ.get("AZIM_TTS") or "gemini").strip().lower()
 GEMINI_TTS_MODEL = os.environ.get("AZIM_GEMINI_TTS_MODEL") or "gemini-3.8-flash-tts"
 GEMINI_TTS_VOICES = {"female": os.environ.get("AZIM_GEMINI_VOICE_FEMALE") or "Sulafat",
-                     "male": os.environ.get("AZIM_GEMINI_VOICE_MALE") or "Gacrux"}
+                     "male": os.environ.get("AZIM_GEMINI_VOICE_MALE") or "Charon"}      # Gacrux is a FEMALE voice of Google; Charon is a deep male voice
 GEMINI_TTS_TEXT = (os.environ.get("AZIM_GEMINI_TTS_TEXT") or "plain").strip().lower()   # plain | spoken
 GEMINI_TTS_STYLE = os.environ.get("AZIM_GEMINI_TTS_STYLE") or (
     "a warm, calm storyteller telling a story to one close listener, with real feeling that follows the story: "
@@ -718,28 +719,48 @@ def sanitize_narration(data, book):
     return data
 
 
+def make_beats(text):
+    """Cut a paragraph into beats of about BEAT_WORDS words (whole sentences): one picture per beat."""
+    sents = split_sentences(DIAC.sub("", text))
+    beats, cur = [], []
+    for x in sents:
+        cur.append(x)
+        if sum(len(y.split()) for y in cur) >= BEAT_WORDS:
+            beats.append(" ".join(cur))
+            cur = []
+    if cur:
+        if beats and sum(len(y.split()) for y in cur) < BEAT_WORDS // 2:
+            beats[-1] += " " + " ".join(cur)
+        else:
+            beats.append(" ".join(cur))
+    return beats or [text]
+
+
 def align_visuals(data, book):
-    """Step D: write each picture from the FINAL narration and its source sentence (skipped if it fails)."""
+    """Step D: write ONE picture for EVERY beat (about 2 sentences) of the FINAL narration (skipped if it fails)."""
     scenes = data["scenes"]
     chars = data.get("characters", [])
-    items = [{"i": i, "narration_fa": s["narration_fa"], "source_en": s.get("source_en", "")}
-             for i, s in enumerate(scenes)]
-    prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration paragraphs, in order, of a video
-that summarizes the book "{book['title_en']}" by {book['author_en']}, each with the English source sentence it comes
-from. While each paragraph is read aloud, ONE picture is shown. For EACH paragraph write the picture so that it
-illustrates the exact content of that paragraph, so a viewer who sees only the picture understands what is being said.
+    items = []
+    for i, s in enumerate(scenes):
+        s["beats"] = make_beats(s["narration_fa"])
+        s.pop("beat_visuals", None)
+        for j, b in enumerate(s["beats"]):
+            items.append({"i": len(items), "scene": i, "narration_fa": b, "source_en": s.get("source_en", "")})
+    prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration parts, in order, of a video
+that summarizes the book "{book['title_en']}" by {book['author_en']}. While each part is read aloud (about 10 seconds),
+ONE picture is shown. For EACH part write the picture so that it illustrates the exact content of THAT part, so a
+viewer who sees only the picture understands what is being said at that moment.
 
 Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "visual_en": "..."}}, ...]}}
-with exactly {len(scenes)} items, in the same order.
+with exactly {len(items)} items, in the same order.
 
 Rules for "visual_en":
-- English, 30 to 60 words. Start with the main subject doing the main action, then the place and time, then
-  the important objects. Name 3 to 5 specific, concrete things from the paragraph (people, objects, place,
+- English, 25 to 50 words. Start with the main subject doing the main action, then the place and time, then
+  the important objects. Name 3 to 5 specific, concrete things from the part (people, objects, place,
   clothing, weather) that must be visible.
-- Show LITERALLY what the paragraph says at that moment, not a mood and not a general idea. One clear subject,
-  one clear action, one place per picture.
-  For non-fiction, show the concrete story, example or experiment from the paragraph, or a clear literal visual
-  metaphor of the idea. For the closing wrap-up paragraphs, show a symbolic scene of the book's central message.
+- Show LITERALLY what the part says at that moment, not a mood and not a general idea. One clear subject,
+  one clear action, one place per picture. Two neighbouring parts must not get the same picture.
+  For the closing wrap-up parts, show a symbolic scene of the book's central message.
 - The image model does not know names: describe people by their fixed look (use the characters' looks below)
   and never write book titles or names in the picture description.
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
@@ -747,15 +768,19 @@ Rules for "visual_en":
 "characters_present": names (from the characters list) visible in the picture, may be empty.
 
 Characters: {json.dumps(chars, ensure_ascii=False)}
-Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
+Parts: {json.dumps(items, ensure_ascii=False)}"""
     try:
         vis = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["visuals"]
-        if len(vis) == len(scenes) and all(isinstance(v.get("visual_en"), str) and v["visual_en"].strip()
-                                           for v in vis):
-            for s, v in zip(scenes, vis):
-                s["visual_en"] = v["visual_en"].strip()
-                s["characters_present"] = v.get("characters_present") or []
-            print("Visuals aligned to the final narration.", flush=True)
+        if len(vis) == len(items) and all(isinstance(v.get("visual_en"), str) and v["visual_en"].strip()
+                                          for v in vis):
+            k = 0
+            for s in scenes:
+                n = len(s["beats"])
+                s["beat_visuals"] = [{"visual_en": v["visual_en"].strip(),
+                                      "characters_present": v.get("characters_present") or []}
+                                     for v in vis[k:k + n]]
+                k += n
+            print(f"Visuals aligned: {len(items)} pictures for {len(scenes)} paragraphs.", flush=True)
     except Exception as e:  # noqa: BLE001
         print("Visual alignment skipped:", e, flush=True)
     return data
@@ -1012,7 +1037,7 @@ def gemini_tts(text, kind, out_wav, style=""):
             note(f"  Gemini TTS error: {last[:120]}")
         time.sleep(15 * (attempt + 1))
     _gtts["fails"] += 1
-    raise RuntimeError(f"Gemini TTS failed: {last[:120]}")
+    raise GeminiTTSUnavailable(f"Gemini TTS failed: {last[:120]}")
 
 
 def reference_wav(kind):
@@ -1116,7 +1141,20 @@ def phonetic_text(text, names):
 
 
 def make_voice(scenes, kind, names=None):
-    print(f"Voice: {'Gemini TTS' if gemini_tts_ready() else 'Pocket TTS Farsi v2'} ({kind}), scenes: {len(scenes)}", flush=True)
+    """ONE engine and ONE voice for the WHOLE video. If Gemini TTS fails on any paragraph, the whole video is
+    read again by Pocket TTS (never one paragraph with one voice and the next with another)."""
+    if gemini_tts_ready():
+        try:
+            return _make_voice(scenes, kind, names, True)
+        except GeminiTTSUnavailable as e:
+            note(f"Gemini TTS could not read the whole video ({str(e)[:100]}): the WHOLE video is read again "
+                 "with Pocket TTS, so only one voice is heard.")
+            _gtts["dead"] = True
+    return _make_voice(scenes, kind, names, False)
+
+
+def _make_voice(scenes, kind, names, use_gemini):
+    print(f"Voice: {'Gemini TTS' if use_gemini else 'Pocket TTS Farsi v2'} ({kind}), scenes: {len(scenes)}", flush=True)
     (WORK / "tts_out").mkdir(exist_ok=True)
     names = names or {}
     wavs = []
@@ -1134,14 +1172,11 @@ def make_voice(scenes, kind, names=None):
         plain = s["narration_fa"].strip()
         spoken = (s.get("spoken_fa") or plain).strip()
         REWRITTEN.clear()
-        if gemini_tts_ready():
-            try:
-                gemini_tts(spoken if GEMINI_TTS_TEXT == "spoken" else plain, kind, p, tts_style(s))
-                wavs.append(p)
-                time.sleep(3)
-                continue
-            except Exception as e:  # noqa: BLE001
-                note(f"  Scene {i}: Gemini TTS not used ({str(e)[:100]}); Pocket TTS reads this scene.")
+        if use_gemini:
+            gemini_tts(spoken if GEMINI_TTS_TEXT == "spoken" else plain, kind, p, tts_style(s))
+            wavs.append(p)
+            time.sleep(3)
+            continue
         key = "spoken_fa" if spoken != plain else "narration_fa"
         try:
             speak(spoken, p)
@@ -1306,7 +1341,7 @@ def make_checked_image(prompt, path, seed, scenes_left, scene):
     if not IMAGE_CHECK:
         return
     best = None                      # (score, bytes)
-    for retry in range(3):
+    for retry in range(2):
         res = check_image(path, scene)
         if res is None:
             return                   # the check is not available: keep the current picture
@@ -1314,7 +1349,7 @@ def make_checked_image(prompt, path, seed, scenes_left, scene):
         print(f"Image check: score {score}/10 {('- ' + missing) if score < 6 else ''}", flush=True)
         if best is None or score > best[0]:
             best = (score, path.read_bytes())
-        if score >= 6 or retry == 2:
+        if score >= 6 or retry == 1:
             break
         try:
             make_image(prompt + f" The picture must clearly show: {missing}.", path,
@@ -1361,25 +1396,27 @@ def font_chars():
 _dropped_chars = {}
 
 
+_OK_CHARS = re.compile(r"[\u0621-\u063A\u0641-\u064A\u067E\u0686\u0698\u06A9\u06AF\u06CC\u06C0"
+                       r"A-Za-z0-9\u06F0-\u06F9\s.,;:!?\u2026\u00AB\u00BB\u060C\u061B\u061F\"'()\-]")
+
+
 def clean_subtitle(text):
-    """Remove everything the subtitle font cannot draw (it would show as a rectangle): invisible format characters,
-    and characters missing from the font. Latin letters are left to the font fallback (they are in names)."""
+    """Only Persian letters, names, digits and ordinary punctuation survive: every mark or invisible character that
+    could be drawn as a rectangle is removed (the removed code points are listed in the voice report)."""
     cm = font_chars()
     out = []
-    for ch in unicodedata.normalize("NFC", text):
+    t = unicodedata.normalize("NFKC", text).replace("...", "\u2026")
+    t = t.replace("ي", "ی").replace("ك", "ک")
+    for ch in t:
         cp = ord(ch)
-        cat = unicodedata.category(ch)
         if ch == "\u200c":                       # half-space: keep only if the font really has it
             if cm and cp in cm:
                 out.append(ch)
             else:
                 _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
             continue
-        if cat == "Cf" or cat == "Co" or cat == "Cn":
+        if not _OK_CHARS.fullmatch(ch):
             _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
-            continue
-        if cat == "Cc":
-            out.append(" ")
             continue
         if cm and cp >= 0x250 and cp not in cm and not ch.isspace():
             _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
@@ -1388,33 +1425,88 @@ def clean_subtitle(text):
     return " ".join("".join(out).split())
 
 
-def build_video(scenes, durs, out_path):
+def fa_typo(t):
+    """Persian typing rules: Persian punctuation, no space before it and one space after it, «» quotes."""
+    t = t.replace(",", "\u060c").replace(";", "\u061b").replace("?", "\u061f")
+    t = re.sub(r'"([^"]+)"', "\u00ab\\1\u00bb", t)
+    t = re.sub(r"\s+([\u060c\u061b\u061f!.:\u2026\u00bb)])", r"\1", t)
+    t = re.sub(r"([\u060c\u061b\u061f!:])(?=\S)", r"\1 ", t)
+    t = re.sub(r"([\u00ab(])\s+", r"\1", t)
+    return " ".join(t.split())
+
+
+def subtitle_text(text, names=None):
+    """Subtitle: no diacritics; English names stay in English (Latin) letters exactly as the voice says them.
+    A line that starts with a Latin name gets a right-to-left mark so the Persian line keeps its direction."""
+    t = fa_typo(clean_subtitle(DIAC.sub("", text)))
+    if t and re.match(r"[A-Za-z]", t):
+        t = "\u200f" + t
+    return t
+
+
+def ensure_names(data, book):
+    """Persian spelling for EVERY English name in the narration (one cheap Gemini call only for the missing ones)."""
+    names = dict(data.get("names") or {})
+    found = set()
+    for sc in data["scenes"]:
+        for is_name, piece in split_names(sc["narration_fa"]):
+            if is_name:
+                found.add(piece.strip())
+    missing = sorted(n for n in found if n and n not in names)
+    if missing:
+        prompt = f"""Write each English name below in Persian letters, as an Iranian reader would say it, WITHOUT vowel
+marks, for subtitles of a video about the novel "{book['title_en']}". Return JSON {{"names": {{"English": "فارسی"}}}}.
+Names: {json.dumps(missing, ensure_ascii=False)}"""
+        try:
+            got = gemini_json(prompt, minutes=4, models=CHEAP_MODELS).get("names") or {}
+            for k, v in got.items():
+                if str(k).strip() in missing and str(v).strip():
+                    names[str(k).strip()] = str(v).strip()
+        except (GeminiBlocked, GeminiQuotaExhausted):
+            raise
+        except Exception as e:  # noqa: BLE001
+            print("Name spelling skipped:", e, flush=True)
+    data["names"] = names
+    return data
+
+
+def build_video(scenes, durs, out_path, names=None):
     clips = []
     srt = []
     n = 0
     t = 0.0
     for i, (s, d) in enumerate(zip(scenes, durs)):
         length = d + PAD
-        frames = math.ceil(length * FPS)
+        total_frames = math.ceil(length * FPS)
+        beats = s.get("beats") or [s["narration_fa"]]
+        bw = [max(len(x), 1) for x in beats]
+        used, vparts = 0, []
+        for j in range(len(beats)):
+            frames = max(total_frames - used, 1) if j == len(beats) - 1 else max(round(total_frames * bw[j] / sum(bw)), 1)
+            used += frames
+            inc = 0.12 / max(frames, 1)    # zoom speed spread over the whole picture (no early stop)
+            zoom = (f"z='min(zoom+{inc:.6f},1.12)'" if (i + j) % 2 == 0
+                    else f"z='if(eq(on,1),1.12,max(zoom-{inc:.6f},1.0))'")
+            # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
+            vf = ("scale=2560:1440:flags=lanczos:force_original_aspect_ratio=increase,crop=2560:1440,"
+                  "unsharp=5:5:0.6:5:5:0.0,"
+                  f"zoompan={zoom}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
+                  "format=yuv420p")
+            vname = f"vclip_{i:02d}_{j}.mp4"
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", f"img_{i:02d}_{j}.jpg", "-vf", vf,
+                "-frames:v", str(frames), "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", vname], cwd=WORK)
+            vparts.append(vname)
+        (WORK / f"vl_{i:02d}.txt").write_text("".join(f"file '{v}'\n" for v in vparts), encoding="utf-8")
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", f"vl_{i:02d}.txt",
+            "-c", "copy", f"vid_{i:02d}.mp4"], cwd=WORK)
         clip = WORK / f"clip_{i:02d}.mp4"
-        inc = 0.12 / max(frames, 1)    # zoom speed spread over the whole scene (no early stop)
-        zoom = (f"z='min(zoom+{inc:.6f},1.12)'" if i % 2 == 0
-                else f"z='if(eq(on,1),1.12,max(zoom-{inc:.6f},1.0))'")
-        # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
-        vf = ("scale=2560:1440:flags=lanczos:force_original_aspect_ratio=increase,crop=2560:1440,"
-              "unsharp=5:5:0.6:5:5:0.0,"
-              f"zoompan={zoom}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
-              "format=yuv420p")
-        sh(["ffmpeg", "-y", "-loglevel", "error",
-            "-i", f"img_{i:02d}.jpg", "-i", f"voice_{i:02d}.mp3",
-            "-vf", vf, "-af", "apad", "-t", f"{length:.2f}",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",    # near-lossless intermediate
-            "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1",
-            clip.name], cwd=WORK)
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", f"vid_{i:02d}.mp4", "-i", f"voice_{i:02d}.mp3",
+            "-af", "apad", "-t", f"{length:.2f}", "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1", clip.name], cwd=WORK)
         clips.append(clip.name)
 
         # subtitles: always the clean text (no diacritics), cut into sentences
-        sents = split_sentences(clean_subtitle(DIAC.sub("", s["narration_fa"])))
+        sents = split_sentences(subtitle_text(s["narration_fa"], names))
         weights = [max(len(x), 1) for x in sents]
         total_w = sum(weights)
         acc = 0
@@ -1560,20 +1652,33 @@ def main():
     durs = make_voice(scenes, kind, script.get("names") or {})
 
     seed = int(time.time()) % 100000
+    n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
+    done_pics = 0
+    last_img = None
     for i, s in enumerate(scenes):
-        prompt = build_prompt(script["art_style_en"], script.get("characters", []), s)
-        img = WORK / f"img_{i:02d}.jpg"
-        try:
-            make_checked_image(prompt, img, seed + i, len(scenes) - i - 1, s)
-        except Exception as e:  # noqa: BLE001
-            if i == 0:
-                raise
-            # one failed picture must not lose the whole video: reuse the previous picture
-            print(f"WARNING: image {i} failed ({e}); reusing the previous picture.", flush=True)
-            shutil.copy(WORK / f"img_{i - 1:02d}.jpg", img)
+        beats = s.get("beats") or [s["narration_fa"]]
+        bvs = s.get("beat_visuals") or []
+        for j, beat in enumerate(beats):
+            sc = dict(s)
+            sc["narration_fa"] = beat
+            if j < len(bvs):
+                sc["visual_en"] = bvs[j]["visual_en"]
+                sc["characters_present"] = bvs[j]["characters_present"]
+            prompt = build_prompt(script["art_style_en"], script.get("characters", []), sc)
+            img = WORK / f"img_{i:02d}_{j}.jpg"
+            try:
+                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
+            except Exception as e:  # noqa: BLE001
+                if last_img is None:
+                    raise
+                # one failed picture must not lose the whole video: reuse the previous picture
+                print(f"WARNING: image {i}.{j} failed ({e}); reusing the previous picture.", flush=True)
+                shutil.copy(last_img, img)
+            last_img = img
+            done_pics += 1
 
     final = WORK / "azim_final.mp4"
-    total = build_video(scenes, durs, final)
+    total = build_video(scenes, durs, final, script.get("names") or {})
     print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
 
     caption = (f"{book['title_fa']}\n{book['author_fa']}\n\n"
