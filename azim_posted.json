@@ -93,5 +93,15 @@
   "voice": "male",
   "wiki": "Alice's Adventures in Wonderland",
   "date": "2026-10-28"
+ },
+ {
+  "title_en": "A Christmas Carol",
+  "title_fa": "سرود کریسمس",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-10-28",
+  "wiki": "A Christmas Carol",
+  "date": "2026-10-28"
  }
 ]
