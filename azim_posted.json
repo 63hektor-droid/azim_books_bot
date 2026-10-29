@@ -113,5 +113,15 @@
   "date_pt": "2026-10-28",
   "wiki": "Make Me (novel)",
   "date": "2026-10-29"
+ },
+ {
+  "title_en": "Catch-22",
+  "title_fa": "تبصره ۲۲",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-10-29",
+  "wiki": "Catch-22",
+  "date": "2026-10-29"
  }
 ]
