@@ -133,5 +133,15 @@
   "date_pt": "2026-10-30",
   "wiki": "Coraline",
   "date": "2026-10-30"
+ },
+ {
+  "title_en": "The Turn of the Screw",
+  "title_fa": "سخت‌تر شدن اوضاع",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-10-30",
+  "wiki": "The Turn of the Screw",
+  "date": "2026-10-30"
  }
 ]
