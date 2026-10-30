@@ -1,0 +1,32 @@
+name: azim-apply-fixes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply the fixes
+        run: |
+          python azim_apply_fixes.py
+          python azim_apply_fixes2.py
+
+      - name: Save the fixed files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -- azim_book_video_bot.py
+          if [ -f azim_books_list.json ]; then git add -- azim_books_list.json; fi
+          git diff --cached --quiet || git commit -m "azim: apply fixes"
+          git pull --rebase --autostash origin main || true
+          git push
