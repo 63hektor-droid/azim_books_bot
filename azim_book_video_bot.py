@@ -53,7 +53,7 @@ SUB_FONT_SIZE = 23        # subtitle size (was 22)
 SUB_FONT = "DejaVu Sans"      # tested: «لا» in «تلاش، کلاه، کلاسیک» is drawn correctly (Noto Sans Arabic drew a rectangle)
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-SCRIPT_VERSION = 8        # a saved script of another version is not resumed
+SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -475,21 +475,92 @@ NAMES_RULE = """- NAMES: write the names of people, places, the novel and its au
   rephrase so that the name stands alone."""
 
 
+def design_cast(book, src):
+    """Step B0: BEFORE the script is written, design the era and ONE fixed look sheet for every important character
+    (ages that fit the family, very different faces and bodies, different clothes, true to the era)."""
+    prompt = f"""You are a film casting director and a costume designer. Design the characters of a picture video about
+the novel "{book['title_en']}" by {book['author_en']}.
+
+Who the characters are comes ONLY from the SOURCE TEXT. What the source does not say, you decide so that it fits the
+era, the place and the story.
+
+SOURCE TEXT:
+{src['text']}
+
+Return JSON with exactly these keys:
+- "era_en": the time and place of the story in one short English phrase (for example "provincial Russia, 1860s").
+- "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
+  (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
+- "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "..."}}.
+  "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 45 to 65 English words in
+  this fixed order: gender and exact age in years; body build; face shape; skin tone; eye color; hair (color, length,
+  style); facial hair; ONE distinctive feature; the usual outfit with colors. It is pasted into EVERY picture of this
+  character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
+  no action, no names of actors.
+
+Rules:
+- AGES: use the ages of the source; otherwise decide them so they fit the story and the family tree. A parent is at least
+  18 years older than his or her child, grandparents are older than parents, a teenager looks like a teenager and an old
+  person looks old.
+- FACES: every character has a clearly different face: a different face shape, hair color and style, eye color and
+  distinctive feature. Skin tone fits the place and the people of the story. Nobody looks like a twin of somebody else
+  unless the source says they are twins.
+- BODIES: every character gets a DIFFERENT build (for example thin, heavy, muscular, short, very tall, frail,
+  broad-shouldered, round). A build is never copied from the main character unless the source says so; at most ONE
+  character is heavy unless the source says that more are.
+- CLOTHES: every character wears a different outfit with different main colors, true to his or her job, class, age and
+  the era, and historically correct for that time and place.
+- Never contradict the source (gender, age, hair, body, job, family relations)."""
+    try:
+        d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
+        era = " ".join(str(d.get("era_en") or "").split())
+        costume = " ".join(str(d.get("costume_en") or "").split())
+        chars = []
+        for c in d.get("characters") or []:
+            if isinstance(c, dict) and str(c.get("name") or "").strip() and str(c.get("look_en") or "").strip():
+                chars.append({"name": str(c["name"]).strip(), "look_en": " ".join(str(c["look_en"]).split())})
+        if not era:
+            return None
+        print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
+        return {"era_en": era + (f". Clothing of that time: {costume}" if costume else ""), "characters": chars[:6]}
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Cast design skipped:", e, flush=True)
+        return None
+
+
+def cast_prompt(cast):
+    """The fixed cast, pasted into the script prompt."""
+    if not cast or not cast.get("characters"):
+        return ""
+    sheets = json.dumps(cast["characters"], ensure_ascii=False)
+    return ("\nCHARACTERS (already designed: faces, ages, bodies and clothes are FIXED, do not change them):\n"
+            f"{sheets}\nERA AND PLACE: {cast['era_en']}\n"
+            "In your JSON copy these sheets unchanged into the key \"characters\". In \"characters_present\" and in the "
+            "\"outline\" use ONLY these names. The video must introduce these heroes to the viewer early, by name, with "
+            "their relation to each other and what each of them wants.\n")
+
+
 def write_scenes(book, src, plan):
     """Step B: write the Persian narration from the source text only (no outside facts)."""
     min_sc, max_sc, words = plan
+    cast = design_cast(book, src)
+    cast_block = cast_prompt(cast)
     for _ in range(4):
         prompt = f"""You are a gifted Iranian storyteller and radio host. Write the script of a video that summarizes the
 novel "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience.
 
 Use ONLY the facts in the SOURCE TEXT below (taken from Wikipedia). Never add a fact, name, date, number,
 quote or opinion that is not in the source. If the source says nothing about something, say nothing about it.
-The PLOT part of the source is already a concise, editor-reviewed summary of the whole story: RETELL it. Keep every
-key event in the same order, including the ending, leave out only minor details, and add nothing.
+The PLOT part of the source is a summary of the whole story. Your job is to DISTILL it: a viewer who never read the
+book must understand the whole story from this video alone. So tell only what matters: the central conflict, the turning
+points, how the heroes change and the ending. Leave out every episode, side character, place and detail whose removal
+would NOT break the chain of cause and effect (the "removal test"). Add nothing that is not in the source.
 
 SOURCE TEXT:
 {src['text']}
-
+{cast_block}
 Return JSON with exactly these keys:
 - "style_key": ONE picture style for the WHOLE video, exactly one of these keys (write the key only):
 {STYLE_GUIDE}
@@ -506,8 +577,9 @@ Return JSON with exactly these keys:
   exact age, face shape, skin tone, eye color, hair (color, length, style), facial hair, ONE distinctive feature (scar,
   glasses, freckles, hat...) and the usual clothes with colors. Empty list if there are no characters.
   Base the look on what the source says; if it says nothing, choose a fitting look for the era and keep it fixed.
-- "outline": the 8 to 14 key events of the PLOT in order, each {{"event": "short English sentence", "because": "what
-  caused it or what it leads to"}}. The scenes must tell ALL of them, in this order, so the whole book is covered.
+- "outline": the key events of the PLOT in order, as few as the story needs (usually 7 to 12), each {{"event": "short
+  English sentence", "because": "what caused it or what it leads to"}}. Include ONLY events that change the direction of
+  the story (removal test). The scenes must tell ALL of them, in this order, and no other event of the plot.
 - "cast": the same important characters in order of importance (at most 5), each {{"name": "...", "sentence_fa": "..."}}:
   ONE Persian sentence of 8 to 18 words that introduces the character to the viewer (who he or she is and his or her
   role in the story, only from the source). The sentence STARTS with the name in English letters. Empty list if none.
@@ -523,17 +595,22 @@ Rules for the narration:
 - Total narration: {words} Persian words. The source is already short: stay close to it, never pad.
 - NO FILLER. Every sentence must carry a new concrete fact, event or idea from the source. No generic praise, no
   rhetorical questions, no empty transitions, no repeating the same point, no moral or lesson that is not in the source.
-- Structure: (1) the first paragraph: what the novel is, who wrote it and when (only if the INTRODUCTION says so) and the
-  situation where the story begins; (2) the story in the SAME ORDER as the PLOT, covering ALL its key events, including
-  the ending; (3) the closing wrap-up (next rule).
+- Structure: (1) the first paragraph: what the novel is, who wrote it and when (only if the INTRODUCTION says so) and in
+  one sentence what the story is about; (2) the next paragraph or two: introduce the main heroes by name, who each one is,
+  how they are related to each other and what each one wants or fears at the start (only from the source); (3) the story in
+  the SAME ORDER as the PLOT: only its turning points, each one linked to its cause, including the ending; (4) the closing
+  wrap-up (next rule).
 - MANDATORY, USEFUL wrap-up in the LAST 2 or 3 scenes. The first of them starts with the Persian words «در جمع‌بندی».
   It must give the listener something to keep, not repeat sentences: (a) in 2 or 3 flowing sentences tell the whole arc
   of the story from beginning to end; (b) then what the novel is really about and why it matters, ONLY from the
   INTRODUCTION and SIGNIFICANCE parts of the source (its themes, its reception, its influence); (c) the very last
   sentence is short and memorable. No new plot events, no empty praise.
 - Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
-- COVERAGE: follow your "outline": every one of its events must be told, in order, with its cause (the "because"), so a viewer who never read the book understands the WHOLE story, the cause of each event, how the main
-  character changes, and the ending. Skip only minor details.
+- COVERAGE AND IMPORTANCE: follow your "outline": every one of its events must be told, in order, with its cause (the
+  "because"), so a viewer who never read the book understands the WHOLE story, the cause of each event, how the main
+  character changes, and the ending. Tell NOTHING else: for every sentence ask "if I delete it, does the story still make
+  sense and does the chain of causes stay unbroken?" If yes, delete it. Never tell side episodes, minor characters, travel
+  or description details, or any place or person that does not change what happens next.
 - CONTINUITY: the first sentence of every paragraph picks up exactly where the last sentence of the previous paragraph
   stopped (same person, time or problem) through a connector that shows cause or time («برای همین»، «چند روز بعد»،
   «در نتیجه»، «اما»، «تا این‌که»); never start a paragraph from nowhere and never jump to a new subject without a bridge.
@@ -559,6 +636,13 @@ Rules for the visuals:
         data["style_key"] = key
         data["art_style_en"] = STYLES[key][0]             # the exact words come from the fixed table
         print(f"Picture style: {key}", flush=True)
+        if cast:                                          # the fixed, designed cast replaces the robot's own sheets
+            data["characters"] = cast["characters"]
+            data["era_en"] = cast["era_en"]
+            okn = {c["name"] for c in cast["characters"]}
+            for s in data.get("scenes") or []:
+                if isinstance(s, dict):
+                    s["characters_present"] = [n for n in (s.get("characters_present") or []) if n in okn]
         try:
             scenes = data["scenes"]
             ok = (
@@ -616,6 +700,8 @@ A) "narration_fa" (also shown as the subtitle)
 1. FACTS: keep only what the SOURCE TEXT supports. Remove or fix every fact, name, date, number, quote or interpretation
    that is not in the source, every wrong fact, and every sentence that is filler without information. If nothing
    supported remains, return "" for both texts of that paragraph.
+   IMPORTANCE: also remove every sentence that tells a minor episode or detail whose removal does not break the chain of
+   cause and effect of the story. Never remove a turning point, the introduction of a hero, the ending or the wrap-up.
 2. FLOW AND WORDING: make the paragraph read as ONE connected story, not as separate short statements: join short
    sentences with connectors, make each sentence grow out of the previous one, and let the last sentence lead into the
    next paragraph. Also fix grammar, word choice, spelling and half-spaces. Do NOT add new facts. Keep the order and the
@@ -858,6 +944,10 @@ Rules for "visual_en":
   the character DOES ("the boy sits alone on a bench"): his fixed look sheet is added automatically, so the face is
   the same in every picture. Show the character in the situation of that part (place, action, feeling).
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
+- At most TWO named characters in one picture (more of them make the image model blend their faces and bodies); other
+  people are unnamed (a crowd, a servant, a soldier), small or seen from behind. Never describe the faces, ages, bodies or
+  clothes of the named characters (their fixed sheets are added automatically), and never show anything that does not
+  belong to the era of the story.
 - Do not write an art style (it is added separately).
 "characters_present": names (from the characters list) visible in the picture, may be empty.
 
@@ -1169,6 +1259,18 @@ def split_by_silence(path, weights):
     return list(zip(edges[:-1], edges[1:]))
 
 
+# Voice-only writing of the short words that the Gemini voice swallows or merges («در این» -> «دین»/«این»,
+# «را از» -> «از»). Only these words get vowel marks, only in the text sent to the voice: subtitles stay clean.
+_PL = "\u0600-\u06FF\u200c"
+_VOICE_WORDS = (("در", "دَر"), ("این", "اِین"), ("را", "رَا"), ("از", "اَز"))
+
+
+def gemini_voice_text(t):
+    for plain, marked in _VOICE_WORDS:
+        t = re.sub(rf"(?<![{_PL}]){plain}(?![{_PL}])", marked, t)
+    return t
+
+
 def gemini_voice_groups(scenes, kind):
     """The free Gemini TTS allows only 10 requests a day: the paragraphs are read in a few GROUPS (about
     GEMINI_GROUP_WORDS words per request), then the recording is cut back into paragraphs at the pauses."""
@@ -1190,7 +1292,7 @@ def gemini_voice_groups(scenes, kind):
             texts.append(((sc.get("spoken_fa") or sc["narration_fa"]) if GEMINI_TTS_TEXT == "spoken"
                           else sc["narration_fa"]).strip())
         full = WORK / f"graw_{gi:02d}.wav"
-        gemini_tts("\n\n".join(texts), kind, full, GEMINI_TTS_STYLE)
+        gemini_tts("\n\n".join(gemini_voice_text(x) for x in texts), kind, full, GEMINI_TTS_STYLE)
         cuts = split_by_silence(full, [max(len(t), 1) for t in texts])
         note("  Gemini group %d: cuts at %s s" % (gi, ", ".join(f"{b:.1f}" for _, b in cuts[:-1])))
         for i, (a, b) in zip(idxs, cuts):
@@ -1453,6 +1555,33 @@ CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, 
 
 
 def build_prompt(art, chars, scene):
+    """The style comes FIRST (the end of a long prompt can be cut); then the fixed character sheets, the picture, and
+    the era so that clothes and objects always fit the time of the story."""
+    names = scene.get("characters_present") or []
+    present = [c for c in chars if isinstance(c, dict) and c.get("name") in names]
+    looks = " ".join(f"{c['name']}: {c['look_en']}." for c in present)
+    if len(present) > 1:
+        looks += " These people look completely different from each other: different faces, ages, body builds and clothes."
+    era_full = str(scene.get("era_en") or "").strip()
+
+    def compose(era):
+        era_part = (f"Setting: {era}. Everything shown (clothes, buildings, objects) belongs to that time. "
+                    if era else "")
+        chars_part = (f"Characters (always with exactly this face, body and clothes): {looks} " if looks else "")
+        if scene.get("visual_en"):
+            main = f"{scene['visual_en']} "
+        else:
+            main = (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
+                    f"Mood: {scene.get('mood_en', 'cinematic')}. ")
+        return f"Art style: {art}. {chars_part}{main}{era_part}Wide 16:9 composition, {CLEAN}"
+
+    out = compose(era_full)
+    if len(out) > 1850:                                   # keep the style and the characters: shorten the era
+        out = compose(era_full.split(". Clothing of that time")[0])
+    return out
+
+
+def _build_prompt_old(art, chars, scene):
     names = scene.get("characters_present") or []
     looks = "; ".join(f"{c['name']}: {c['look_en']}" for c in chars
                       if isinstance(c, dict) and c.get("name") in names)
@@ -1842,134 +1971,4 @@ def get_book_and_source(posted, rejected):
 
 
 def main():
-    posted = load_json(POSTED_FILE, [])
-    rejected = load_json(REJECTED_FILE, [])
-    if len(posted) >= TOTAL_BOOKS:
-        print("All books are done.")
-        return
-
-    if WORK.exists():
-        shutil.rmtree(WORK)
-    WORK.mkdir(parents=True)
-
-    print(f"Image service: {'Cloudflare FLUX' if USE_CF else 'Pollinations (slow)'}; "
-          f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
-          flush=True)
-
-    # a script that was finished in an earlier run which failed later (voice/images/video): resume it,
-    # so the Gemini quota is not spent twice. After 3 failed resumes the book is rejected.
-    book = src = script = None
-    pending = load_json(PENDING_FILE, None)
-    if pending and pending.get("version") != SCRIPT_VERSION:
-        print("Saved script is from an older version of the bot: ignored.", flush=True)
-        PENDING_FILE.unlink(missing_ok=True)
-        pending = None
-    if pending:
-        done = {norm(p["title_en"]) for p in posted}
-        try:
-            if norm(pending["book"]["title_en"]) in done:
-                pending = None
-            else:
-                attempts = int(pending.get("attempts", 0)) + 1
-                if attempts > 3:
-                    reject_book(rejected, pending["book"], "failed 3 times after the script was written")
-                    pending = None
-                else:
-                    pending["attempts"] = attempts
-                    save_json(PENDING_FILE, pending)
-                    book, src, script = pending["book"], pending["src"], pending["script"]
-                    print(f"Resuming the saved script of '{book['title_en']}' (resume {attempts} of 3).", flush=True)
-        except Exception as e:  # noqa: BLE001
-            print("Saved script ignored:", e, flush=True)
-            pending = None
-        if not pending:
-            PENDING_FILE.unlink(missing_ok=True)
-
-    if not pending:
-        for _ in range(4):
-            book, src = get_book_and_source(posted, rejected)
-            print("Book:", book["title_en"], "| source:", src["url"].replace("\n", " + "), flush=True)
-            plan = plan_length(src)
-            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from a {src['en_words']}-word Plot)",
-                  flush=True)
-            try:
-                script = write_scenes(book, src, plan)
-                break
-            except GeminiBlocked as e:
-                reject_book(rejected, book, f"Gemini blocked the prompt: {e}")
-        else:
-            raise RuntimeError("Gemini blocked 4 books in a row")
-        save_json(PENDING_FILE, {"book": book, "src": src, "script": script, "attempts": 0, "version": SCRIPT_VERSION,
-                                 "date": date.today().isoformat()})
-
-    (WORK / "azim_source.txt").write_text(src["text"], encoding="utf-8")
-    if not CAST_SCENE:      # a saved script from an older run may still contain the portrait scene: remove it
-        script["scenes"] = [sc for sc in script["scenes"] if not sc.get("cast_names")]
-    scenes = script["scenes"]
-    words = sum(len(s["narration_fa"].split()) for s in scenes)
-    print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
-    (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
-    (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
-    (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
-    REPORT_FILE.write_text(f"Book: {book['title_en']}\nSource: {src['url']}\n", encoding="utf-8")
-
-    # the voice alternates: female, male, female, male...
-    last_voice = posted[-1].get("voice") if posted else None
-    if last_voice in ("female", "male"):
-        kind = "male" if last_voice == "female" else "female"
-    else:
-        kind = "female" if len(posted) % 2 == 0 else "male"
-    print(f"Voice of this video: {kind}", flush=True)
-    POSTED_REF[:] = posted
-    durs = make_voice(scenes, kind, script.get("names") or {})
-
-    seed = int(time.time()) % 100000
-    n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
-    done_pics = 0
-    last_img = None
-    for i, s in enumerate(scenes):
-        beats = s.get("beats") or [s["narration_fa"]]
-        bvs = s.get("beat_visuals") or []
-        for j, beat in enumerate(beats):
-            sc = dict(s)
-            sc["narration_fa"] = beat
-            if j < len(bvs):
-                sc["visual_en"] = bvs[j]["visual_en"]
-                sc["characters_present"] = bvs[j]["characters_present"]
-            prompt = build_prompt(script["art_style_en"], script.get("characters", []), sc)
-            img = WORK / f"img_{i:02d}_{j}.jpg"
-            try:
-                present = [n for n in (sc.get("characters_present") or []) if isinstance(n, str)]
-                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
-            except Exception as e:  # noqa: BLE001
-                if last_img is None:
-                    raise
-                # one failed picture must not lose the whole video: reuse the previous picture
-                print(f"WARNING: image {i}.{j} failed ({e}); reusing the previous picture.", flush=True)
-                shutil.copy(last_img, img)
-            last_img = img
-            done_pics += 1
-
-    final = WORK / "azim_final.mp4"
-    total = build_video(scenes, durs, final, script.get("names") or {})
-    print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
-
-    caption = (f"{book['title_fa']}\n{book['author_fa']}\n\n"
-               f"{src.get('credit') or 'منبع خلاصه: ویکی‌پدیا (CC BY-SA)'}\n{src['url']}")
-    send_video(final, caption)
-
-    posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
-                   "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
-    save_json(POSTED_FILE, posted)
-    PENDING_FILE.unlink(missing_ok=True)
-    shutil.rmtree(WORK, ignore_errors=True)
-    print("Done.")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except GeminiQuotaExhausted as exc:
-        print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
-              "No video now; the next run continues.", flush=True)
-        sys.exit(1)
+    posted 
