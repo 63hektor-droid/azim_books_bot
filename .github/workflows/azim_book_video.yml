@@ -1,0 +1,111 @@
+name: azim-book-video
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Iran time (UTC+3:30): 12:00 and 20:00 (two videos a day, both with the Gemini voice)
+    - cron: "30 8,16 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: azim-book-video
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: System packages (ffmpeg + Arabic font for subtitles)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu-core
+
+      - name: Cache Pocket TTS model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: azim-pocket-tts-v3   # v3: also holds the English model used for names
+
+      - name: Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests fonttools
+          pip install "sokhanvar[pocket] @ git+https://github.com/tavallaie/sokhanvar.git" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Check reference voices
+        run: |
+          if [ ! -f azim_voices_data.py ]; then
+            test -f azim_voice_female.wav || { echo "azim_voice_female.wav is missing"; exit 1; }
+            test -f azim_voice_male.wav || { echo "azim_voice_male.wav is missing"; exit 1; }
+          fi
+
+      # first run only: builds azim_books_list.json (the most famous novels). It is fast now (about 10-25 minutes)
+      # and can never eat the whole job: after 60 minutes it is stopped and the bot picks novels with Gemini instead.
+      - name: Build the list of novels (only if it does not exist yet)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ ! -f azim_books_list.json ]; then
+            timeout 60m python azim_make_booklist.py || echo "List could not be built now: the bot asks Gemini for the next novel instead."
+          fi
+
+      - name: Save the list of novels
+        run: |
+          if [ -f azim_books_list.json ]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add -- azim_books_list.json
+            git diff --cached --quiet || git commit -m "azim: list of novels"
+            git pull --rebase origin main || true
+            git push || true
+          fi
+
+      - name: Make the video and post it
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          # switches: Settings -> Secrets and variables -> Actions -> Variables (empty = default)
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}                                # optional: English words in the Pocket voice
+          AZIM_TTS: ${{ vars.AZIM_TTS }}                                  # gemini (default) or pocket
+          AZIM_GEMINI_TTS_MODEL: ${{ vars.AZIM_GEMINI_TTS_MODEL }}        # gemini-3.8-flash-tts (default)
+          AZIM_GEMINI_VOICE_FEMALE: ${{ vars.AZIM_GEMINI_VOICE_FEMALE }}  # Sulafat (default)
+          AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Charon (default)
+          AZIM_GEMINI_TTS_TEXT: ${{ vars.AZIM_GEMINI_TTS_TEXT }}          # plain (default) or spoken
+        run: python azim_book_video_bot.py
+
+      - name: Save the voice report and script (for checking)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azim-voice-report
+          path: |
+            azim_voice_report.txt
+            azim_last_script.json
+            azim_last_source.txt
+          if-no-files-found: ignore
+
+      # always (even when the video failed): rejected books and the saved script must not be lost
+      - name: Save posted books, rejected books and the saved script
+        if: always()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          for f in azim_posted.json azim_rejected.json azim_pending.json; do
+            git add -A -- "$f" 2>/dev/null || true
+          done
+          git diff --cached --quiet || git commit -m "azim: update posted/rejected books and saved script"
+          git pull --rebase --autostash origin main || true
+          git push || (git pull --rebase --autostash origin main && git push)
