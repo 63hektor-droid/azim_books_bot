@@ -193,5 +193,15 @@
   "date_pt": "2026-10-31",
   "wiki": "Mansfield Park",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "Cujo",
+  "title_fa": "کوجو",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-10-31",
+  "wiki": "Cujo",
+  "date": "2026-10-31"
  }
 ]

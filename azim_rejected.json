@@ -13,5 +13,10 @@
   "title_en": "Autobiography of Red",
   "reason": "Gemini blocked the prompt: gemini-flash-lite-latest: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
   "date": "2026-10-30"
+ },
+ {
+  "title_en": "The Perks of Being a Wallflower",
+  "reason": "Gemini blocked the prompt: gemini-3.6-flash: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-10-31"
  }
 ]
