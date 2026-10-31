@@ -153,5 +153,15 @@
   "date_pt": "2026-10-30",
   "wiki": "Harry Potter and the Deathly Hallows",
   "date": "2026-10-30"
+ },
+ {
+  "title_en": "The Turner Diaries",
+  "title_fa": "خاطرات ترنر",
+  "type": "novel",
+  "voice": "female",
+  "engine": "pocket",
+  "date_pt": "2026-10-30",
+  "wiki": "The Turner Diaries",
+  "date": "2026-10-31"
  }
 ]

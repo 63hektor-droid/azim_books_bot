@@ -8,5 +8,10 @@
   "title_en": "The Catcher in the Rye",
   "reason": "Gemini blocked the prompt: gemini-flash-latest: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
   "date": "2026-10-28"
+ },
+ {
+  "title_en": "Autobiography of Red",
+  "reason": "Gemini blocked the prompt: gemini-flash-lite-latest: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-10-30"
  }
 ]
