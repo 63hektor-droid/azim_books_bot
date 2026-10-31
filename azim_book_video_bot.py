@@ -1035,11 +1035,64 @@ def make_beats(text):
     return beats or [text]
 
 
+SHOTS = ("wide establishing shot", "medium shot", "close-up", "over-the-shoulder shot", "low-angle shot",
+         "high-angle shot", "detail shot of an object", "silhouette against the light")
+
+
+def _vwords(t):
+    return {w for w in re.findall(r"[a-z]+", str(t).lower()) if len(w) > 3}
+
+
+def _too_similar(a, b):
+    """True if two neighbouring pictures would look almost the same (same shot, or mostly the same words)."""
+    if not a or not b:
+        return False
+    if a.get("shot") and a.get("shot") == b.get("shot"):
+        return True
+    wa, wb = _vwords(a["visual_en"]), _vwords(b["visual_en"])
+    return bool(wa and wb) and len(wa & wb) / len(wa | wb) > 0.45
+
+
+def diversify_visuals(vis, items, book):
+    """ONE extra Gemini call: neighbouring pictures that repeat the same shot or the same scene are written again
+    with another camera, another background and other details (the story content stays the same)."""
+    bad = [k for k in range(1, len(vis)) if _too_similar(vis[k - 1], vis[k])]
+    if not bad:
+        return vis
+    jobs = [{"i": k, "narration_fa": items[k]["narration_fa"], "current": vis[k]["visual_en"],
+             "previous_picture": vis[k - 1]["visual_en"], "previous_shot": vis[k - 1].get("shot", ""),
+             "next_picture": vis[k + 1]["visual_en"] if k + 1 < len(vis) else ""} for k in bad]
+    prompt = f"""Some neighbouring pictures of a video about "{book['title_en']}" look too similar. Rewrite ONLY the pictures
+below. Each one must still show exactly what its narration says, but with a DIFFERENT shot (choose from
+{json.dumps(SHOTS)}), a different part of the place or a different background detail, different light or time of day
+where the story allows, and different foreground objects than "previous_picture" and "next_picture".
+Keep the same characters, no names, no text, 40 to 70 English words, start with the shot type.
+Return JSON {{"visuals": [{{"i": 0, "shot": "...", "visual_en": "..."}}]}}
+Pictures: {json.dumps(jobs, ensure_ascii=False)}"""
+    try:
+        out = gemini_json(prompt, minutes=5, models=WRITE_MODELS)["visuals"]
+        n = 0
+        for v in out:
+            k = int(v["i"])
+            if k in bad and isinstance(v.get("visual_en"), str) and v["visual_en"].strip():
+                vis[k]["visual_en"] = v["visual_en"].strip()
+                vis[k]["shot"] = str(v.get("shot") or "")
+                n += 1
+        print(f"Visuals diversified: {n} of {len(bad)} similar neighbours rewritten.", flush=True)
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Diversify skipped:", e, flush=True)
+    return vis
+
+
 def align_visuals(data, book):
-    """Step D: write ONE picture for EVERY beat (about 2 sentences) of the FINAL narration (skipped if it fails)."""
+    """Step D: write ONE picture for EVERY beat (about 2 sentences) of the FINAL narration (skipped if it fails).
+    Every picture shows the place, the light and the objects of ITS sentence, and neighbouring pictures change the
+    camera and the background even when the same character is in them."""
     scenes = data["scenes"]
     chars = data.get("characters", [])
-    items = []
+    items, ctx = [], []
     for i, s in enumerate(scenes):
         s.pop("beat_visuals", None)
         if s.get("cast_names"):
@@ -1050,22 +1103,31 @@ def align_visuals(data, book):
                 continue
             s.pop("cast_names")                       # sentences were changed: treat as an ordinary paragraph
         s["beats"] = make_beats(s["narration_fa"])
+        ctx.append({"scene": i, "full_paragraph_fa": s["narration_fa"], "place_hint_en": s.get("setting_en", ""),
+                    "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", "")})
         for j, b in enumerate(s["beats"]):
-            items.append({"i": len(items), "scene": i, "narration_fa": b, "source_en": s.get("source_en", "")})
+            items.append({"i": len(items), "scene": i, "narration_fa": b})
     prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration parts, in order, of a video
-that summarizes the book "{book['title_en']}" by {book['author_en']}. While each part is read aloud (about 10 seconds),
-ONE picture is shown. For EACH part write the picture so that it illustrates the exact content of THAT part, so a
-viewer who sees only the picture understands what is being said at that moment.
+that summarizes the book "{book['title_en']}" by {book['author_en']} (era: {data.get('era_en', '')}). While each part is
+read aloud (about 10 seconds), ONE picture is shown. For EACH part write the picture so that it illustrates the exact
+content of THAT part, so a viewer who sees only the picture understands what is being said at that moment.
 
-Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "visual_en": "..."}}, ...]}}
+Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "shot": "...", "visual_en": "..."}}, ...]}}
 with exactly {len(items)} items, in the same order.
 
 Rules for "visual_en":
-- English, 25 to 50 words. Start with the main subject doing the main action, then the place and time, then
-  the important objects. Name 3 to 5 specific, concrete things from the part (people, objects, place,
-  clothing, weather) that must be visible.
-- Show LITERALLY what the part says at that moment, not a mood and not a general idea. One clear subject,
-  one clear action, one place per picture. Two neighbouring parts must not get the same picture.
+- English, 40 to 70 words. Start with the shot type, then the main subject doing the main action, then the PLACE with
+  concrete details (rooms, buildings, streets, nature, furniture), the time of day and the light, the weather, and 4 to 6
+  specific objects or background details that belong to THAT sentence. Unnamed people in the background: what they wear
+  and do.
+- "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
+- Show LITERALLY what the part says at that moment, not a mood and not a general idea. One clear moment, one place per
+  picture. Use the details of the sentence (where, when, what objects, what weather) and of the "full_paragraph_fa" it
+  belongs to; never invent a place or object that contradicts the source.
+- VARIETY: even when several parts are about the SAME character, every picture changes the camera distance and angle, the
+  background, the light and the foreground objects, following what the sentence says (a different room, a different
+  corner of the street, another time of day, another object in his or her hands). Two neighbouring pictures must never
+  look alike.
   For the closing wrap-up parts, show a symbolic scene of the book's central message.
 - The image model does not know names: never write names or book titles in the picture description. When a part is
   about a character (even only as "he", "she" or by name), list him or her in "characters_present" and write only what
@@ -1080,21 +1142,26 @@ Rules for "visual_en":
 "characters_present": names (from the characters list) visible in the picture, may be empty.
 
 Characters: {json.dumps(chars, ensure_ascii=False)}
+Paragraphs (context): {json.dumps(ctx, ensure_ascii=False)}
 Parts: {json.dumps(items, ensure_ascii=False)}"""
     try:
         vis = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["visuals"]
         if len(vis) == len(items) and all(isinstance(v.get("visual_en"), str) and v["visual_en"].strip()
                                           for v in vis):
+            vis = [{"visual_en": v["visual_en"].strip(), "shot": str(v.get("shot") or "").strip().lower(),
+                    "characters_present": v.get("characters_present") or []} for v in vis]
+            vis = diversify_visuals(vis, items, book)
             k = 0
             for s in scenes:
                 if s.get("cast_names"):
                     continue
                 n = len(s["beats"])
-                s["beat_visuals"] = [{"visual_en": v["visual_en"].strip(),
-                                      "characters_present": v.get("characters_present") or []}
+                s["beat_visuals"] = [{"visual_en": v["visual_en"], "characters_present": v["characters_present"]}
                                      for v in vis[k:k + n]]
                 k += n
             print(f"Visuals aligned: {len(items)} pictures for {len(scenes)} paragraphs.", flush=True)
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
     except Exception as e:  # noqa: BLE001
         print("Visual alignment skipped:", e, flush=True)
     return data
@@ -1397,9 +1464,16 @@ _PL = "\u0600-\u06FF\u200c"
 _VOICE_WORDS = (("در", "دَر"), ("این", "اِین"), ("را", "رَا"), ("از", "اَز"))
 
 
+# Words that the Gemini voice reads with a wrong vowel. The entry matches the word AND every form that starts with it
+# (رسوا -> رسوا، رسوایی، رسواکننده...). Only the voice text gets the vowel mark: the subtitles stay clean.
+_VOICE_PREFIX = (("رسوا", "رُسوا"),)
+
+
 def gemini_voice_text(t):
     for plain, marked in _VOICE_WORDS:
         t = re.sub(rf"(?<![{_PL}]){plain}(?![{_PL}])", marked, t)
+    for plain, marked in _VOICE_PREFIX:
+        t = re.sub(rf"(?<![{_PL}]){plain}", marked, t)
     return t
 
 
@@ -1806,7 +1880,7 @@ def build_prompt(art, chars, scene):
         else:
             main = (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
                     f"Mood: {scene.get('mood_en', 'cinematic')}. ")
-        return f"Art style: {art}. {chars_part}{main}{era_part}Wide 16:9 composition, {CLEAN}"
+        return f"Art style: {art}. {main}{chars_part}{era_part}Cinematic 16:9 composition, {CLEAN}"
 
     out = compose(era_full)
     if len(out) > 1850:                                   # keep the style and the characters: shorten the era
