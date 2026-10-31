@@ -203,5 +203,15 @@
   "date_pt": "2026-10-31",
   "wiki": "Cujo",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "Harry Potter and the Chamber of Secrets",
+  "title_fa": "هری پاتر و تالار اسرار",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-10-31",
+  "wiki": "Harry Potter and the Chamber of Secrets",
+  "date": "2026-10-31"
  }
 ]
