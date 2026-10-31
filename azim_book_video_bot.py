@@ -66,6 +66,9 @@ PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 1100)
 # ----- or "pocket" (offline Pocket TTS only). Switch without editing code: repository variable AZIM_TTS.
 TTS_ENGINE = (os.environ.get("AZIM_TTS") or "gemini").strip().lower()
 GEMINI_TTS_MODEL = os.environ.get("AZIM_GEMINI_TTS_MODEL") or "gemini-3.8-flash-tts"
+# a second FREE voice model with its own quota: used for a whole video when the first one is finished or fails
+GEMINI_TTS_MODELS = [m for m in dict.fromkeys([GEMINI_TTS_MODEL, os.environ.get("AZIM_GEMINI_TTS_MODEL2")
+                                               or "gemini-3.8-flash-lite-tts"]) if m]
 GEMINI_TTS_VOICES = {"female": os.environ.get("AZIM_GEMINI_VOICE_FEMALE") or "Sulafat",
                      "male": os.environ.get("AZIM_GEMINI_VOICE_MALE") or "Charon"}      # Gacrux is a FEMALE voice of Google; Charon is a deep male voice
 GEMINI_TTS_TEXT = (os.environ.get("AZIM_GEMINI_TTS_TEXT") or "plain").strip().lower()   # plain | spoken
@@ -138,10 +141,28 @@ def short_error(text):
     return " | ".join(out)
 
 
-def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150):
+def parse_json_text(text):
+    """json.loads that also survives ``` fences or extra words around the JSON."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        t = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
+        for a, b in (("{", "}"), ("[", "]")):
+            i, k = t.find(a), t.rfind(b)
+            if 0 <= i < k:
+                try:
+                    return json.loads(t[i:k + 1])
+                except ValueError:
+                    pass
+        raise
+
+
+def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, audio=None):
     parts = [{"text": prompt}]
     if image is not None:
         parts.insert(0, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(image).decode()}})
+    if audio is not None:
+        parts.insert(0, {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}})
     body = {
         "contents": [{"parts": parts}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
@@ -149,7 +170,7 @@ def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150):
     if os.environ.get("AZIM_GEMINI_SAFETY", "relaxed") != "default":
         body["safetySettings"] = SAFETY       # fewer false blocks on the plots of famous novels
     headers = {"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"}
-    models = models or [GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"]
+    models = models or FREE_TEXT_MODELS
     dead = set()          # not usable at all (400/404)
     blocked = set()       # models that blocked this prompt
     deadline = time.time() + minutes * 60
@@ -177,7 +198,7 @@ def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150):
                         pts = (cands[0].get("content") or {}).get("parts") or []
                         text = "".join(p.get("text", "") for p in pts)
                     if text.strip():
-                        data = json.loads(text)
+                        data = parse_json_text(text)
                         if isinstance(data, list):
                             data = data[0]
                         print(f"Gemini OK with {model}", flush=True)
@@ -211,9 +232,14 @@ def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150):
     raise RuntimeError(f"Gemini failed: {last}")
 
 
-WRITE_MODELS = ["gemini-pro-latest", GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"]
+# ONLY models of the free tier (the Pro models are paid). Every model has its own free quota, so when one is
+# finished the next one continues. The two "-latest" names are a safety net in case a model name changes.
+FREE_TEXT_MODELS = [GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite",
+                    "gemini-flash-latest", "gemini-flash-lite-latest"]
+WRITE_MODELS = list(FREE_TEXT_MODELS)
 # cheap jobs (picture check, simple rewrites) go to the lite model first: every model has its own quota
-CHEAP_MODELS = ["gemini-flash-lite-latest", GEMINI_MODEL, "gemini-flash-latest"]
+CHEAP_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", GEMINI_MODEL,
+                "gemini-3.6-flash", "gemini-flash-latest"]
 
 
 # ---------------------------------------------------------------- the book and its reliable source
@@ -658,7 +684,8 @@ Rules for the visuals:
             data.setdefault("characters", [])
             if not has_wrapup(data["scenes"]):
                 continue
-            data = review_script(data, book, src)       # ONE call: facts + wording/tone + voice text
+            data = review_script(data, book, src)
+            data = story_gate(data, book, src)       # ONE call: facts + wording/tone + voice text
             if CAST_SCENE:
                 data = add_cast_scene(data)
             data = sanitize_narration(data, book)
@@ -679,6 +706,107 @@ def valid_spoken(txt, plain):
     if not txt or bad_latin(txt) or DIGITS.search(txt):
         return False
     return letters_only(txt) == letters_only(plain)
+
+
+def story_gate(data, book, src):
+    """Step C2 (1 or 2 Gemini calls): a viewer who NEVER read the book hears the final narration and must be able to
+    say who the hero is, what he or she wants, the conflict, the turning points and the ending. Missing key events,
+    logic jumps and unneeded minor paragraphs are repaired in ONE rewrite. Any trouble keeps the narration as it is."""
+    scenes = data["scenes"]
+    paras = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
+    outline = data.get("outline") or []
+    prompt = f"""You are a viewer who has NEVER read the novel "{book['title_en']}". You only heard this narration of a video
+(paragraphs in order). Answer ONLY from the narration, never from your own knowledge of the book.
+
+Narration: {json.dumps(paras, ensure_ascii=False)}
+
+Key events that the video must tell (outline): {json.dumps(outline, ensure_ascii=False)}
+SOURCE TEXT (the only truth): {src['text']}
+
+Return JSON with exactly these keys:
+- "unclear": the list of those words that the narration does NOT make clear to you, from: "hero", "wants", "conflict",
+  "turning_points", "ending" (empty if you understood all five).
+- "missing_events": outline events that the narration never tells (short English sentences; empty if none).
+- "logic_gaps": places where you cannot follow why the next thing happens: [{{"after": paragraph number, "problem":
+  "what link is missing, in short English"}}] (empty if none).
+- "minor": numbers of paragraphs that tell only a minor detail, so that deleting them would not break the chain of cause
+  and effect (empty if none)."""
+    try:
+        t = gemini_json(prompt, minutes=6, models=WRITE_MODELS)
+        unclear = [str(x) for x in (t.get("unclear") or [])]
+        missing = [str(x) for x in (t.get("missing_events") or [])]
+        gaps = [g for g in (t.get("logic_gaps") or []) if isinstance(g, dict)]
+        n = len(scenes)
+        minor = [int(i) for i in (t.get("minor") or []) if str(i).lstrip("-").isdigit()
+                 and 0 < int(i) < n - 2 and "جمعبندی" not in scenes[int(i)]["narration_fa"].replace("\u200c", "").replace(" ", "")][:2]
+        if n <= 6:
+            minor = []
+        print(f"Story gate: unclear={unclear} missing_events={len(missing)} logic_gaps={len(gaps)} minor={minor}", flush=True)
+        if not (unclear or missing or gaps or minor):
+            return data
+        fix = f"""Fix the Persian narration of a video about the novel "{book['title_en']}" by {book['author_en']}.
+A viewer who never read the book found these problems:
+- not clear: {json.dumps(unclear)}
+- key events never told: {json.dumps(missing, ensure_ascii=False)}
+- links missing (after paragraph number): {json.dumps(gaps, ensure_ascii=False)}
+- minor paragraphs that may be deleted: {json.dumps(minor)}
+
+SOURCE TEXT (the only truth; use nothing else):
+{src['text']}
+
+Narration: {json.dumps(paras, ensure_ascii=False)}
+
+Rules:
+- Change as little as possible. Fix a problem by adding ONE or TWO sentences inside the paragraph where it belongs, or (at
+  most 2 times) as a new paragraph right after paragraph "after". Make clear in the first paragraphs who the hero is, what
+  he or she wants and the main conflict, if they are listed as not clear.
+- A minor paragraph is deleted by returning "" for it. Delete nothing else.
+- Every new sentence only from the SOURCE TEXT, linked to the sentence before it by a connector.
+{TONE_RULES}
+{NAMES_RULE}
+Return JSON {{"results": [{{"i": 0, "narration_fa": "..."}}], "new": [{{"after": 3, "narration_fa": "..."}}]}} where
+"results" has ONLY the paragraphs you changed or deleted."""
+        out = gemini_json(fix, minutes=8, models=WRITE_MODELS)
+        edited = {}
+        for r in out.get("results") or []:
+            if isinstance(r, dict) and str(r.get("i", "")).isdigit() and 0 <= int(r["i"]) < n \
+                    and isinstance(r.get("narration_fa"), str):
+                edited[int(r["i"])] = " ".join(r["narration_fa"].replace("ي", "ی").replace("ك", "ک").split())
+        added = {}
+        for r in (out.get("new") or [])[:2]:
+            if isinstance(r, dict) and str(r.get("after", "")).isdigit() and 0 <= int(r["after"]) < n \
+                    and str(r.get("narration_fa", "")).strip():
+                added[int(r["after"])] = " ".join(str(r["narration_fa"]).replace("ي", "ی").replace("ك", "ک").split())
+        new_scenes = []
+        for i, s in enumerate(scenes):
+            if i in edited:
+                if not edited[i]:
+                    if i not in minor:                    # only the paragraphs named as minor may disappear
+                        new_scenes.append(s)
+                        continue
+                    continue
+                s = dict(s)
+                s["narration_fa"] = edited[i]
+                s["spoken_fa"] = edited[i]
+            new_scenes.append(s)
+            if i in added:
+                new_scenes.append({"narration_fa": added[i], "spoken_fa": added[i], "source_en": "",
+                                   "characters_present": [], "setting_en": s.get("setting_en", ""),
+                                   "action_en": s.get("action_en", ""), "mood_en": s.get("mood_en", "")})
+        words = sum(len(s["narration_fa"].split()) for s in new_scenes)
+        before = sum(len(s["narration_fa"].split()) for s in scenes)
+        if (len(new_scenes) >= 5 and has_wrapup(new_scenes) and words <= max(MAX_WORDS, before) * 1.15
+                and all(len(s["narration_fa"].split()) <= 120 for s in new_scenes)):
+            data["scenes"] = new_scenes
+            print(f"Story gate repaired the narration: {len(edited)} edited, {len(added)} added, "
+                  f"{n - len(new_scenes) + len(added)} deleted ({before} -> {words} words).", flush=True)
+        else:
+            print("Story gate: the repair was not safe (length or wrap-up): kept the original narration.", flush=True)
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Story gate skipped:", e, flush=True)
+    return data
 
 
 def review_script(data, book, src):
@@ -1162,7 +1290,8 @@ class GeminiTTSUnavailable(RuntimeError):
     """Gemini TTS cannot be used any more in this run (daily quota finished): use Pocket TTS."""
 
 
-_gtts = {"dead": False, "fails": 0}
+_gtts = {"dead": False, "fails": 0, "model": None}
+_gtts_dead_models = set()
 
 
 def gemini_tts_ready():
@@ -1182,7 +1311,7 @@ def gemini_tts(text, kind, out_wav, style=""):
     if style:
         content["annotations"] = [{"type": "speech_metadata", "style": style}]
     body = {
-        "model": GEMINI_TTS_MODEL,
+        "model": _gtts.get("model") or GEMINI_TTS_MODEL,
         "input": [{"type": "user_input", "content": [content]}],
         "response_format": {"type": "audio"},
         "generation_config": {"speech_config": [{"voice": GEMINI_TTS_VOICES[kind]}]},
@@ -1208,11 +1337,14 @@ def gemini_tts(text, kind, out_wav, style=""):
                 out_wav.write_bytes(base64.b64decode(data))
                 if out_wav.stat().st_size < 2000:
                     raise RuntimeError("empty audio")
+                tts_usage_add(_gtts.get("model") or GEMINI_TTS_MODEL)
                 return
             last = f"{r.status_code} {short_error(r.text)}"
             note(f"  Gemini TTS: {last}")
             if r.status_code == 429 and ("PerDay" in r.text or "limit: 0" in r.text):
-                _gtts["dead"] = True
+                _gtts_dead_models.add(_gtts.get("model") or GEMINI_TTS_MODEL)
+                if all(m in _gtts_dead_models for m in GEMINI_TTS_MODELS):
+                    _gtts["dead"] = True
                 raise GeminiTTSUnavailable(last)
             if r.status_code in (400, 404):
                 break
@@ -1300,7 +1432,63 @@ def gemini_voice_groups(scenes, kind):
                 str(WORK / f"raw_{i:02d}.wav")])
         if gi < len(groups) - 1:
             time.sleep(25)                       # free tier: 3 requests per minute
+    verify_gemini_voice(scenes, kind)
     return [WORK / f"raw_{i:02d}.wav" for i in range(len(scenes))]
+
+
+VOICE_FIX_MAX = int(os.environ.get("AZIM_VOICE_FIX_MAX") or 3)     # at most this many paragraphs are re-read per video
+
+
+def voice_missing_words(wav, text):
+    """Gemini listens to a paragraph and lists the words of the text that were skipped or replaced in the audio.
+    Returns a list (empty = faithful) or None if the check is not available."""
+    mp3 = wav.with_name(wav.stem + "_chk.mp3")
+    try:
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ac", "1", "-b:a", "48k", str(mp3)])
+        prompt = f"""Listen to this Persian audio. It should be the reading of exactly this text:
+"{text}"
+List the words of the text that are NOT spoken in the audio, or that are replaced by other words. Ignore vowel marks,
+small pronunciation differences, pauses, and the way English names are pronounced. Do not list words that are spoken.
+Return JSON: {{"missing": ["word", ...]}} (an empty list if the reading is faithful)."""
+        r = gemini_json(prompt, minutes=3, models=CHEAP_MODELS, audio=mp3.read_bytes())
+        time.sleep(3)
+        return [str(w) for w in (r.get("missing") or []) if str(w).strip()]
+    except Exception as e:  # noqa: BLE001
+        note(f"  Voice check unavailable: {str(e)[:100]}")
+        return None
+
+
+def verify_gemini_voice(scenes, kind):
+    """A paragraph in which words were skipped is read again alone (up to VOICE_FIX_MAX per video). The new reading
+    replaces the old one only if it misses fewer words. Any problem here never stops the video."""
+    fixes, unavailable = 0, 0
+    for i, sc in enumerate(scenes):
+        if fixes >= VOICE_FIX_MAX or unavailable >= 2:
+            break
+        wav = WORK / f"raw_{i:02d}.wav"
+        plain = ((sc.get("spoken_fa") or sc["narration_fa"]) if GEMINI_TTS_TEXT == "spoken"
+                 else sc["narration_fa"]).strip()
+        miss = voice_missing_words(wav, plain)
+        if miss is None:
+            unavailable += 1
+            continue
+        if not miss:
+            continue
+        note(f"  Voice check: paragraph {i} skipped or changed: {', '.join(miss[:6])}")
+        if not gemini_tts_ready() or tts_left(_gtts.get("model") or GEMINI_TTS_MODEL) < 1:
+            break
+        new = WORK / f"fix_{i:02d}.wav"
+        try:
+            time.sleep(25)                                  # free tier: 3 requests per minute
+            gemini_tts(gemini_voice_text(plain), kind, new, GEMINI_TTS_STYLE)
+        except GeminiTTSUnavailable as e:
+            note(f"  Re-read stopped: {str(e)[:100]}")
+            break
+        fixes += 1
+        miss2 = voice_missing_words(new, plain)
+        if miss2 is not None and len(miss2) < len(miss):
+            shutil.copy(new, wav)
+            note(f"  Paragraph {i}: the new reading is better and is used.")
 
 
 def reference_wav(kind):
@@ -1439,7 +1627,43 @@ def phonetic_text(text, names):
     return re.sub(r"[A-Za-z][A-Za-z'’\-]*", lambda m: latin_to_fa(m.group(0)), text)
 
 
-GEMINI_VIDEOS_PER_DAY = int(os.environ.get("AZIM_GEMINI_VIDEOS") or 2)   # free Gemini TTS: 10 requests/day = 2 videos
+# free voice quota: requests per model per day (counted in azim_tts_usage.json, reset at midnight Pacific time)
+TTS_DAILY_LIMIT = int(os.environ.get("AZIM_TTS_DAILY") or 10)
+USAGE_FILE = ROOT / "azim_tts_usage.json"
+
+
+def tts_usage():
+    d = load_json(USAGE_FILE, {})
+    if not isinstance(d, dict) or d.get("date_pt") != pacific_today():
+        d = {"date_pt": pacific_today(), "used": {}}
+    return d
+
+
+def tts_usage_add(model):
+    d = tts_usage()
+    d["used"][model] = int(d["used"].get(model, 0)) + 1
+    try:
+        save_json(USAGE_FILE, d)
+    except OSError:
+        pass
+
+
+def tts_left(model):
+    return TTS_DAILY_LIMIT - int(tts_usage()["used"].get(model, 0))
+
+
+def gemini_group_count(scenes):
+    """How many Gemini voice requests the whole video needs (same grouping as gemini_voice_groups)."""
+    groups = n = cur = 0
+    for sc in scenes:
+        w = len(sc["narration_fa"].split())
+        if n and cur + w > GEMINI_GROUP_WORDS:
+            groups, n, cur = groups + 1, 0, 0
+        n, cur = n + 1, cur + w
+    return groups + (1 if n else 0)
+
+
+GEMINI_VIDEOS_PER_DAY = int(os.environ.get("AZIM_GEMINI_VIDEOS") or 99)   # free Gemini TTS: 10 requests/day = 2 videos
 POSTED_REF = []                 # the list of posted videos (set in main), used to count today's Gemini videos
 VOICE_USED = {"engine": None}
 
@@ -1460,14 +1684,23 @@ def make_voice(scenes, kind, names=None):
     """ONE engine and ONE voice for the WHOLE video. If Gemini TTS fails on any paragraph, the whole video is
     read again by Pocket TTS (never one paragraph with one voice and the next with another)."""
     if gemini_tts_ready() and gemini_voice_allowed():
-        try:
-            durs = _make_voice(scenes, kind, names, True)
-            VOICE_USED["engine"] = "gemini"
-            return durs
-        except GeminiTTSUnavailable as e:
-            note(f"Gemini TTS could not read the whole video ({str(e)[:100]}): the WHOLE video is read again "
-                 "with Pocket TTS, so only one voice is heard.")
-            _gtts["dead"] = True
+        for mdl in GEMINI_TTS_MODELS:
+            if mdl in _gtts_dead_models or not gemini_tts_ready():
+                continue
+            need = gemini_group_count(scenes) + 1            # +1: one spare request for a re-read
+            if tts_left(mdl) < need:
+                note(f"Gemini voice model {mdl}: {max(tts_left(mdl), 0)} free request(s) left today, {need} needed: "
+                     "not started, so no request is wasted on a half video.")
+                continue
+            _gtts["model"] = mdl
+            try:
+                durs = _make_voice(scenes, kind, names, True)
+                VOICE_USED["engine"] = "gemini"
+                return durs
+            except GeminiTTSUnavailable as e:
+                note(f"Gemini voice model {mdl} could not read the whole video ({str(e)[:100]}): the WHOLE video is "
+                     "read again with the next free voice model, or with Pocket TTS, so only one voice is heard.")
+        _gtts["dead"] = True
     if gemini_tts_ready():
         note("Gemini voice is used for only %d videos a day: this video uses the uploaded voices (Pocket TTS)."
              % GEMINI_VIDEOS_PER_DAY)
@@ -1675,15 +1908,24 @@ def make_image(prompt, path, seed, scenes_left):
 
 def check_image(path, scene):
     """Ask Gemini (it looks at the picture) how well the picture shows the narration. (score 0-10, what is missing)."""
+    sheets = scene.get("look_sheets") or []
+    look_part = ("Also check the CHARACTERS: each person must look exactly like his or her sheet (age, hair, body build, "
+                 "clothes); if there are several people they must be clearly different from each other in face, body "
+                 "and clothes; clothes and objects must fit the era (" + str(scene.get("era_en") or "the story") + "). "
+                 "Sheets: " + " | ".join(sheets) + "\nGive \"look_score\" from 0 to 10 for that (10 = all correct) "
+                 "and put what is wrong in \"missing\".\n") if sheets else ""
     prompt = f"""You check illustrations for a video. Narration (Persian): "{scene['narration_fa']}"
 Intended picture: "{scene.get('visual_en', scene.get('action_en', ''))}"
 Look at the image. Score from 0 to 10 how clearly it shows the main subject and the main action of the narration
 (10 = a viewer understands what is said just by looking; 0 = unrelated).
-Return JSON: {{"score": 7, "missing": "short English phrase: the key thing that is missing or wrong"}}"""
+{look_part}Return JSON: {{"score": 7, "look_score": 7, "missing": "short English phrase: the key thing that is missing or wrong"}}"""
     try:
         r = gemini_json(prompt, minutes=2, models=CHEAP_MODELS, image=path.read_bytes())
         time.sleep(3)
-        return int(r.get("score", 10)), str(r.get("missing", "")).strip()
+        score = int(r.get("score", 10))
+        if sheets:
+            score = min(score, int(r.get("look_score", 10)))
+        return score, str(r.get("missing", "")).strip()
     except Exception as e:  # noqa: BLE001
         print("Image check skipped:", e, flush=True)
         return None
@@ -1971,4 +2213,137 @@ def get_book_and_source(posted, rejected):
 
 
 def main():
-    posted 
+    posted = load_json(POSTED_FILE, [])
+    rejected = load_json(REJECTED_FILE, [])
+    if len(posted) >= TOTAL_BOOKS:
+        print("All books are done.")
+        return
+
+    if WORK.exists():
+        shutil.rmtree(WORK)
+    WORK.mkdir(parents=True)
+
+    print(f"Image service: {'Cloudflare FLUX' if USE_CF else 'Pollinations (slow)'}; "
+          f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
+          flush=True)
+
+    # a script that was finished in an earlier run which failed later (voice/images/video): resume it,
+    # so the Gemini quota is not spent twice. After 3 failed resumes the book is rejected.
+    book = src = script = None
+    pending = load_json(PENDING_FILE, None)
+    if pending and pending.get("version") != SCRIPT_VERSION:
+        print("Saved script is from an older version of the bot: ignored.", flush=True)
+        PENDING_FILE.unlink(missing_ok=True)
+        pending = None
+    if pending:
+        done = {norm(p["title_en"]) for p in posted}
+        try:
+            if norm(pending["book"]["title_en"]) in done:
+                pending = None
+            else:
+                attempts = int(pending.get("attempts", 0)) + 1
+                if attempts > 3:
+                    reject_book(rejected, pending["book"], "failed 3 times after the script was written")
+                    pending = None
+                else:
+                    pending["attempts"] = attempts
+                    save_json(PENDING_FILE, pending)
+                    book, src, script = pending["book"], pending["src"], pending["script"]
+                    print(f"Resuming the saved script of '{book['title_en']}' (resume {attempts} of 3).", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print("Saved script ignored:", e, flush=True)
+            pending = None
+        if not pending:
+            PENDING_FILE.unlink(missing_ok=True)
+
+    if not pending:
+        for _ in range(4):
+            book, src = get_book_and_source(posted, rejected)
+            print("Book:", book["title_en"], "| source:", src["url"].replace("\n", " + "), flush=True)
+            plan = plan_length(src)
+            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from a {src['en_words']}-word Plot)",
+                  flush=True)
+            try:
+                script = write_scenes(book, src, plan)
+                break
+            except GeminiBlocked as e:
+                reject_book(rejected, book, f"Gemini blocked the prompt: {e}")
+        else:
+            raise RuntimeError("Gemini blocked 4 books in a row")
+        save_json(PENDING_FILE, {"book": book, "src": src, "script": script, "attempts": 0, "version": SCRIPT_VERSION,
+                                 "date": date.today().isoformat()})
+
+    (WORK / "azim_source.txt").write_text(src["text"], encoding="utf-8")
+    if not CAST_SCENE:      # a saved script from an older run may still contain the portrait scene: remove it
+        script["scenes"] = [sc for sc in script["scenes"] if not sc.get("cast_names")]
+    scenes = script["scenes"]
+    words = sum(len(s["narration_fa"].split()) for s in scenes)
+    print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
+    (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
+    REPORT_FILE.write_text(f"Book: {book['title_en']}\nSource: {src['url']}\n", encoding="utf-8")
+
+    # the voice alternates: female, male, female, male...
+    last_voice = posted[-1].get("voice") if posted else None
+    if last_voice in ("female", "male"):
+        kind = "male" if last_voice == "female" else "female"
+    else:
+        kind = "female" if len(posted) % 2 == 0 else "male"
+    print(f"Voice of this video: {kind}", flush=True)
+    POSTED_REF[:] = posted
+    durs = make_voice(scenes, kind, script.get("names") or {})
+
+    seed = int(time.time()) % 100000
+    n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
+    done_pics = 0
+    last_img = None
+    for i, s in enumerate(scenes):
+        beats = s.get("beats") or [s["narration_fa"]]
+        bvs = s.get("beat_visuals") or []
+        for j, beat in enumerate(beats):
+            sc = dict(s)
+            sc["narration_fa"] = beat
+            sc["era_en"] = script.get("era_en", "")
+            if j < len(bvs):
+                sc["visual_en"] = bvs[j]["visual_en"]
+                sc["characters_present"] = bvs[j]["characters_present"]
+            prompt = build_prompt(script["art_style_en"], script.get("characters", []), sc)
+            sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
+                                 if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
+            img = WORK / f"img_{i:02d}_{j}.jpg"
+            try:
+                present = [n for n in (sc.get("characters_present") or []) if isinstance(n, str)]
+                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
+            except Exception as e:  # noqa: BLE001
+                if last_img is None:
+                    raise
+                # one failed picture must not lose the whole video: reuse the previous picture
+                print(f"WARNING: image {i}.{j} failed ({e}); reusing the previous picture.", flush=True)
+                shutil.copy(last_img, img)
+            last_img = img
+            done_pics += 1
+
+    final = WORK / "azim_final.mp4"
+    total = build_video(scenes, durs, final, script.get("names") or {})
+    print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
+
+    caption = (f"{book['title_fa']}\n{book['author_fa']}\n\n"
+               f"{src.get('credit') or 'منبع خلاصه: ویکی‌پدیا (CC BY-SA)'}\n{src['url']}")
+    send_video(final, caption)
+
+    posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
+                   "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
+    save_json(POSTED_FILE, posted)
+    PENDING_FILE.unlink(missing_ok=True)
+    shutil.rmtree(WORK, ignore_errors=True)
+    print("Done.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except GeminiQuotaExhausted as exc:
+        print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
+              "No video now; the next run continues.", flush=True)
+        sys.exit(1)
