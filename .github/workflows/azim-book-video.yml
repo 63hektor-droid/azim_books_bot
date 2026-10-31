@@ -103,7 +103,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          for f in azim_posted.json azim_rejected.json azim_pending.json; do
+          for f in azim_posted.json azim_rejected.json azim_pending.json azim_tts_usage.json; do
             git add -A -- "$f" 2>/dev/null || true
           done
           git diff --cached --quiet || git commit -m "azim: update posted/rejected books and saved script"
