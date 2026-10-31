@@ -173,5 +173,15 @@
   "date_pt": "2026-10-31",
   "wiki": "A Wrinkle in Time",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "A Confederacy of Dunces",
+  "title_fa": "اتحادیه ابلهان",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-10-31",
+  "wiki": "A Confederacy of Dunces",
+  "date": "2026-10-31"
  }
 ]
