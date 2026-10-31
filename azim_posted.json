@@ -183,5 +183,15 @@
   "date_pt": "2026-10-31",
   "wiki": "A Confederacy of Dunces",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "Mansfield Park",
+  "title_fa": "منسفیلد پارک",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-10-31",
+  "wiki": "Mansfield Park",
+  "date": "2026-10-31"
  }
 ]
