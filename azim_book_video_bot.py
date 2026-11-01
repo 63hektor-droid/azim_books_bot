@@ -61,7 +61,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 2        # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 3        # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -1072,6 +1072,9 @@ SHOTS = ("wide establishing shot", "wide shot with full bodies", "medium-wide sh
 FRAMING = ("FRAMING (very important): the camera is FAR from the subject. Every person is completely inside the picture, "
            "head and feet included, with empty space around him or her; nothing important touches or crosses the border "
            "of the picture. Never a close-up, never a detail or macro shot, never a zoomed face.")
+POSE = ("POSE (very important): the people are INSIDE the scene and busy with the action of the sentence. They look at each "
+        "other, at the object of the action or away; they are seen from the side, from three quarters or from behind. "
+        "Nobody stands still facing the viewer and nobody looks into the camera.")
 
 
 def _vwords(t):
@@ -1162,7 +1165,7 @@ that summarizes the book "{book['title_en']}" by {book['author_en']} (era: {data
 read aloud (about 10 seconds), ONE picture is shown. For EACH part write the picture so that it illustrates the exact
 content of THAT part, so a viewer who sees only the picture understands what is being said at that moment.
 
-Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "shot": "...", "event_en": "...", "visual_en": "..."}}, ...]}}
+Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "shot": "...", "event_en": "...", "roles": {{"Name": "..."}}, "visual_en": "..."}}, ...]}}
 with exactly {len(items)} items, in the same order.
 
 Rules:
@@ -1172,11 +1175,16 @@ Rules:
   discovery, a betrayal, a wedding, a trial...) is drawn as that very event, never replaced by a calm unrelated scene or
   a symbol. A death or a killing is shown in a non-graphic storybook way that is still unmistakable: the still body on the
   ground or on the bed, the dropped weapon, the shocked or grieving people around, a dark mood; never blood or gore.
+- "roles": an object that maps EVERY name in "characters_present" to 4 to 12 English words: his or her role in THIS picture and
+  what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
+  and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
+  (caregiver and patient, parent and child, killer and victim, speaker and listener).
 - "visual_en": English, 35 to 55 words. It STARTS with the shot type, then the event of "event_en" with the people doing
   it, then the PLACE of that sentence with its concrete details (room, street, ship, forest, court...), the time of day, the
   light and the weather, and 3 or 4 specific objects of THAT sentence. Unnamed people in the background: what they wear and do.
 - "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
 - {FRAMING}
+- {POSE}
 - PLACE AND SITUATION: the picture takes place exactly where the sentence (or the paragraph it belongs to) says it
   happens. If the place is not named in the sentence, take it from the paragraph context; never invent a place or object
   that contradicts the source, and never show anything that does not belong to the era of the story.
@@ -1201,7 +1209,8 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                                           for v in vis):
             vis = [{"visual_en": v["visual_en"].strip(), "shot": str(v.get("shot") or "").strip().lower(),
                     "event_en": " ".join(str(v.get("event_en") or "").split()),
-                    "characters_present": v.get("characters_present") or []} for v in vis]
+                    "characters_present": v.get("characters_present") or [],
+                    "roles": v.get("roles") if isinstance(v.get("roles"), dict) else {}} for v in vis]
             vis = diversify_visuals(vis, items, book)
             for v, it in zip(vis, items):      # a character NAMED in the sentence is always in the picture
                 v["characters_present"] = force_named_characters(v["characters_present"], it["narration_fa"], chars)
@@ -1211,7 +1220,8 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                     continue
                 n = len(s["beats"])
                 s["beat_visuals"] = [{"visual_en": v["visual_en"], "event_en": v.get("event_en", ""),
-                                      "characters_present": v["characters_present"]} for v in vis[k:k + n]]
+                                      "characters_present": v["characters_present"],
+                                      "roles": v.get("roles", {})} for v in vis[k:k + n]]
                 k += n
             data["visual_version"] = VISUAL_VERSION
             print(f"Visuals aligned: {len(items)} pictures for {len(scenes)} paragraphs.", flush=True)
@@ -1378,6 +1388,7 @@ def tts_pieces(text, kind, out_wav, level=0, skip=False, rewrites=2):
 
 def tts_text(text, kind, out_wav):
     """Whole scene. The library itself puts natural pauses between sentences; pieces are joined only on fallback."""
+    text = force_marks(text)
     files = tts_pieces(text, kind, out_wav)
     if not files:
         raise RuntimeError(f"Pocket TTS could not read this scene at all: {text[:80]}")
@@ -1527,6 +1538,20 @@ _VOICE_PREFIX = (("رسوا", "رُسوا"), ("دسر", "دِسِر"), ("دله�
 _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|یم|یت|یش|یمان|یتان|یشان)?(?![{_PL}]))", "عَمو"),)
 
 
+# Words that MUST be read with these exact vowel marks, by BOTH voices (Gemini and Pocket). The entry matches the word
+# and every form that starts with it, even if the text already carries some vowel marks (so it also works on spoken_fa).
+#   کندوکاو  -> first letter with fatha (کَندوکاو)
+#   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
+_FORCE_MARKS = (("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"))
+
+
+def force_marks(t):
+    for plain, marked in _FORCE_MARKS:
+        pat = rf"(?<![{_PL}])" + "".join(re.escape(ch) + r"[\u064B-\u0655\u0670]*" for ch in plain)
+        t = re.sub(pat, lambda m, mk=marked: mk, t)
+    return t
+
+
 PRON_FILE = ROOT / "azim_pronunciation.json"
 _PRON = {}
 
@@ -1567,7 +1592,7 @@ def gemini_voice_text(t):
         t = re.sub(rf"(?<![{_PL}]){re.escape(plain)}", marked, t)
     for pattern, marked in regexes.items():
         t = re.sub(pattern, marked, t)
-    return t
+    return force_marks(t)
 
 
 def gemini_voice_groups(scenes, kind):
@@ -1961,7 +1986,7 @@ def _wc(t):
 
 KLEIN_WORDS = 200         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 3          # at most this many named people in one picture (more of them blend their faces)
-PROMPT_WORDS = 165        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
+PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
 
 
 def _trim_words(t, n):
@@ -1977,6 +2002,12 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     names = [n for n in (scene.get("characters_present") or []) if n in byname][:MAX_PEOPLE]
     present = [byname[n] for n in names]
     ref_idx = {n: k + 1 for k, n in enumerate(ref_names or [])}
+    roles = scene.get("roles") if isinstance(scene.get("roles"), dict) else {}
+
+    def role_txt(name):          # who does WHAT in this picture (so e.g. the mother and the daughter are never swapped)
+        r = " ".join(str(roles.get(name) or "").split())
+        return f", who is {_trim_words(r, 12)}" if r else ""
+
     era_full = str(scene.get("era_en") or "").strip()
     era_short = era_full.split(". Clothing of that time")[0]
     if scene.get("visual_en"):
@@ -1996,19 +2027,23 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
         if len(present) == 1:
             c = present[0]
             if ref_idx.get(c["name"]):
-                return f"The person is exactly like reference image 1: same face, hair, age, body and clothes ({char_tag(c)}). "
+                return (f"The person is exactly like reference image 1: same face, hair, age, body and clothes ({char_tag(c)}), "
+                        f"but NOT its pose or head direction{role_txt(c['name'])}. ")
             return ("The person (always exactly this face, body and clothes): "
-                    + (_trim_words(c["look_en"], 42) if full else char_tag(c)) + ". ")
+                    + (_trim_words(c["look_en"], 42) if full else char_tag(c)) + role_txt(c["name"]) + ". ")
         parts = []
         for k, c in enumerate(present):
             ri = ref_idx.get(c["name"])
-            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "") + f": {char_tag(c)}")
-        lead = "Copy every face, hair and clothes from its reference image. " if ref_idx else ""
+            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "") + f": {char_tag(c)}"
+                         + role_txt(c["name"]))
+        lead = ("Copy only the face, hair and clothes from each reference image, NOT its pose or head direction. "
+                if ref_idx else "")
         return (lead + "All of them are in the picture, clearly different from each other: " + "; ".join(parts) + ". ")
 
     def compose(main_t, full, era, tail):
         era_part = (f"Setting: {era}. Everything shown belongs to that time. " if era else "")
         return (f"{head}Hand-drawn storybook illustration. {main_t} {people(full)}{era_part}Style: {art_s}. "
+                f"People are busy with the action, turned toward each other or the action, never looking at the camera. "
                 f"Vertical 9:16 composition, wide framing: every person completely inside the picture with empty space "
                 f"around, nothing cropped by the border, camera far away, {tail}")
 
@@ -2180,6 +2215,9 @@ For EACH picture return:
     or unrelated picture of a place or a person gets at most 3;
   * the place and situation must fit the narration (inside/outside, kind of place, time, weather), else at most 5;
   * every character of the sheets must be visible in the picture; one missing: at most 5;
+  * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
+    round); roles swapped between the people: at most 3;
+  * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * a picture that is physically absurd (a head lying on a car, extra or missing limbs, merged or floating bodies,
     melted faces) gets at most 3.
@@ -2712,6 +2750,7 @@ def main():
             if j < len(bvs):
                 sc["visual_en"] = bvs[j]["visual_en"]
                 sc["event_en"] = bvs[j].get("event_en", "")
+                sc["roles"] = bvs[j].get("roles", {})
                 sc["characters_present"] = bvs[j]["characters_present"]
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
