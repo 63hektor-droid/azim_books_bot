@@ -1,0 +1,417 @@
+{
+ "book": {
+  "title_en": "Jurassic Park",
+  "title_fa": "پارک ژوراسیک",
+  "author_en": "Michael Crichton",
+  "author_fa": "مایکل کرایتون",
+  "wikipedia_title_en": "Jurassic Park (novel)",
+  "wikipedia_title_fa": "پارک ژوراسیک (رمان)",
+  "book_type": "novel"
+ },
+ "src": {
+  "text": "INTRODUCTION (what the novel is, who wrote it, when):\nJurassic Park is a 1990 science fiction novel written by Michael Crichton. It is a cautionary tale about genetic engineering that depicts the collapse of a zoological park featuring genetically recreated dinosaurs, illustrating chaos theory and its real-world implications. Crichton published a sequel, The Lost World, in 1995.\nJurassic Park was adapted into a 1993 film directed by Steven Spielberg. The film achieved critical and commercial success, becoming the highest-grossing film of all time at the time of its release and launching the Jurassic Park franchise.\n\nPLOT (an editor-reviewed concise summary of the whole story, 700 words; the ONLY source of the events):\nIn 1989, a series of unusual animal attacks occur in Costa Rica, with evidence suggesting the involvement of Procompsognathus, an extinct dinosaur. Paleontologist Alan Grant and his colleague, paleobotanist Ellie Sattler, meet with an EPA official to discuss the incidents but are unexpectedly summoned by John Hammond, a billionaire and founder of the bioengineering company InGen. Hammond takes them to Isla Nublar, a remote island where he has established a biological preserve, for a weekend visit.\nThe preserve is a cover for the construction of \"Jurassic Park\", a theme park showcasing living dinosaurs recreated using ancient DNA found in the blood inside insects that were fossilized and preserved in amber. Gaps in the genetic code were filled in with reptilian, avian, or amphibian DNA. To control breeding, the park's specimens are raised as females with a genetic flaw that makes them lysine deficient and unable to survive outside captivity.\nThe recent attacks have made Hammond's investors skittish. Hammond requests that Grant and Sattler tour the park and endorse it. They are joined by mathematician and chaos theorist Ian Malcolm, and a lawyer representing the investors, Donald Gennaro, both of whom are pessimistic about the park. Hammond also invites his grandchildren, Tim and Alexis 'Lex' Murphy, to join the tour. The park staff comprise senior engineer John Arnold, biotechnologist Henry Wu, game warden Robert Muldoon, PR director Ed Regis, chief programmer Dennis Nedry, veterinarian Harding, and several laborers. \nWhile touring the park, Grant finds a Velociraptor eggshell, seemingly proving Malcolm's assertion that the dinosaurs are breeding. Grant deduces that using frog DNA to fill gaps in the dinosaurs' genetic code resulted in an environment that was conducive to dichogamy; some of the female dinosaurs became males and established a breeding population. The park's automated tally system failed to account for the newborns, having been programmed to allow operators to input the expected number of dinosaurs.\nNedry, angered by Hammond refusing to pay him for months of overwork, commits corporate espionage for Lewis Dodgson, an employee of InGen's rival, Biosyn. Activating a backdoor he wrote into the park's software, he disables the security systems and steals frozen embryos for the park's dinosaur species. Attempting to rendezvous with Dodgson's agent, he becomes lost due to a tropical storm. Nedry's sabotage disables the electric fences around the park's enclosures. He is killed by a Dilophosaurus during his attempted escape.\nThe tour group discovers that dinosaurs have escaped the island by stowing away on supply boats. When the power is turned off, they are left stranded next to the Tyrannosaurus rex enclosure and a Tyrannosaurus rex attacks them. Grant rescues Tim and Lex, but Malcolm is severely injured and left behind, while Regis is eaten. Muldoon and Gennaro, searching for the tour group, find Malcolm and leave him in Harding's care.\nArnold tries rebooting the control room's systems and undoing Nedry's sabotage while repair crews patch up the park. However, the staff does not realize that the rebooting process has left the main generators turned off, leaving only the overtaxed auxiliary generator operational. It quickly breaks down, disabling the entire island's power. Velociraptors escape their enclosure and kill Arnold and Wu. Grant and the children make their way back to the island's control complex by rafting down a river, narrowly escaping multiple dinosaur attacks. \nGrant and Tim restart the main generators and regain control of the park's systems. Warned by Grant that raptors are aboard, Gennaro contacts the island's departing supply ship and recalls it. Hammond, walking outdoors while contemplating InGen's future, is killed by a pack of Procompsognathus after falling down a hill and breaking his ankle. Grant, Sattler, Muldoon, and Gennaro search for the surviving raptors and discover a nest hidden in the park's waterworks.\nMalcolm seemingly dies from his injuries. Everyone is evacuated by the Air Vigilance Service, which declares the dinosaurs hazardous and razes the island with napalm. The survivors are detained in a Costa Rican hotel. Weeks later, Grant is visited by Dr. Martin Gutierrez, an American doctor who lives in Costa Rica. Gutierrez informs Grant that an unknown pack of animals is migrating through the Costa Rican jungle, implying that the surviving dinosaurs have been reintroduced into Earth's ecosystem.\n\nSIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the novel matters):\n[Themes]\nJurassic Park critiques the dystopian potentialities of modern science. Ian Malcolm is the conscience that reminds John Hammond of the immoral and unnatural path that has been taken. The final condition of the park is epitomized by the word \"hell\" which highlights the sacrilegious nature of Hammond's attempt.\nThe plot of Crichton's novel has similarities to Mary Shelley's 1818 novel Frankenstein; or, The Modern Prometheus, where humanity creates something without truly knowing anything about it. Henry Wu is unable to name the things that he creates, which alludes to Victor Frankenstein not knowing what to call his flawed imitation of God's creation. The immorality of these actions lead to human destruction, echoing the creature's vengeance on his creator.\nAs Dale Speirs notes at p. 18 of \"\n\n[Reception]\nThe book became a bestseller and Crichton's signature novel, with largely favorable reviews by critics. In a review for The New York Times, Christopher Lehmann-Haupt described it as \"a superior specimen of the [Frankenstein] myth\" and \"easily the best of Mr. Crichton's novels to date\". Writing for Entertainment Weekly, Gene Lyons held that the book was \"hard to beat for sheer intellectual entertainment\" largely because it was \"[f]illed with diverting, up-to-date information in easily digestible form\". Both Lyons' Entertainment Weekly piece and Andrew Ferguson's review in the Los Angeles Times, however, criticized Crichton's characterization as heavy-handed and his char",
+  "en_words": 700,
+  "url": "https://en.wikipedia.org/wiki/Jurassic_Park_%28novel%29",
+  "title": "Jurassic Park (novel)",
+  "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"
+ },
+ "script": {
+  "style_key": "comic",
+  "characters": [
+   {
+    "name": "Alan Grant",
+    "look_en": "Male, 40 years old; tall and thin build; square face shape; tanned skin tone; hazel eyes; black, short, messy hair; clean-shaved; prominent scar across his forehead; dark green canvas button-down utility shirt, faded khaki work trousers, dark brown leather belt, and sturdy worn brown leather work boots.",
+    "tag_en": "Male, 40, short black hair, forehead scar, tall and thin build, dark green utility shirt with khaki trousers."
+   },
+   {
+    "name": "Ellie Sattler",
+    "look_en": "Female, 28 years old; athletic build; oval face shape; sun-kissed fair skin tone; blue eyes; blond, shoulder-length hair tied in a practical ponytail; no facial hair; light freckles across her nose; deep red tied short-sleeved linen shirt, tan cargo shorts, brown belt, and durable tan leather hiking boots.",
+    "tag_en": "Female, 28, blond ponytail, freckled nose, athletic build, deep red tied shirt with tan cargo shorts."
+   },
+   {
+    "name": "Ian Malcolm",
+    "look_en": "Male, 35 years old; broad-shouldered and muscular build; sharp angular face shape; olive skin tone; dark brown eyes; dark copper, short, slicked-back hair; light stubble beard; tinted round wire-rimmed spectacles; navy blue silk long-sleeved shirt unbuttoned at the neck, dark charcoal trousers, black leather belt, and dark leather loafers.",
+    "tag_en": "Male, 35, slicked dark copper hair, round wire-rimmed spectacles, muscular build, navy blue silk shirt."
+   },
+   {
+    "name": "John Hammond",
+    "look_en": "Male, 72 years old; slim, medium height build; round face shape; pale skin tone; pale blue eyes; white, short, thinning hair; full neatly trimmed white beard; polished amber-topped wooden walking cane; light mustard yellow linen jacket over an ivory cotton shirt, white linen trousers, and light tan leather shoes.",
+    "tag_en": "Male, 72, short white hair and beard, amber-topped cane, slim build, mustard yellow linen jacket."
+   },
+   {
+    "name": "Tim Murphy",
+    "look_en": "Male, 11 years old; small and frail build; heart-shaped face shape; pale fair skin tone; green eyes; dark brown, medium length, messy hair with forehead bangs; no facial hair; silver dental braces; purple short-sleeved striped cotton t-shirt, dark blue denim shorts, white crew socks, and scuffed white canvas sneakers.",
+    "tag_en": "Male, 11, messy dark brown hair, silver dental braces, small frail build, purple striped t-shirt."
+   },
+   {
+    "name": "Dennis Nedry",
+    "look_en": "Male, 36 years old; heavy and tall build; double-chinned round face shape; ruddy fair skin tone; brown eyes; light brown, short, greasy side-parted hair; clean-shaved; thick black-framed eyeglasses; light gray hooded windbreaker jacket over a rumpled yellow t-shirt, loose beige cotton trousers, and worn gray rubber-soled sneakers.",
+    "tag_en": "Male, 36, greasy light brown hair, thick black glasses, heavy tall build, light gray hooded jacket."
+   }
+  ],
+  "outline": [
+   {
+    "event": "John Hammond invites Alan Grant, Ellie Sattler, and Ian Malcolm to Isla Nublar.",
+    "because": "Investors are skittish after unusual animal attacks in Costa Rica."
+   },
+   {
+    "event": "Alan Grant discovers dinosaur eggshells in the park.",
+    "because": "Using frog DNA allowed female dinosaurs to change sex and breed secretly."
+   },
+   {
+    "event": "Dennis Nedry sabotages security systems and steals embryos.",
+    "because": "He is angry at Hammond for refusing to pay him for overwork."
+   },
+   {
+    "event": "A Tyrannosaurus rex attacks the stranded tour group.",
+    "because": "Nedry's sabotage cut off power to the electric fences."
+   },
+   {
+    "event": "Velociraptors escape and attack the park staff.",
+    "because": "The system reboot leaves the main generators turned off and auxiliary power breaks down."
+   },
+   {
+    "event": "Alan Grant and Tim restart the main generators and restore park control.",
+    "because": "They need to regain security and prevent escaped raptors from reaching the mainland."
+   },
+   {
+    "event": "The island is razed with napalm after survivors are evacuated.",
+    "because": "Air Vigilance Service declares the dinosaurs hazardous."
+   },
+   {
+    "event": "Alan Grant learns that unknown animal packs are migrating through Costa Rica.",
+    "because": "Surviving dinosaurs have entered Earth's ecosystem."
+   }
+  ],
+  "cast": [
+   {
+    "name": "Alan Grant",
+    "sentence_fa": "Alan Grant یک دیرینه‌شناس است که برای ارزیابی ایمنی پارک دایناسورها به جزیره دعوت می‌شود."
+   },
+   {
+    "name": "Ellie Sattler",
+    "sentence_fa": "Ellie Sattler دیرینه‌گیاه‌شناس و همکار علمی Alan Grant است که او را در سفر همراهی می‌کند."
+   },
+   {
+    "name": "Ian Malcolm",
+    "sentence_fa": "Ian Malcolm یک ریاضی‌دان و نظریه‌پرداز آشوب بدبین است که خطرات پارک را تذکر می‌دهد."
+   },
+   {
+    "name": "John Hammond",
+    "sentence_fa": "John Hammond میلیاردری است که ساخت پارک زیستی دایناسورها را بنیان‌گذاری کرده است."
+   },
+   {
+    "name": "Dennis Nedry",
+    "sentence_fa": "Dennis Nedry برنامه‌نویس ارشد پارک است که به خاطر خشم از دستمزد دست به جاسوسی می‌زند."
+   }
+  ],
+  "scenes": [
+   {
+    "narration_fa": "رمان علمی‌تخیلی Jurassic Park در سال هزار و نهصد و نود به قلم Michael Crichton نوشته شد. این داستان هشداردهنده درباره مهندسی ژنتیک، فروپاشی یک پارک زیست‌شناختی با دایناسورهای بازسازی‌شده را نشان می‌دهد. نویسنده در این اثر، نظریه آشوب و پیامدهای واقعی آن را به تصویر می‌کشد تا داستان به ماجرایی هیجان‌انگیز تبدیل شود.",
+    "source_en": "Jurassic Park is a 1990 science fiction novel written by Michael Crichton. It is a cautionary tale about genetic engineering that depicts the collapse of a zoological park featuring genetically recreated dinosaurs, illustrating chaos theory...",
+    "characters_present": [],
+    "setting_en": "A dramatic high-tech laboratory background showing fossilized amber and DNA strands, 1989 atmosphere.",
+    "action_en": "An artistically framed introduction depicting a glowing amber mosquito against scientific monitors.",
+    "mood_en": "Mysterious, intellectual, science-fiction tension.",
+    "spoken_fa": "رُمانِ عِلمی‌تَخَیُّلیِ Jurassic Park دَر سالِ هِزار وَ نُهصَد وَ نَوَد بِه قَلَمِ Michael Crichton نَوِشتِه شُد. اِین داسْتانِ هُشداردِهَندِه دَربارِهِ مَهَندِسیِ ژِنِتیک، فَرُوپاشیِ یِک پارْکِ زِیست‌شِناخْتی با دایِناسُورهایِ بازْسازی‌شُدِه را نِشان می‌دَهد. نَویسَندِه دَر اِین اَثَر، نَظَرِیِهٔ آشُوب وَ پَیامَدهایِ واقِعیِ آن را بِه تَصویر می‌کِشَد تا داسْتان بِه ماجَرایی هِیجان‌اَنگیز تَبدیل شَوَد.",
+    "beats": [
+     "رمان علمی‌تخیلی Jurassic Park در سال هزار و نهصد و نود به قلم Michael Crichton نوشته شد. این داستان هشداردهنده درباره مهندسی ژنتیک، فروپاشی یک پارک زیست‌شناختی با دایناسورهای بازسازی‌شده را نشان می‌دهد.",
+     "نویسنده در این اثر، نظریه آشوب و پیامدهای واقعی آن را به تصویر می‌کشد تا داستان به ماجرایی هیجان‌انگیز تبدیل شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Detail shot of an object showing a polished piece of amber containing a preserved mosquito resting on a metal laboratory desk beside a glowing CRT computer monitor. Bright fluorescent ceiling lighting illuminates the high-tech lab interior, revealing glass petri dishes, stainless steel instruments, a laboratory centrifuge, and sealed glass vials filled with golden yellow liquids.",
+      "characters_present": []
+     },
+     {
+      "visual_en": "Wide establishing shot of a futuristic park control room featuring wall-sized green vector radar screens and flickering warning consoles. Dark nighttime ambiance fills the room, casting shadows across scattered paper computer printouts, bulky CRT displays, high-backed swivel chairs, abandoned coffee mugs, and dark steel spiral staircases in the background.",
+      "characters_present": []
+     }
+    ]
+   },
+   {
+    "narration_fa": "ماجرا در سال هزار و نهصد و هشتاد و نه با حملات غیرمعمول جانوران در کوستاریکا آغاز می‌شود. سپس John Hammond میلیاردر، Alan Grant دیرینه‌شناس و Ellie Sattler دیرینه‌گیاه‌شناس را به همراه Ian Malcolm ریاضی‌دان به جزیره Isla Nublar دعوت می‌کند. Hammond قصد دارد با جلب نظر این متخصصان، نگرانی سرمایه‌گذاران پارک را برطرف سازد.",
+    "source_en": "In 1989, a series of unusual animal attacks occur in Costa Rica... Alan Grant and Ellie Sattler... are unexpectedly summoned by John Hammond... Hammond requests that Grant and Sattler tour the park and endorse it.",
+    "characters_present": [
+     "Alan Grant",
+     "Ellie Sattler",
+     "Ian Malcolm",
+     "John Hammond"
+    ],
+    "setting_en": "Tropical lush island Isla Nublar, outdoors near a helicopter landing pad, warm sunny late afternoon light.",
+    "action_en": "John Hammond welcomes Alan Grant, Ellie Sattler, and Ian Malcolm as they step off a landing area into the dense jungle environment.",
+    "mood_en": "Adventurous, expectant, subtly tense.",
+    "spoken_fa": "ماجرا در سال هزار و نهصد و هشتاد و نه با حملات غیرمعمول جانوران در کوستاریکا آغاز می‌شود. سپس John Hammond میلیاردر، Alan Grant دیرینه‌شناس و Ellie Sattler دیرینه‌گیاه‌شناس را به همراه Ian Malcolm ریاضی‌دان به جزیره Isla Nublar دعوت می‌کند. Hammond قصد دارد با جلب نظر این متخصصان، نگرانی سرمایه‌گذاران پارک را برطرف سازد.",
+    "beats": [
+     "ماجرا در سال هزار و نهصد و هشتاد و نه با حملات غیرمعمول جانوران در کوستاریکا آغاز می‌شود. سپس John Hammond میلیاردر، Alan Grant دیرینه‌شناس و Ellie Sattler دیرینه‌گیاه‌شناس را به همراه Ian Malcolm ریاضی‌دان به جزیره Isla Nublar دعوت می‌کند.",
+     "Hammond قصد دارد با جلب نظر این متخصصان، نگرانی سرمایه‌گذاران پارک را برطرف سازد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium shot of an elderly man leaning on his cane while warmly greeting a tall paleontologist near a silver helicopter. They stand on a green lawn landing pad, bathed in warm late afternoon sun. In the background are lush tropical palm trees, duffel bags on turf, windswept grass, and misty mountain peaks.",
+      "characters_present": [
+       "John Hammond",
+       "Alan Grant"
+      ]
+     },
+     {
+      "visual_en": "Over-the-shoulder shot looking past a muscular mathematician in dark round glasses toward a female paleobotanist inside an electric safari vehicle. Sunlit daytime light shines through the windows as they travel past dense tropical jungle foliage, featuring leather interior seats, dashboard monitoring screens, heavy steel fence cables, and lush roadside greenery.",
+      "characters_present": [
+       "Ellie Sattler",
+       "Ian Malcolm"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "این پارک در واقع پوششی برای بازسازی دایناسورها با استفاده از دی‌ان‌ای کهن است. مسئولان پارک برای جلوگیری از تولیدمثل، همه دایناسورها را ماده آفریده‌اند. اما Alan Grant در طول بازدید، پوسته تخم یک دایناسور را پیدا می‌کند. او درمی‌یابد که دی‌ان‌ای قورباغه باعث تغییر جنسیت برخی دایناسورها و آغاز تولیدمثل آن‌ها شده است.",
+    "source_en": "While touring the park, Grant finds a Velociraptor eggshell, seemingly proving Malcolm's assertion that the dinosaurs are breeding. Grant deduces that using frog DNA... resulted in an environment that was conducive to dichogamy...",
+    "characters_present": [
+     "Alan Grant"
+    ],
+    "setting_en": "Inside the lush jungle enclosure of Jurassic Park, daytime with light filtering through thick canopy.",
+    "action_en": "Alan Grant kneels down in the foliage, carefully holding a hatched Velociraptor eggshell while examining it with intense focus.",
+    "mood_en": "Revelatory, shocking, ominous discovery.",
+    "spoken_fa": "اِین پارْک دَر واقِع پُوشِشی بَرایِ بازْسازیِ دایِناسُورها با اِستِفادِه اَز دی‌اِن‌ایِ کُهَن اَست. مَسئُولانِ پارْک بَرایِ جِلُوگیری اَز تُولیدْمِثل، هَمِهٔ دایِناسُورها را مادَّه آفَریدِه‌اَند. اَما Alan Grant دَر طُولِ بازْدید، پُوسْتِهٔ تُخْمِ یِک دایِناسُور را پِیدا می‌کُنَد. اُو دَرمی‌یابَد کِه دی‌اِن‌ایِ قُورباغِه باعِثِ تَغیِیرِ جِنسِیَّتِ بَرخی دایِناسُورها وَ آغازِ تُولیدْمِثلِ آن‌ها شُدِه اَست.",
+    "beats": [
+     "این پارک در واقع پوششی برای بازسازی دایناسورها با استفاده از دی‌ان‌ای کهن است. مسئولان پارک برای جلوگیری از تولیدمثل، همه دایناسورها را ماده آفریده‌اند.",
+     "اما Alan Grant در طول بازدید، پوسته تخم یک دایناسور را پیدا می‌کند. او درمی‌یابد که دی‌ان‌ای قورباغه باعث تغییر جنسیت برخی دایناسورها و آغاز تولیدمثل آن‌ها شده است."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Close-up of automated mechanical metal arms delicately handling transparent glass incubator tubes containing dinosaur embryos inside a cleanroom laboratory. Bright blue fluorescent lighting reflects off stainless steel racks, frosted glass partition windows, digital temperature dials, white clinical countertops, and sterile plastic trays.",
+      "characters_present": []
+     },
+     {
+      "visual_en": "Low-angle shot of a paleontologist kneeling on damp jungle soil while holding a cracked dinosaur eggshell in his hands. Filtered mid-day sunlight cuts through the thick green forest canopy overhead, highlighting wild fern fronds, damp fallen leaves, muddy earth, mossy tree roots, and dense tropical foliage.",
+      "characters_present": [
+       "Alan Grant"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "در همین حال، Dennis Nedry برنامه‌نویس ارشد پارک که از John Hammond عصبانی است، دست به جاسوسی صنعتی می‌زند. او با ایجاد یک مسیر مخفی در نرم‌افزار، سیستم‌های امنیتی را از کار می‌اندازد و جنین‌های منجمد را می‌دزدد. این خرابکاری باعث خاموشی حصارهای الکتریکی می‌شود و Dennis Nedry نیز در طوفان به دست یک دایناسور به قتل می‌رسد.",
+    "source_en": "Nedry, angered by Hammond refusing to pay him... disables the security systems and steals frozen embryos... Nedry's sabotage disables the electric fences... He is killed by a Dilophosaurus...",
+    "characters_present": [
+     "Dennis Nedry"
+    ],
+    "setting_en": "Dark rain-drenched jungle road during a severe tropical storm at night.",
+    "action_en": "Dennis Nedry struggles through torrential rain beside his stalled jeep, clutching a stolen embryo container while looking terrified into the dark woods.",
+    "mood_en": "Dark, chaotic, suspenseful thriller.",
+    "spoken_fa": "دَر هَمِین حال، Dennis Nedryِ بَرنامِه‌نَویسِ اَرشَدِ پارْک کِه اَز John Hammond عَصَبانی اَست، دَسْت بِه جاسُوسیِ صَنعَتی می‌زَنَد. اُو با اِیجادِ یِک مَسیرِ مَخفی دَر نَرْم‌اَفْزار، سِیستِم‌هایِ اَمْنِیَّتی را اَز کار می‌اَندازَد وَ جَنین‌هایِ مُنجَمَد را می‌دُزدَد. اِین خَرابْکاری باعِثِ خامُوشیِ حِصارهایِ اِلِکْتِریکی می‌شَوَد وَ Dennis Nedry نِیز دَر طُوفان بِه دَسْتِ یِک دایِناسُور بِه قَتْل می‌رَسَد.",
+    "beats": [
+     "در همین حال، Dennis Nedry برنامه‌نویس ارشد پارک که از John Hammond عصبانی است، دست به جاسوسی صنعتی می‌زند. او با ایجاد یک مسیر مخفی در نرم‌افزار، سیستم‌های امنیتی را از کار می‌اندازد و جنین‌های منجمد را می‌دزدد.",
+     "این خرابکاری باعث خاموشی حصارهای الکتریکی می‌شود و Dennis Nedry نیز در طوفان به دست یک دایناسور به قتل می‌رسد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium shot of a heavy programmer stashing stolen stainless steel embryo canisters into a modified shaving cream can inside a cold storage room. Cold white fog drifts across metal shelving units, biohazard warning labels, frosted glass doors, overhead yellow safety lights, and stainless steel refrigeration equipment.",
+      "characters_present": [
+       "Dennis Nedry"
+      ]
+     },
+     {
+      "visual_en": "High-angle shot of a heavy man slipping onto a muddy incline next to a yellow island jeep with its driver door open. Dark nighttime scene during a heavy tropical rainstorm, bright headlights shining through torrential downpours, thick mud pools, tangled jungle vines, and yellow hazard warning signs.",
+      "characters_present": [
+       "Dennis Nedry"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "پس از قطعی کامل برق، اعضای گروه در کنار حصار Tyrannosaurus می‌مانند و مورد حمله این جانور قرار می‌گیرند. در این میان Alan Grant موفق می‌شود Tim و Lex را نجات دهد. اما Ian Malcolm در این حادثه به شدت زخمی می‌شود و شرایط برای سایر بازماندگان بسیار سخت و بحرانی می‌شود.",
+    "source_en": "When the power is turned off, they are left stranded next to the Tyrannosaurus rex enclosure and a Tyrannosaurus rex attacks them. Grant rescues Tim and Lex, but Malcolm is severely injured...",
+    "characters_present": [
+     "Alan Grant",
+     "Tim Murphy",
+     "Ian Malcolm"
+    ],
+    "setting_en": "Rainy dark night outside the Tyrannosaurus rex electric fence enclosure, emergency vehicle lights flashing.",
+    "action_en": "Alan Grant shields young Tim Murphy near a wrecked tour car while the giant silhouette of a Tyrannosaurus rex looms in the background.",
+    "mood_en": "Terrifying, violent action, survival horror.",
+    "spoken_fa": "پس از قطعی کامل برق، اعضای گروه در کنار حصار Tyrannosaurus می‌مانند و مورد حمله این جانور قرار می‌گیرند. در این میان Alan Grant موفق می‌شود Tim و Lex را نجات دهد. اما Ian Malcolm در این حادثه به شدت زخمی می‌شود و شرایط برای سایر بازماندگان بسیار سخت و بحرانی می‌شود.",
+    "beats": [
+     "پس از قطعی کامل برق، اعضای گروه در کنار حصار Tyrannosaurus می‌مانند و مورد حمله این جانور قرار می‌گیرند. در این میان Alan Grant موفق می‌شود Tim و Lex را نجات دهد.",
+     "اما Ian Malcolm در این حادثه به شدت زخمی می‌شود و شرایط برای سایر بازماندگان بسیار سخت و بحرانی می‌شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Wide establishing shot of a tall man pulling a small boy away from a crushed electric safari vehicle near torn electric perimeter wires. Terrifying dark stormy night atmosphere with rain pouring down, flashing orange emergency lights, muddy road puddles, broken metal fence posts, and towering jungle trees.",
+      "characters_present": [
+       "Alan Grant",
+       "Tim Murphy"
+      ]
+     },
+     {
+      "visual_en": "Close-up of a mathematician resting against a muddy earth bank while clutching his bandaged leg in pain. Torrential rain pours down in the dim blue night, showing rain droplets on round wire-rimmed glasses, wet palm fronds, muddy water puddles, discarded torn cloth, and dark wet jungle roots.",
+      "characters_present": [
+       "Ian Malcolm"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "کارکنان سعی می‌کنند سیستم‌های کنترل را دوباره راه‌اندازی کنند، اما ژنراتورهای اصلی خاموش می‌مانند. با از کار افتادن ژنراتور کمکی، برق کل جزیره قطع می‌شود و دایناسورهای Velociraptor از حصار فرار می‌کنند. در نتیجه این اتفاق، چند نفر کشته می‌شوند و Alan Grant همراه کودکان با قایق از مسیر رودخانه فرار می‌کند.",
+    "source_en": "However, the staff does not realize that the rebooting process has left the main generators turned off... Velociraptors escape their enclosure... Grant and the children make their way back... by rafting down a river...",
+    "characters_present": [
+     "Alan Grant",
+     "Tim Murphy"
+    ],
+    "setting_en": "A misty, dangerous jungle riverbank in the early dawn light.",
+    "action_en": "Alan Grant guides a wooden raft down a turbulent river with Tim Murphy, navigating away from dense foliage where raptors lurk.",
+    "mood_en": "Urgent, perilous, high-stakes escape.",
+    "spoken_fa": "کارْکُنان سَعْی می‌کُنَند سِیستِم‌هایِ کُنْتُرُل را دُوبارِه راه‌اَندازی کُنَند، اَما ژِنِراتُورهایِ اَصْلی خامُوش می‌مانَند. با اَز کار اُفْتادَنِ ژِنِراتُورِ کُمَکی، بَرْقِ کُلِّ جَزیرِه قَطْع می‌شَوَد وَ دایِناسُورهایِ Velociraptor اَز حِصار فَرار می‌کُنَند. دَر نَتیجِهٔ اِین اِتِّفاق، چَنْد نَفَر کُشْتِه می‌شَوَند وَ Alan Grant هَمْراهِ کُودَکان با قایِق اَز مَسیرِ رُودخانِه فَرار می‌کُنَد.",
+    "beats": [
+     "کارکنان سعی می‌کنند سیستم‌های کنترل را دوباره راه‌اندازی کنند، اما ژنراتورهای اصلی خاموش می‌مانند. با از کار افتادن ژنراتور کمکی، برق کل جزیره قطع می‌شود و دایناسورهای Velociraptor از حصار فرار می‌کنند.",
+     "در نتیجه این اتفاق، چند نفر کشته می‌شوند و Alan Grant همراه کودکان با قایق از مسیر رودخانه فرار می‌کند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Silhouette against the light of predatory velociraptors perching atop a broken wire mesh enclosure fence. Gloomy misty dawn breaking over the jungle creates stark light behind the creatures, casting fog around tall palm trees, a forgotten searchlight beam, scattered steel debris, and dense tropical rainforest plants.",
+      "characters_present": []
+     },
+     {
+      "visual_en": "Medium shot of a man paddling a yellow rubber raft down a turbulent jungle river while a young boy sits at the front. Early morning hazy sunlight illuminates the scene, revealing overhanging jungle branches, white river rapids foam, slippery shoreline boulders, dense bamboo thickets, and misty water spray.",
+      "characters_present": [
+       "Alan Grant",
+       "Tim Murphy"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "سرانجام Alan Grant و Tim موفق می‌شوند ژنراتور اصلی را روشن کنند و کنترل سیستم‌های پارک را به دست گیرند. در همین حین، John Hammond هنگام قدم زدن سقوط می‌کند و توسط دسته‌ای از دایناسورهای کوچک کشته می‌شود. پس از آن، Alan Grant و سایر بازماندگان به جستجوی آشیانه دایناسورها می‌پردازند.",
+    "source_en": "Grant and Tim restart the main generators and regain control of the park's systems... Hammond, walking outdoors... is killed by a pack of Procompsognathus after falling down a hill...",
+    "characters_present": [
+     "Alan Grant",
+     "Tim Murphy",
+     "John Hammond"
+    ],
+    "setting_en": "Industrial basement generator control room of the main complex, flickering fluorescent lighting.",
+    "action_en": "Alan Grant and Tim Murphy pull heavy industrial breakers on a main power panel to restart the island systems.",
+    "mood_en": "Tense victory, tragic irony.",
+    "spoken_fa": "سرانجام Alan Grant و Tim موفق می‌شوند ژنراتور اصلی را روشن کنند و کنترل سیستم‌های پارک را به دست گیرند. در همین حین، John Hammond هنگام قدم زدن سقوط می‌کند و توسط دسته‌ای از دایناسورهای کوچک کشته می‌شود. پس از آن، Alan Grant و سایر بازماندگان به جستجوی آشیانه دایناسورها می‌پردازند.",
+    "beats": [
+     "سرانجام Alan Grant و Tim موفق می‌شوند ژنراتور اصلی را روشن کنند و کنترل سیستم‌های پارک را به دست گیرند. در همین حین، John Hammond هنگام قدم زدن سقوط می‌کند و توسط دسته‌ای از دایناسورهای کوچک کشته می‌شود.",
+     "پس از آن، Alan Grant و سایر بازماندگان به جستجوی آشیانه دایناسورها می‌پردازند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Low-angle shot of an elderly man tumbling down a steep grassy hill, dropping his polished wooden cane in the grass. Daytime light under overcast gray skies exposes small lizard-like creatures swarming through tall weeds around him, alongside loose rocks, fallen tropical palm fronds, and wet muddy slopes.",
+      "characters_present": [
+       "John Hammond"
+      ]
+     },
+     {
+      "visual_en": "Over-the-shoulder shot looking past a male paleontologist and a female paleobotanist peering into a subterranean cave holding dinosaur nests. Twin bright flashlight beams pierce through damp cavern mist, revealing ancient jagged rock walls, sandy floor nests filled with eggs, dripping stalactites, and dark rocky crevices.",
+      "characters_present": [
+       "Alan Grant",
+       "Ellie Sattler"
+      ]
+     }
+    ]
+   },
+   {
+    "narration_fa": "در جمع‌بندی، این داستان مسیر فروپاشی یک رویا را از آغاز تا فاجعه نهایی به تصویر می‌کشد. با بحرانی شدن اوضاع، نیروهای هوایی تمام نجات‌یافتگان را از جزیره تخلیه می‌کنند و منطقه را با بمب‌های ناپالم به آتش می‌کشند. بدین ترتیب رویای پرهزینه ساخت پارک زیستی به یک کابوس تمام‌عیار تبدیل می‌شود.",
+    "source_en": "Everyone is evacuated by the Air Vigilance Service, which declares the dinosaurs hazardous and razes the island with napalm.",
+    "characters_present": [
+     "Alan Grant",
+     "Ellie Sattler"
+    ],
+    "setting_en": "View from an airborne evacuation helicopter looking back down at Isla Nublar at dusk.",
+    "action_en": "Alan Grant and Ellie Sattler look out the window of a military helicopter as fiery napalm explosions consume the jungle island below.",
+    "mood_en": "Cataclysmic, somber resolution, dramatic ending.",
+    "spoken_fa": "دَر جَمْع‌بَندی، اِین داسْتان مَسیرِ فَرُوپاشیِ یِک رُویا را اَز آغاز تا فاجِعِهٔ نَهایی بِه تَصویر می‌کِشَد. با بُحْرانی شُدَنِ اَوضاع، نِیُرُوهایِ هَوایی تَمامِ نَجات‌یافْتِگان را اَز جَزیرِه تَخْلِیِه می‌کُنَند وَ مَنطَقِه را با بُمب‌هایِ ناپالْم بِه آتش می‌کِشَند. بَدِین تَرتیب رُویاِیِ پُرْهَزینِهٔ ساختِ پارْکِ زِیستی بِه یِک کابُوسِ تَمام‌عَیار تَبدیل می‌شَوَد.",
+    "beats": [
+     "در جمع‌بندی، این داستان مسیر فروپاشی یک رویا را از آغاز تا فاجعه نهایی به تصویر می‌کشد. با بحرانی شدن اوضاع، نیروهای هوایی تمام نجات‌یافتگان را از جزیره تخلیه می‌کنند و منطقه را با بمب‌های ناپالم به آتش می‌کشند.",
+     "بدین ترتیب رویای پرهزینه ساخت پارک زیستی به یک کابوس تمام‌عیار تبدیل می‌شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Wide establishing shot from inside a military helicopter looking down at the tropical island of Isla Nublar below. Dusk sunlight glows on the horizon as massive plumes of orange fire and dark smoke rise from burning jungle foliage, framed by the helicopter door, ocean waves, and military gear straps.",
+      "characters_present": []
+     },
+     {
+      "visual_en": "Silhouette against the light of a destroyed visitor center entrance gate against a dramatic smoky sunset. Glowing embers drift across charred mud ground, casting harsh shadows behind dark skeletal palm trees, broken wooden fencing, ruined stone pillars, and torn park banners blowing in the hot wind.",
+      "characters_present": []
+     }
+    ]
+   },
+   {
+    "narration_fa": "رمان Jurassic Park نقد روشنی بر پیامدهای علم مدرن و غرور انسان است. در این داستان Ian Malcolm نماد وجدان بیداری است که رفتار غیراخلاقی را به John Hammond یادآوری می‌کند. این اثر با الهام از داستان فرانکنشتاین نشان می‌دهد که آفرینش ناآگاهانه موجودات توسط انسان، در نهایت به نابودی آفریننده ختم خواهد شد.",
+    "source_en": "Jurassic Park critiques the dystopian potentialities of modern science. Ian Malcolm is the conscience that reminds John Hammond of the immoral and unnatural path... The plot... has similarities to Mary Shelley's 1818 novel Frankenstein...",
+    "characters_present": [
+     "Ian Malcolm"
+    ],
+    "setting_en": "Abstract philosophical space contrasting futuristic high-tech DNA labs with dark gothic shadows.",
+    "action_en": "Ian Malcolm standing thoughtfully, gesturing as if arguing a moral point, framed by complex mathematical chaos theory graphics.",
+    "mood_en": "Philosophical, haunting, reflective.",
+    "spoken_fa": "رُمانِ Jurassic Park نَقْدِ رُوشَنی بَر پَیامَدهایِ عِلْمِ مُدِرْن وَ غُرُورِ اِنْسان اَست. دَر اِین داسْتان Ian Malcolm نَمادِ وِجْدانِ بیداری اَست کِه رَفْتارِ غَیْرِاَخْلاقی را بِه John Hammond یادآوَری می‌کُنَد. اِین اَثَر با اِلْهام اَز داسْتانِ فِرانْکِنِشْتاین نِشان می‌دَهد کِه آفَرینِشِ ناآگاهانِهٔ مَوجُودات تَوَسُّطِ اِنْسان، دَر نِهایَت بِه نابُودیِ آفَرینَندِه خَتْم خواهَد شُد.",
+    "beats": [
+     "رمان Jurassic Park نقد روشنی بر پیامدهای علم مدرن و غرور انسان است. در این داستان Ian Malcolm نماد وجدان بیداری است که رفتار غیراخلاقی را به John Hammond یادآوری می‌کند.",
+     "این اثر با الهام از داستان فرانکنشتاین نشان می‌دهد که آفرینش ناآگاهانه موجودات توسط انسان، در نهایت به نابودی آفریننده ختم خواهد شد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium shot of a mathematician gesturing intently while speaking across a formal white-clothed dining table to an elderly man. Warm indoor chandelier lighting illuminates the visitor center dining hall, showing crystal wine glasses, polished silverware, half-eaten meals, dark wooden chairs, and colorful tropical murals on walls.",
+      "characters_present": [
+       "Ian Malcolm",
+       "John Hammond"
+      ]
+     },
+     {
+      "visual_en": "Detail shot of an object showing a broken glass petri dish cracked open on a wet concrete floor. Harsh cold spotlighting highlights green fluorescent liquid leaking across dark damp stone, alongside metallic lab debris, shattered beaker shards, small claw prints in nearby mud, and discarded scientific cables.",
+      "characters_present": []
+     }
+    ]
+   },
+   {
+    "narration_fa": "در نهایت، هفته‌ها بعد Alan Grant مطلع می‌شود که جانورانی ناشناخته در جنگل‌های کوستاریکا در حال حرکت هستند. این موضوع نشان می‌دهد دایناسورها وارد چرخه طبیعی زمین شده‌اند. این کتاب با استقبال گرم منتقدان روبه‌رو شد و به عنوان یکی از برترین آثار Michael Crichton باقی ماند.",
+    "source_en": "Gutierrez informs Grant that an unknown pack of animals is migrating through the Costa Rican jungle, implying that the surviving dinosaurs have been reintroduced into Earth's ecosystem.",
+    "characters_present": [
+     "Alan Grant"
+    ],
+    "setting_en": "A quiet Costa Rican hotel porch overlooking a dense, mist-covered tropical mainland forest weeks later.",
+    "action_en": "Alan Grant stands looking at the distant misty jungle line with a deep, knowing look of wonder and concern.",
+    "mood_en": "Haunting, thought-provoking, legendary finish.",
+    "spoken_fa": "در نهایت، هفته‌ها بعد Alan Grant مطلع می‌شود که جانورانی ناشناخته در جنگل‌های کوستاریکا در حال حرکت هستند. این موضوع نشان می‌دهد دایناسورها وارد چرخه طبیعی زمین شده‌اند. این کتاب با استقبال گرم منتقدان روبه‌رو شد و به عنوان یکی از برترین آثار Michael Crichton باقی ماند.",
+    "beats": [
+     "در نهایت، هفته‌ها بعد Alan Grant مطلع می‌شود که جانورانی ناشناخته در جنگل‌های کوستاریکا در حال حرکت هستند. این موضوع نشان می‌دهد دایناسورها وارد چرخه طبیعی زمین شده‌اند.",
+     "این کتاب با استقبال گرم منتقدان روبه‌رو شد و به عنوان یکی از برترین آثار Michael Crichton باقی ماند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Over-the-shoulder shot looking over a male paleontologist standing on a wooden hotel balcony holding a paper letter. Late afternoon golden sunlight illuminates the vast mainland Costa Rican rainforest in the background, featuring a rustic wicker balcony chair, ceramic coffee mug, wooden railing, and distant mist-covered hills.",
+      "characters_present": [
+       "Alan Grant"
+      ]
+     },
+     {
+      "visual_en": "Close-up of an open hardcover novel lying on a dark wooden desk under the warm glow of a brass desk lamp. Cream-colored book pages display printed text, flanked by a vintage brass compass, leather notebook, round reading glasses, a polished wooden tabletop, and soft shadow backgrounds.",
+      "characters_present": []
+     }
+    ]
+   }
+  ],
+  "art_style_en": "comic book illustration, thick black outlines, dynamic angles, bold shadows, halftone shading, saturated colors",
+  "era_en": "Isla Nublar, Costa Rica, 1989. Clothing of that time: Late 1980s tropical island and expedition attire featuring lightweight cotton khaki shorts, breathable linen utility shirts, waterproof nylon rain jackets, durable canvas trousers, sturdy leather hiking boots, and sun protective hats.",
+  "names": {
+   "Jurassic Park": "ژُوراسیک پارْک",
+   "Michael Crichton": "مایْکِل کرایْتُون",
+   "John Hammond": "جان هَمُوند",
+   "Alan Grant": "آلَن گِرَنْت",
+   "Ellie Sattler": "اِلّی ساتْلِر",
+   "Ian Malcolm": "ایان مالْکُوم",
+   "Isla Nublar": "ایسْلا نُوبْلار",
+   "Dennis Nedry": "دِنیس نِدْری",
+   "Tyrannosaurus rex": "تیرانُوسُورُوس رِکْس",
+   "Tim": "تیم",
+   "Lex": "لِکْس",
+   "Velociraptor": "وِلُوسیرَپْتُر"
+  }
+ },
+ "attempts": 0,
+ "version": 9,
+ "date": "2026-11-01"
+}
