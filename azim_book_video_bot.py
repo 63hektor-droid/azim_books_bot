@@ -45,14 +45,19 @@ WORK = ROOT / "azim_work"
 START_TIME = time.time()
 JOB_BUDGET = 340 * 60     # seconds; GitHub Actions default job limit is 360 minutes
 
-W, H = 1280, 720
+W, H = 720, 1280          # vertical 9:16 like the reference video (reels / phone screen)
 FPS = 25
 PAD = 0.25                # pause after each scene (seconds)
 TOTAL_BOOKS = 2000              # only novels
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
-SUB_FONT_SIZE = 23        # subtitle size (was 22)
-SUB_FONT = "DejaVu Sans"      # tested: «لا» in «تلاش، کلاه، کلاسیک» is drawn correctly (Noto Sans Arabic drew a rectangle)
+SUB_FONT_SIZE = 10        # subtitle size in 288-line units = about 44 px on the 1280 px tall vertical video
+SUB_FONT = "Vazirmatn"        # bold Persian font like the user's reference subtitle (free); DejaVu Sans is the safe fallback
+SUB_FONT_URLS = (             # free download, tried in order (the first that works is used)
+    "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/ttf/Vazirmatn-Bold.ttf",
+    "https://github.com/rastikerdar/vazirmatn/raw/v33.003/fonts/ttf/Vazirmatn-Bold.ttf",
+    "https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Bold.ttf",
+)
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
@@ -477,28 +482,14 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    "cartoon": ("stylish 2D cartoon illustration, bold clean outlines, flat vibrant colors",
-                "light, funny, whimsical or children's stories; fairy-tale and nonsense worlds; talking animals "
-                "(for example Alice in Wonderland, Pinocchio, The Little Prince, The Wizard of Oz)"),
-    "anime": ("anime style illustration, large expressive eyes, clean cel shading, vivid colors, detailed backgrounds",
-              "young heroes, coming-of-age, first love, school life, magic and adventure for teenagers "
-              "(for example Anne of Green Gables, Harry Potter, The Hobbit, Little Women)"),
-    "pencil": ("black and white pencil and charcoal drawing, detailed graphite shading, cross-hatching, monochrome, "
-               "only shades of gray",
-               "dark, tragic, psychological, crime, war, poverty, prison, dystopia, gothic horror "
-               "(for example Crime and Punishment, 1984, Les Miserables, Frankenstein, Dracula)"),
-    "ink_watercolor": ("delicate ink and watercolor illustration, fine ink linework, transparent watercolor washes, "
-                       "gentle muted colors",
-                       "quiet, poetic, nostalgic, pastoral, tender love stories and slow literary novels "
-                       "(for example Pride and Prejudice, Jane Eyre, Wuthering Heights, Madame Bovary)"),
-    "oil": ("classical oil painting, rich deep colors, visible brushwork, dramatic lighting, museum quality",
-            "grand historical epics, big family sagas, aristocratic and 19th-century realist novels, "
-            "serious social panoramas (for example War and Peace, Anna Karenina, The Count of Monte Cristo)"),
-    "comic": ("comic book illustration, thick black outlines, dynamic angles, bold shadows, halftone shading, "
-              "saturated colors",
-              "fast action, pirates, duels, thrillers, detective stories, science fiction, superhero-like adventure "
-              "(for example Treasure Island, The Three Musketeers, Journey to the Center of the Earth, Sherlock Holmes)"),
+    # ONE fixed style for ALL videos (the user's choice, Nov 1, 2026): a hand-drawn storybook / animated-film look -
+    # soft ink outlines, warm painterly colors, atmospheric detailed backgrounds, cozy warm light, expressive faces.
+    "storybook": ("hand-drawn storybook illustration in the style of a gentle animated film, fine dark ink outlines, "
+                  "soft painterly colors, warm cozy lamplight and atmospheric weather, richly detailed backgrounds, "
+                  "natural proportions, expressive realistic faces, whole picture in this one style",
+                  "every book (this is the only style)"),
 }
+FIXED_STYLE = STYLES["storybook"][0]
 STYLE_GUIDE = "\n".join(f'  * "{k}": use for {v[1]}.' for k, v in STYLES.items())
 
 TONE_RULES = """- TONE AND FLOW: a warm storyteller who tells the story to ONE listener, like a friend on a quiet evening, with
@@ -638,15 +629,6 @@ SOURCE TEXT:
 {src['text']}
 {cast_block}
 Return JSON with exactly these keys:
-- "style_key": ONE picture style for the WHOLE video, exactly one of these keys (write the key only):
-{STYLE_GUIDE}
-  How to choose: decide by the OVERALL mood of the whole book, never by one scene. Check in this order and take the
-  first rule that fits: (1) the book is mainly for children or is a light fairy-tale/nonsense story -> "cartoon";
-  (2) the book is dark, tragic, criminal, about war, prison, poverty or a grim future -> "pencil";
-  (3) the book is a grand historical epic or a large social saga -> "oil";
-  (4) the book is mainly action, adventure on the sea, duels, detective or science fiction -> "comic";
-  (5) the hero is a teenager or young person growing up, or the story is magical youth adventure -> "anime";
-  (6) otherwise (quiet, poetic, romantic, literary) -> "ink_watercolor".
 - "characters": a list of ALL the important characters of the story (at most 6), each {{"name": "...", "look_en":
   "..."}}. "name" is the name in English letters exactly as in the source. "look_en" is ONE fixed look sheet in English
   of 35 to 55 words that will be pasted into EVERY picture of this character, so the face is always the same: gender,
@@ -706,12 +688,9 @@ Rules for the visuals:
 - Each picture must show EXACTLY what the narration says at that moment (concrete scene, people, objects, action).
 - No text, letters, numbers, charts or logos in the pictures. No real celebrities. No scenes copied from films."""
         data = gemini_json(prompt, minutes=15, models=WRITE_MODELS)
-        key = str(data.get("style_key") or "").strip().lower().replace(" ", "_").replace("-", "_")
-        if key not in STYLES:
-            key = "cartoon"                               # the robot named no valid style: safe default
-        data["style_key"] = key
-        data["art_style_en"] = STYLES[key][0]             # the exact words come from the fixed table
-        print(f"Picture style: {key}", flush=True)
+        data["style_key"] = "storybook"
+        data["art_style_en"] = FIXED_STYLE                # one fixed style for every video
+        print("Picture style: storybook (fixed)", flush=True)
         if cast:                                          # the fixed, designed cast replaces the robot's own sheets
             data["characters"] = cast["characters"]
             data["era_en"] = cast["era_en"]
@@ -1990,7 +1969,7 @@ def build_prompt(art, chars, scene, fix=""):
 
     def compose(main_t, full, era, tail):
         era_part = (f"Setting: {era}. Everything shown belongs to that time. " if era else "")
-        return f"{head}{main_t} {people(full)}{era_part}Cinematic 16:9 composition, {tail}"
+        return f"{head}{main_t} {people(full)}{era_part}Vertical 9:16 portrait composition, {tail}"
 
     for full, era, tail in ((True, era_full, CLEAN), (True, era_short, CLEAN), (True, era_short, CLEAN_SHORT),
                             (False, era_short, CLEAN_SHORT)):
@@ -2008,11 +1987,11 @@ def _build_prompt_old(art, chars, scene):
     if scene.get("visual_en"):
         return ((f"Characters (always with exactly this face and clothes): {looks}. " if looks else "")
                 + f"{scene['visual_en']} "
-                + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
+                + f"Art style: {art}. Vertical 9:16 portrait composition, {CLEAN}")
     return (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
             + (f"Characters: {looks}. " if looks else "")
             + f"Mood: {scene.get('mood_en', 'cinematic')}. "
-            + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
+            + f"Art style: {art}. Vertical 9:16 portrait composition, {CLEAN}")
 
 
 class ImageServiceUnavailable(RuntimeError):
@@ -2034,7 +2013,7 @@ def cf_image(prompt, path, seed=None):
         if seed is not None:
             payload["seed"] = int(seed) % 2147483647
         if _cf_size_ok:
-            payload.update({"width": 1024, "height": 576})
+            payload.update({"width": 576, "height": 1024})
         try:
             print(f"Image(CF): attempt={attempt}", flush=True)
             CALLS["cloudflare"] += 1
@@ -2191,9 +2170,83 @@ def srt_time(t):
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
 
+SUB_PHRASE_WORDS = int(os.environ.get("AZIM_SUB_WORDS") or 4)    # words per subtitle line (0 = whole sentences)
+
+
+def chunk_phrases(sent, maxw=None):
+    """Like the reference video: a short one-line phrase at a time (inside the dark box), cut at commas first and then
+    into equal parts. An English name made of several words is never cut in the middle."""
+    maxw = SUB_PHRASE_WORDS if maxw is None else maxw
+    if maxw <= 0:
+        return [sent]
+    out = []
+    for part in [p for p in re.split(r"(?<=[\u060c\u061b:,;])\s+", sent) if p.strip()]:
+        toks = []
+        for w in part.split():
+            if toks and re.match(r"[A-Za-z]", w) and re.match(r"[A-Za-z]", toks[-1].split()[-1]):
+                toks[-1] += " " + w
+            else:
+                toks.append(w)
+        if len(toks) <= maxw:
+            out.append(" ".join(toks))
+            continue
+        n = -(-len(toks) // maxw)
+        size = -(-len(toks) // n)
+        out += [" ".join(toks[k:k + size]) for k in range(0, len(toks), size)]
+    final = []
+    for c in out:                                  # a line must fit the narrow vertical screen: cut long ones in two
+        w = c.split()
+        if len(c) > 26 and len(w) > 1:
+            h = len(w) // 2
+            final += [" ".join(w[:h]), " ".join(w[h:])]
+        else:
+            final.append(c)
+    return final or [sent]
+
+
 def split_sentences(text):
     parts = [p.strip() for p in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if p.strip()]
     return parts or [text.strip()]
+
+
+_sub_font_path = None
+_sub_bold = False
+
+
+def find_sub_font_file():
+    """The bold Persian subtitle font file: already in azim_work/azim_fonts, or installed, or downloaded (free).
+    Returns a path or None (then the old tested DejaVu Sans is used)."""
+    global _sub_font_path
+    if _sub_font_path is not None:
+        return _sub_font_path or None
+    d = WORK / "azim_fonts"
+    d.mkdir(parents=True, exist_ok=True)
+    target = d / "Vazirmatn-Bold.ttf"
+    if not (target.is_file() and target.stat().st_size > 50000):
+        try:
+            out = subprocess.check_output(["fc-list", "Vazirmatn:bold", "file"], text=True)
+            for x in out.splitlines():
+                x = x.strip().rstrip(":")
+                if x.lower().endswith(".ttf") and Path(x).is_file():
+                    shutil.copy(x, target)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+    if not (target.is_file() and target.stat().st_size > 50000):
+        import urllib.request
+        for url in SUB_FONT_URLS:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "azim-bot"}),
+                                            timeout=60) as r:
+                    data = r.read()
+                if len(data) > 50000 and data[:4] in (b"\x00\x01\x00\x00", b"true", b"OTTO"):
+                    target.write_bytes(data)
+                    print("Subtitle font downloaded:", url, flush=True)
+                    break
+            except Exception as e:  # noqa: BLE001
+                print("Subtitle font download failed:", url, short_error(str(e)), flush=True)
+    _sub_font_path = str(target) if (target.is_file() and target.stat().st_size > 50000) else ""
+    return _sub_font_path or None
 
 
 _font_cmap = None
@@ -2206,7 +2259,8 @@ def font_chars():
         _font_cmap = set()
         try:
             from fontTools.ttLib import TTFont
-            path = subprocess.check_output(["fc-match", "-f", "%{file}", SUB_FONT], text=True).strip()
+            path = find_sub_font_file() or subprocess.check_output(["fc-match", "-f", "%{file}", "DejaVu Sans"],
+                                                                   text=True).strip()
             _font_cmap = set(TTFont(path, fontNumber=0, lazy=True).getBestCmap().keys())
             print(f"Subtitle font file: {path} ({len(_font_cmap)} characters)", flush=True)
         except Exception as e:  # noqa: BLE001
@@ -2263,13 +2317,16 @@ def setup_sub_font():
     need = [0xFEFB, 0x0644, 0x0627, 0x067E, 0x0686, 0x0698, 0x06A9, 0x06AF, 0x06CC, 0x200C]
     cands = []
     try:
-        cands.append(subprocess.check_output(["fc-match", "-f", "%{file}", SUB_FONT], text=True).strip())
+        vz = find_sub_font_file()
+        if vz:
+            cands.append(vz)
+        cands.append(subprocess.check_output(["fc-match", "-f", "%{file}", "DejaVu Sans"], text=True).strip())
         out = subprocess.check_output(["fc-list", ":charset=fefb 644 627 67e 686 698 6a9 6af 6cc", "file"], text=True)
         cands += [x.strip().rstrip(":") for x in out.splitlines() if x.strip()]
     except Exception as e:  # noqa: BLE001
         print("Font search failed:", e, flush=True)
     cands.append("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-    pref = ("dejavusans.ttf", "vazir", "notonaskharabic", "notosansarabic")
+    pref = ("vazirmatn-bold", "dejavusans.ttf", "notonaskharabic", "notosansarabic")
     cands.sort(key=lambda f: next((k for k, x in enumerate(pref) if x in Path(f).name.lower()), 99))
     for path in cands:
         try:
@@ -2284,11 +2341,13 @@ def setup_sub_font():
             d.mkdir(parents=True, exist_ok=True)
             shutil.copy(path, d / Path(path).name)
             print(f"Subtitle font: {fam} ({path})", flush=True)
+            global _sub_bold
+            _sub_bold = "bold" in Path(path).name.lower()
             note(f"Subtitle font = {fam} ({path}); ZWNJ in font: {need[-1] in cm}")
             return fam
         except Exception as e:  # noqa: BLE001
             print("Font skipped:", path, e, flush=True)
-    return SUB_FONT
+    return "DejaVu Sans"
 
 
 def subtitle_text(text, names=None):
@@ -2352,7 +2411,7 @@ def build_video(scenes, durs, out_path, names=None):
             zoom = (f"z='min(zoom+{inc:.6f},1.12)'" if (i + j) % 2 == 0
                     else f"z='if(eq(on,1),1.12,max(zoom-{inc:.6f},1.0))'")
             # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
-            vf = ("scale=2560:1440:flags=lanczos:force_original_aspect_ratio=increase,crop=2560:1440,"
+            vf = ("scale=1440:2560:flags=lanczos:force_original_aspect_ratio=increase,crop=1440:2560,"
                   "unsharp=5:5:0.6:5:5:0.0,"
                   f"zoompan={zoom}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
                   "format=yuv420p")
@@ -2370,7 +2429,7 @@ def build_video(scenes, durs, out_path, names=None):
         clips.append(clip.name)
 
         # subtitles: always the clean text (no diacritics), cut into sentences
-        sents = split_sentences(subtitle_text(s["narration_fa"], names))
+        sents = [c for x in split_sentences(subtitle_text(s["narration_fa"], names)) for c in chunk_phrases(x)]
         weights = [max(len(x), 1) for x in sents]
         total_w = sum(weights)
         acc = 0
@@ -2391,8 +2450,11 @@ def build_video(scenes, durs, out_path, names=None):
         "-i", "list.txt", "-c", "copy", "joined.mp4"], cwd=WORK)
 
     font_family = setup_sub_font()
-    style = (f"FontName={font_family},FontSize={SUB_FONT_SIZE},PrimaryColour=&H00FFFFFF,"
-             "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=28")
+    # like the reference video: white bold text, centered, on a semi-transparent dark box (BorderStyle=3: the box is
+    # drawn with OutlineColour; &H80 = about half see-through), no outline/shadow, placed in the lower part of the picture
+    style = (f"FontName={font_family},FontSize={SUB_FONT_SIZE},Bold={1 if _sub_bold else 0},"
+             "PrimaryColour=&H00FFFFFF,OutlineColour=&H8C141414,BackColour=&H8C141414,"
+             "BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=62,MarginL=12,MarginR=12")
     # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
     fits = False
     for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
@@ -2505,7 +2567,7 @@ def main():
         script["scenes"] = [sc for sc in script["scenes"] if not sc.get("cast_names")]
     scenes = script["scenes"]
     words = sum(len(s["narration_fa"].split()) for s in scenes)
-    print(f"Script: {len(scenes)} scenes, {words} words, style: {script['art_style_en']}", flush=True)
+    print(f"Script: {len(scenes)} scenes, {words} words, style: storybook (fixed)", flush=True)
     (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
     (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
     (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
@@ -2536,7 +2598,7 @@ def main():
             if j < len(bvs):
                 sc["visual_en"] = bvs[j]["visual_en"]
                 sc["characters_present"] = bvs[j]["characters_present"]
-            prompt = build_prompt(script["art_style_en"], script.get("characters", []), sc)
+            prompt = build_prompt(FIXED_STYLE, script.get("characters", []), sc)
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
@@ -2553,7 +2615,7 @@ def main():
                 shutil.copy(last_img, img)
                 reused = True
             jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": reused,
-                         "rebuild": lambda fx, sc=sc: build_prompt(script["art_style_en"],
+                         "rebuild": lambda fx, sc=sc: build_prompt(FIXED_STYLE,
                                                                    script.get("characters", []), sc, fx)})
             last_img = img
             done_pics += 1
