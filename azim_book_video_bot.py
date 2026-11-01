@@ -1946,4 +1946,704 @@ def build_prompt(art, chars, scene, fix=""):
     inside PROMPT_WORDS words so that the end of it (people, era) is never cut away. Names are not written: the image
     model does not know them (a name like «Harry» can even pull in a film face); the short look tag is enough."""
     names = scene.get("characters_present") or []
-    present = [c for c in chars if isinstance(c, dict
+    present = [c for c in chars if isinstance(c, dict) and c.get("name") in names][:3]
+    era_full = str(scene.get("era_en") or "").strip()
+    era_short = era_full.split(". Clothing of that time")[0]
+    if scene.get("visual_en"):
+        main = str(scene["visual_en"]).strip()
+    else:
+        main = (f"{scene['action_en']}. Setting: {scene['setting_en']}. Mood: {scene.get('mood_en', 'cinematic')}.")
+    head = f"Art style: {art}. " + (f"The picture must clearly show: {fix}. " if fix else "")
+
+    def people(full):
+        if not present:
+            return ""
+        if len(present) == 1:
+            c = present[0]
+            return "The person (always exactly this face, body and clothes): " + (
+                _trim_words(c["look_en"], 42) if full else char_tag(c)) + ". "
+        ords = ("first", "second", "third")
+        body = "; ".join(f"the {ords[k]} person: {char_tag(c)}" for k, c in enumerate(present))
+        return ("People (each always exactly this face, body and clothes): " + body +
+                ". They look completely different from each other: different faces, ages, builds and clothes. ")
+
+    def compose(main_t, full, era, tail):
+        era_part = (f"Setting: {era}. Everything shown belongs to that time. " if era else "")
+        return f"{head}{main_t} {people(full)}{era_part}Vertical 9:16 portrait composition, {tail}"
+
+    for full, era, tail in ((True, era_full, CLEAN), (True, era_short, CLEAN), (True, era_short, CLEAN_SHORT),
+                            (False, era_short, CLEAN_SHORT)):
+        out = compose(main, full, era, tail)
+        if _wc(out) <= PROMPT_WORDS:
+            return out
+    spare = PROMPT_WORDS - _wc(compose("", False, era_short, CLEAN_SHORT))     # keep the people, shorten the picture
+    return compose(_trim_words(main, max(spare, 25)), False, era_short, CLEAN_SHORT)
+
+
+def _build_prompt_old(art, chars, scene):
+    names = scene.get("characters_present") or []
+    looks = "; ".join(f"{c['name']}: {c['look_en']}" for c in chars
+                      if isinstance(c, dict) and c.get("name") in names)
+    if scene.get("visual_en"):
+        return ((f"Characters (always with exactly this face and clothes): {looks}. " if looks else "")
+                + f"{scene['visual_en']} "
+                + f"Art style: {art}. Vertical 9:16 portrait composition, {CLEAN}")
+    return (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
+            + (f"Characters: {looks}. " if looks else "")
+            + f"Mood: {scene.get('mood_en', 'cinematic')}. "
+            + f"Art style: {art}. Vertical 9:16 portrait composition, {CLEAN}")
+
+
+class ImageServiceUnavailable(RuntimeError):
+    """Cloudflare cannot draw now (daily free quota finished, key refused, or down for a long time). The video is NOT
+    made with bad pictures: the finished script stays saved and the next run continues with it."""
+
+
+_cf_size_ok = True
+
+
+def cf_image(prompt, path, seed=None):
+    """Cloudflare Workers AI FLUX.1 schnell (free: 10,000 neurons/day). Returns True on success."""
+    global _cf_size_ok
+    url = (f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}"
+           f"/ai/run/@cf/black-forest-labs/flux-1-schnell")
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
+    for attempt in range(1, 4):
+        # Cloudflare now accepts ONLY prompt and steps for this model (seed/width/height give status 400, code 5006)
+        payload = {"prompt": prompt[:1900], "steps": 4}
+        try:
+            print(f"Image(CF): attempt={attempt}", flush=True)
+            CALLS["cloudflare"] += 1
+            r = requests.post(url, headers=headers, json=payload, timeout=120)
+            if r.status_code == 200:
+                ctype = r.headers.get("content-type", "")
+                if ctype.startswith("image"):
+                    path.write_bytes(r.content)
+                    return True
+                b64 = r.json().get("result", {}).get("image")
+                if b64:
+                    path.write_bytes(base64.b64decode(b64))
+                    return True
+            print(f"  -> status={r.status_code} body={r.text[:200]!r}", flush=True)
+            low = r.text.lower()
+            if "daily free allocation" in low or "4006" in low:
+                raise ImageServiceUnavailable("the daily free quota of Cloudflare Workers AI is finished")
+            if r.status_code in (401, 403):
+                raise ImageServiceUnavailable("Cloudflare refused the key (CF_API_TOKEN / CF_ACCOUNT_ID are wrong)")
+            if r.status_code == 429:
+                time.sleep(30)
+                continue
+        except ImageServiceUnavailable:
+            raise
+        except Exception as e:  # noqa: BLE001
+            print(f"  -> error: {e}", flush=True)
+        time.sleep(8 * attempt)
+    return False
+
+
+def make_image(prompt, path, seed, scenes_left):
+    """Cloudflare only. If it fails, wait (2 and 5 minutes) and try again; if it still fails the run stops quietly."""
+    for wait in (0, 120, 300):
+        if wait:
+            if time.time() - START_TIME + wait + (scenes_left + 1) * 15 > JOB_BUDGET:
+                break
+            print(f"Cloudflare could not draw this picture: waiting {wait} s and trying again.", flush=True)
+            time.sleep(wait)
+        if cf_image(prompt, path, seed):
+            time.sleep(1)
+            return
+    raise ImageServiceUnavailable("Cloudflare could not draw a picture after waiting")
+
+
+CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
+MIN_SCORE = 6
+
+
+def check_images(jobs):
+    """ONE Gemini call looks at up to CHECK_BATCH pictures. Returns a list with (score, what is missing) or None for
+    each picture; returns None if the check is not available (the pictures are then kept as they are)."""
+    blocks = []
+    for k, j in enumerate(jobs, 1):
+        sc = j["sc"]
+        sheets = sc.get("look_sheets") or []
+        blocks.append({"n": k, "narration_fa": sc["narration_fa"],
+                       "intended_picture": sc.get("visual_en", sc.get("action_en", "")),
+                       "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
+    prompt = f"""You check illustrations for a video. The pictures above are labeled IMAGE 1 to IMAGE {len(jobs)}.
+For each one you get the Persian narration that is read while it is shown, the intended picture, and (maybe) the look
+sheets of its characters. Items: {json.dumps(blocks, ensure_ascii=False)}
+
+For EACH picture return:
+- "score" 0-10: how clearly it shows the main subject and main action of ITS narration (10 = a viewer understands what is
+  said just by looking; 0 = unrelated). A picture that is physically absurd (a head lying on a car, extra or missing
+  limbs, merged or floating bodies, melted faces) gets at most 3.
+- "look_score" 0-10, only when sheets are given: each person looks like his or her sheet (age, hair, build, clothes);
+  several people are clearly different from each other in face, body and clothes; clothes and objects fit the era
+  (10 = all correct).
+- "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
+Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "..."}}]}} with one item per picture."""
+    try:
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS, images=[j["img"].read_bytes() for j in jobs])
+        time.sleep(3)
+        by_n = {}
+        for c in out.get("checks") or []:
+            if isinstance(c, dict) and str(c.get("n", "")).isdigit():
+                by_n[int(c["n"])] = c
+        res = []
+        for k, j in enumerate(jobs, 1):
+            c = by_n.get(k)
+            if not c:
+                res.append(None)
+                continue
+            score = int(c.get("score", 10))
+            if j["sc"].get("look_sheets"):
+                score = min(score, int(c.get("look_score", 10)))
+            res.append((score, str(c.get("missing", "")).strip()))
+        return res
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Image check skipped:", e, flush=True)
+        return None
+
+
+def check_and_fix_images(jobs):
+    """Every picture is checked (4 per Gemini call). A picture with a low score is drawn again with the missing
+    thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
+    redraw is not available, the pictures that already exist are kept: the video never fails because of this step."""
+    best = {}                                              # picture number -> (score, bytes)
+    todo = [k for k, j in enumerate(jobs) if not j.get("reused")]
+    for rnd in range(3):
+        results = {}
+        for a in range(0, len(todo), CHECK_BATCH):
+            grp = todo[a:a + CHECK_BATCH]
+            res = check_images([jobs[k] for k in grp])
+            if res is None:
+                continue
+            for k, r in zip(grp, res):
+                if r is not None:
+                    results[k] = r
+        if not results:
+            break
+        low = []
+        for k, (score, missing) in sorted(results.items()):
+            data = jobs[k]["img"].read_bytes()
+            if k not in best or score > best[k][0]:
+                best[k] = (score, data)
+            if score < MIN_SCORE:
+                print(f"Image check: picture {k + 1} score {score}/10 - {missing}", flush=True)
+                low.append((k, missing))
+        print(f"Image check round {rnd + 1}: {len(results)} checked, {len(low)} to draw again.", flush=True)
+        if rnd == 2 or not low:
+            break
+        todo = []
+        try:
+            for k, missing in low:
+                j = jobs[k]
+                make_image(j["rebuild"](missing), j["img"], j["seed"] + 1000 * (rnd + 1), 0)
+                todo.append(k)
+        except ImageServiceUnavailable as e:
+            print(f"Redraw stopped ({e}): the best pictures so far are kept.", flush=True)
+            break
+        except Exception as e:  # noqa: BLE001
+            print("Redraw failed:", e, flush=True)
+            break
+    for k, (score, data) in best.items():                  # keep the best picture of all tries
+        jobs[k]["img"].write_bytes(data)
+    if best:
+        low_left = sum(1 for sc_, _ in best.values() if sc_ < MIN_SCORE)
+        print(f"Image check done: {len(best)} pictures, {low_left} still below {MIN_SCORE}/10.", flush=True)
+
+
+# ---------------------------------------------------------------- video
+def srt_time(t):
+    h = int(t // 3600)
+    m = int(t % 3600 // 60)
+    s = int(t % 60)
+    ms = int((t - int(t)) * 1000)
+    return f"{h:02}:{m:02}:{s:02},{ms:03}"
+
+
+SUB_PHRASE_WORDS = int(os.environ.get("AZIM_SUB_WORDS") or 4)    # words per subtitle line (0 = whole sentences)
+
+
+def chunk_phrases(sent, maxw=None):
+    """Like the reference video: a short one-line phrase at a time (inside the dark box), cut at commas first and then
+    into equal parts. An English name made of several words is never cut in the middle."""
+    maxw = SUB_PHRASE_WORDS if maxw is None else maxw
+    if maxw <= 0:
+        return [sent]
+    out = []
+    for part in [p for p in re.split(r"(?<=[\u060c\u061b:,;])\s+", sent) if p.strip()]:
+        toks = []
+        for w in part.split():
+            if toks and re.match(r"[A-Za-z]", w) and re.match(r"[A-Za-z]", toks[-1].split()[-1]):
+                toks[-1] += " " + w
+            else:
+                toks.append(w)
+        if len(toks) <= maxw:
+            out.append(" ".join(toks))
+            continue
+        n = -(-len(toks) // maxw)
+        size = -(-len(toks) // n)
+        out += [" ".join(toks[k:k + size]) for k in range(0, len(toks), size)]
+    final = []
+    for c in out:                                  # a line must fit the narrow vertical screen: cut long ones in two
+        w = c.split()
+        if len(c) > 26 and len(w) > 1:
+            h = len(w) // 2
+            final += [" ".join(w[:h]), " ".join(w[h:])]
+        else:
+            final.append(c)
+    return final or [sent]
+
+
+def split_sentences(text):
+    parts = [p.strip() for p in re.split(r"(?<=[.!?؟…])\s+", text.strip()) if p.strip()]
+    return parts or [text.strip()]
+
+
+_sub_font_path = None
+_sub_bold = False
+
+
+def find_sub_font_file():
+    """The bold Persian subtitle font file: already in azim_work/azim_fonts, or installed, or downloaded (free).
+    Returns a path or None (then the old tested DejaVu Sans is used)."""
+    global _sub_font_path
+    if _sub_font_path is not None:
+        return _sub_font_path or None
+    d = WORK / "azim_fonts"
+    d.mkdir(parents=True, exist_ok=True)
+    target = d / "Vazirmatn-Bold.ttf"
+    if not (target.is_file() and target.stat().st_size > 50000):
+        try:
+            out = subprocess.check_output(["fc-list", "Vazirmatn:bold", "file"], text=True)
+            for x in out.splitlines():
+                x = x.strip().rstrip(":")
+                if x.lower().endswith(".ttf") and Path(x).is_file():
+                    shutil.copy(x, target)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+    if not (target.is_file() and target.stat().st_size > 50000):
+        import urllib.request
+        for url in SUB_FONT_URLS:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "azim-bot"}),
+                                            timeout=60) as r:
+                    data = r.read()
+                if len(data) > 50000 and data[:4] in (b"\x00\x01\x00\x00", b"true", b"OTTO"):
+                    target.write_bytes(data)
+                    print("Subtitle font downloaded:", url, flush=True)
+                    break
+            except Exception as e:  # noqa: BLE001
+                print("Subtitle font download failed:", url, short_error(str(e)), flush=True)
+    _sub_font_path = str(target) if (target.is_file() and target.stat().st_size > 50000) else ""
+    return _sub_font_path or None
+
+
+_font_cmap = None
+
+
+def font_chars():
+    """Code points of the subtitle font (to find characters that would be drawn as rectangles)."""
+    global _font_cmap
+    if _font_cmap is None:
+        _font_cmap = set()
+        try:
+            from fontTools.ttLib import TTFont
+            path = find_sub_font_file() or subprocess.check_output(["fc-match", "-f", "%{file}", "DejaVu Sans"],
+                                                                   text=True).strip()
+            _font_cmap = set(TTFont(path, fontNumber=0, lazy=True).getBestCmap().keys())
+            print(f"Subtitle font file: {path} ({len(_font_cmap)} characters)", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print("Subtitle font check unavailable:", e, flush=True)
+    return _font_cmap
+
+
+_dropped_chars = {}
+
+
+_OK_CHARS = re.compile(r"[\u0621-\u063A\u0641-\u064A\u067E\u0686\u0698\u06A9\u06AF\u06CC\u06C0"
+                       r"A-Za-z0-9\u06F0-\u06F9\s.,;:!?\u2026\u00AB\u00BB\u060C\u061B\u061F\"'()\-]")
+
+
+def clean_subtitle(text):
+    """Only Persian letters, names, digits and ordinary punctuation survive: every mark or invisible character that
+    could be drawn as a rectangle is removed (the removed code points are listed in the voice report)."""
+    cm = font_chars()
+    out = []
+    t = unicodedata.normalize("NFKC", text).replace("...", "\u2026")
+    t = t.replace("ي", "ی").replace("ك", "ک")
+    for ch in t:
+        cp = ord(ch)
+        if ch == "\u200c":                       # half-space: keep only if the font really has it
+            if cm and cp in cm:
+                out.append(ch)
+            else:
+                _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
+            continue
+        if not _OK_CHARS.fullmatch(ch):
+            _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
+            continue
+        if cm and cp >= 0x250 and cp not in cm and not ch.isspace():
+            _dropped_chars[cp] = _dropped_chars.get(cp, 0) + 1
+            continue
+        out.append(ch)
+    return " ".join("".join(out).split())
+
+
+def fa_typo(t):
+    """Persian typing rules: Persian punctuation, no space before it and one space after it, «» quotes."""
+    t = t.replace(",", "\u060c").replace(";", "\u061b").replace("?", "\u061f")
+    t = re.sub(r'"([^"]+)"', "\u00ab\\1\u00bb", t)
+    t = re.sub(r"\s+([\u060c\u061b\u061f!.:\u2026\u00bb)])", r"\1", t)
+    t = re.sub(r"([\u060c\u061b\u061f!:])(?=\S)", r"\1 ", t)
+    t = re.sub(r"([\u00ab(])\s+", r"\1", t)
+    return " ".join(t.split())
+
+
+def setup_sub_font():
+    """Copies ONE tested font into azim_work/azim_fonts: the lam-alef «لا» ligature (U+FEFB) and all Persian letters
+    must exist in it, otherwise another installed font that has them is chosen. Returns the font family name."""
+    from fontTools.ttLib import TTFont
+    need = [0xFEFB, 0x0644, 0x0627, 0x067E, 0x0686, 0x0698, 0x06A9, 0x06AF, 0x06CC, 0x200C]
+    cands = []
+    try:
+        vz = find_sub_font_file()
+        if vz:
+            cands.append(vz)
+        cands.append(subprocess.check_output(["fc-match", "-f", "%{file}", "DejaVu Sans"], text=True).strip())
+        out = subprocess.check_output(["fc-list", ":charset=fefb 644 627 67e 686 698 6a9 6af 6cc", "file"], text=True)
+        cands += [x.strip().rstrip(":") for x in out.splitlines() if x.strip()]
+    except Exception as e:  # noqa: BLE001
+        print("Font search failed:", e, flush=True)
+    cands.append("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    pref = ("vazirmatn-bold", "dejavusans.ttf", "notonaskharabic", "notosansarabic")
+    cands.sort(key=lambda f: next((k for k, x in enumerate(pref) if x in Path(f).name.lower()), 99))
+    for path in cands:
+        try:
+            if not Path(path).is_file() or Path(path).suffix.lower() not in (".ttf", ".otf"):
+                continue
+            f = TTFont(path, fontNumber=0, lazy=True)
+            cm = f.getBestCmap()
+            if not all(c in cm for c in need[:-1]):
+                continue
+            fam = f["name"].getBestFamilyName()
+            d = WORK / "azim_fonts"
+            d.mkdir(parents=True, exist_ok=True)
+            shutil.copy(path, d / Path(path).name)
+            print(f"Subtitle font: {fam} ({path})", flush=True)
+            global _sub_bold
+            _sub_bold = "bold" in Path(path).name.lower()
+            note(f"Subtitle font = {fam} ({path}); ZWNJ in font: {need[-1] in cm}")
+            return fam
+        except Exception as e:  # noqa: BLE001
+            print("Font skipped:", path, e, flush=True)
+    return "DejaVu Sans"
+
+
+def subtitle_text(text, names=None):
+    """Subtitle: no diacritics; English names stay in English (Latin) letters exactly as the voice says them.
+    A line that starts with a Latin name gets a right-to-left mark so the Persian line keeps its direction."""
+    return fa_typo(clean_subtitle(DIAC.sub("", text)))
+
+
+_LATIN_RUN = re.compile(r"[A-Za-z](?:[A-Za-z0-9'\u2019\-]|\.(?=[A-Za-z]))*(?:\.? (?=[A-Za-z])[A-Za-z](?:[A-Za-z0-9'\u2019\-]|\.(?=[A-Za-z]))*)*")
+
+
+def bidi_wrap(line):
+    """A line with English names: the whole line is a right-to-left paragraph (RLI...PDI) and every English name is
+    an isolated left-to-right run (LRI...PDI), so the order of the Persian sentence is never scrambled."""
+    if not _LATIN_RUN.search(line):
+        return line
+    return "\u2067" + _LATIN_RUN.sub(lambda m: "\u2066" + m.group(0) + "\u2069", line) + "\u2069"
+
+
+def ensure_names(data, book):
+    """Persian spelling for EVERY English name in the narration (one cheap Gemini call only for the missing ones)."""
+    names = dict(data.get("names") or {})
+    found = set()
+    for sc in data["scenes"]:
+        for is_name, piece in split_names(sc["narration_fa"]):
+            if is_name:
+                found.add(piece.strip())
+    missing = sorted(n for n in found if n and n not in names)
+    if missing:
+        prompt = f"""Write each English name below in Persian letters, as an Iranian reader would say it, WITHOUT vowel
+marks, for subtitles of a video about the novel "{book['title_en']}". Return JSON {{"names": {{"English": "فارسی"}}}}.
+Names: {json.dumps(missing, ensure_ascii=False)}"""
+        try:
+            got = gemini_json(prompt, minutes=4, models=CHEAP_MODELS).get("names") or {}
+            for k, v in got.items():
+                if str(k).strip() in missing and str(v).strip():
+                    names[str(k).strip()] = str(v).strip()
+        except (GeminiBlocked, GeminiQuotaExhausted):
+            raise
+        except Exception as e:  # noqa: BLE001
+            print("Name spelling skipped:", e, flush=True)
+    data["names"] = names
+    return data
+
+
+def build_video(scenes, durs, out_path, names=None):
+    clips = []
+    srt = []
+    n = 0
+    t = 0.0
+    for i, (s, d) in enumerate(zip(scenes, durs)):
+        length = d + PAD
+        total_frames = math.ceil(length * FPS)
+        beats = s.get("beats") or [s["narration_fa"]]
+        bw = [max(len(x), 1) for x in beats]
+        used, vparts = 0, []
+        for j in range(len(beats)):
+            frames = max(total_frames - used, 1) if j == len(beats) - 1 else max(round(total_frames * bw[j] / sum(bw)), 1)
+            used += frames
+            inc = 0.12 / max(frames, 1)    # zoom speed spread over the whole picture (no early stop)
+            zoom = (f"z='min(zoom+{inc:.6f},1.12)'" if (i + j) % 2 == 0
+                    else f"z='if(eq(on,1),1.12,max(zoom-{inc:.6f},1.0))'")
+            # big lanczos upscale BEFORE zoompan (no shimmer/blur while zooming) + light sharpening
+            vf = ("scale=1440:2560:flags=lanczos:force_original_aspect_ratio=increase,crop=1440:2560,"
+                  "unsharp=5:5:0.6:5:5:0.0,"
+                  f"zoompan={zoom}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
+                  "format=yuv420p")
+            vname = f"vclip_{i:02d}_{j}.mp4"
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", f"img_{i:02d}_{j}.jpg", "-vf", vf,
+                "-frames:v", str(frames), "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", vname], cwd=WORK)
+            vparts.append(vname)
+        (WORK / f"vl_{i:02d}.txt").write_text("".join(f"file '{v}'\n" for v in vparts), encoding="utf-8")
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", f"vl_{i:02d}.txt",
+            "-c", "copy", f"vid_{i:02d}.mp4"], cwd=WORK)
+        clip = WORK / f"clip_{i:02d}.mp4"
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", f"vid_{i:02d}.mp4", "-i", f"voice_{i:02d}.mp3",
+            "-af", "apad", "-t", f"{length:.2f}", "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1", clip.name], cwd=WORK)
+        clips.append(clip.name)
+
+        # subtitles: always the clean text (no diacritics), cut into sentences
+        sents = [c for x in split_sentences(subtitle_text(s["narration_fa"], names)) for c in chunk_phrases(x)]
+        weights = [max(len(x), 1) for x in sents]
+        total_w = sum(weights)
+        acc = 0
+        for x, w in zip(sents, weights):
+            start = t + d * acc / total_w
+            acc += w
+            end = t + d * acc / total_w + (PAD * 0.5 if acc == total_w else 0)
+            n += 1
+            srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
+        t += length
+
+    if _dropped_chars:
+        note("Subtitle characters removed (would be rectangles): "
+             + ", ".join(f"U+{c:04X} x{n}" for c, n in sorted(_dropped_chars.items())))
+    (WORK / "list.txt").write_text("".join(f"file '{c}'\n" for c in clips), encoding="utf-8")
+    (WORK / "subs.srt").write_text("\n".join(srt), encoding="utf-8")
+    sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+        "-i", "list.txt", "-c", "copy", "joined.mp4"], cwd=WORK)
+
+    font_family = setup_sub_font()
+    # like the reference video: white bold text, centered, on a semi-transparent dark box (BorderStyle=3: the box is
+    # drawn with OutlineColour; &H80 = about half see-through), no outline/shadow, placed in the lower part of the picture
+    style = (f"FontName={font_family},FontSize={SUB_FONT_SIZE},Bold={1 if _sub_bold else 0},"
+             "PrimaryColour=&H00FFFFFF,OutlineColour=&H8C141414,BackColour=&H8C141414,"
+             "BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=62,MarginL=12,MarginR=12")
+    # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
+    fits = False
+    for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", "joined.mp4",
+            "-vf", f"subtitles=subs.srt:fontsdir=azim_fonts:force_style='{style}'",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
+            "-maxrate", maxrate, "-bufsize", "1440k", "-c:a", "copy",
+            "-movflags", "+faststart", out_path.name], cwd=WORK)
+        if out_path.stat().st_size < 48 * 1024 * 1024:
+            fits = True
+            break
+    if not fits:
+        raise RuntimeError(
+            f"Video is still {out_path.stat().st_size / 1e6:.1f} MB after the last attempt: too big for Telegram")
+    return t
+
+
+# ---------------------------------------------------------------- telegram
+def send_video(path, caption):
+    with open(path, "rb") as f:
+        r = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo",
+            data={"chat_id": CHANNEL_ID, "caption": caption,
+                  "supports_streaming": "true", "width": W, "height": H},
+            files={"video": f}, timeout=1200)
+    if r.status_code != 200:
+        raise RuntimeError(f"Telegram error: {r.status_code} {r.text[:300]}")
+
+
+# ---------------------------------------------------------------- main
+def get_book_and_source(posted, rejected):
+    """Next novel that has a usable Plot section on Wikipedia. A novel without one is rejected for good
+    (never summarized from memory, never tried again)."""
+    tries = 60 if BOOKS_FILE.exists() else 6
+    for _ in range(tries):
+        book = pick_book(posted, rejected)
+        print("Book candidate:", book["title_en"], "|", book["book_type"], flush=True)
+        src = fetch_source(book)
+        if src:
+            return book, src
+        reject_book(rejected, book, "no usable Plot section on Wikipedia")
+    raise RuntimeError("Could not find a novel with a usable Plot section on Wikipedia")
+
+
+def main():
+    posted = load_json(POSTED_FILE, [])
+    rejected = load_json(REJECTED_FILE, [])
+    if len(posted) >= TOTAL_BOOKS:
+        print("All books are done.")
+        return
+
+    if WORK.exists():
+        shutil.rmtree(WORK)
+    WORK.mkdir(parents=True)
+
+    if not USE_CF:
+        raise ImageServiceUnavailable("the secrets CF_ACCOUNT_ID and CF_API_TOKEN are missing or empty in GitHub")
+    print(f"Image service: Cloudflare FLUX; "
+          f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
+          flush=True)
+
+    # a script that was finished in an earlier run which failed later (voice/images/video): resume it,
+    # so the Gemini quota is not spent twice. After 3 failed resumes the book is rejected.
+    book = src = script = None
+    pending = load_json(PENDING_FILE, None)
+    if pending and pending.get("version") != SCRIPT_VERSION:
+        print("Saved script is from an older version of the bot: ignored.", flush=True)
+        PENDING_FILE.unlink(missing_ok=True)
+        pending = None
+    if pending:
+        done = {norm(p["title_en"]) for p in posted}
+        try:
+            if norm(pending["book"]["title_en"]) in done:
+                pending = None
+            else:
+                attempts = int(pending.get("attempts", 0)) + 1
+                if attempts > 3:
+                    reject_book(rejected, pending["book"], "failed 3 times after the script was written")
+                    pending = None
+                else:
+                    pending["attempts"] = attempts
+                    save_json(PENDING_FILE, pending)
+                    book, src, script = pending["book"], pending["src"], pending["script"]
+                    print(f"Resuming the saved script of '{book['title_en']}' (resume {attempts} of 3).", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print("Saved script ignored:", e, flush=True)
+            pending = None
+        if not pending:
+            PENDING_FILE.unlink(missing_ok=True)
+
+    if not pending:
+        for _ in range(4):
+            book, src = get_book_and_source(posted, rejected)
+            print("Book:", book["title_en"], "| source:", src["url"].replace("\n", " + "), flush=True)
+            plan = plan_length(src)
+            print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from a {src['en_words']}-word Plot)",
+                  flush=True)
+            try:
+                script = write_scenes(book, src, plan)
+                break
+            except GeminiBlocked as e:
+                reject_book(rejected, book, f"Gemini blocked the prompt: {e}")
+        else:
+            raise RuntimeError("Gemini blocked 4 books in a row")
+        save_json(PENDING_FILE, {"book": book, "src": src, "script": script, "attempts": 0, "version": SCRIPT_VERSION,
+                                 "date": date.today().isoformat()})
+
+    (WORK / "azim_source.txt").write_text(src["text"], encoding="utf-8")
+    if not CAST_SCENE:      # a saved script from an older run may still contain the portrait scene: remove it
+        script["scenes"] = [sc for sc in script["scenes"] if not sc.get("cast_names")]
+    scenes = script["scenes"]
+    words = sum(len(s["narration_fa"].split()) for s in scenes)
+    print(f"Script: {len(scenes)} scenes, {words} words, style: storybook (fixed)", flush=True)
+    (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
+    (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
+    REPORT_FILE.write_text(f"Book: {book['title_en']}\nSource: {src['url']}\n", encoding="utf-8")
+
+    # the voice alternates: female, male, female, male...
+    last_voice = posted[-1].get("voice") if posted else None
+    if last_voice in ("female", "male"):
+        kind = "male" if last_voice == "female" else "female"
+    else:
+        kind = "female" if len(posted) % 2 == 0 else "male"
+    print(f"Voice of this video: {kind}", flush=True)
+    POSTED_REF[:] = posted
+    durs = make_voice(scenes, kind, script.get("names") or {})
+
+    seed = int(time.time()) % 100000
+    n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
+    done_pics = 0
+    last_img = None
+    jobs = []
+    for i, s in enumerate(scenes):
+        beats = s.get("beats") or [s["narration_fa"]]
+        bvs = s.get("beat_visuals") or []
+        for j, beat in enumerate(beats):
+            sc = dict(s)
+            sc["narration_fa"] = beat
+            sc["era_en"] = script.get("era_en", "")
+            if j < len(bvs):
+                sc["visual_en"] = bvs[j]["visual_en"]
+                sc["characters_present"] = bvs[j]["characters_present"]
+            prompt = build_prompt(FIXED_STYLE, script.get("characters", []), sc)
+            sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
+                                 if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
+            img = WORK / f"img_{i:02d}_{j}.jpg"
+            reused = False
+            try:
+                make_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1)
+            except ImageServiceUnavailable:
+                raise
+            except Exception as e:  # noqa: BLE001
+                if last_img is None:
+                    raise
+                # one failed picture must not lose the whole video: reuse the previous picture
+                print(f"WARNING: image {i}.{j} failed ({e}); reusing the previous picture.", flush=True)
+                shutil.copy(last_img, img)
+                reused = True
+            jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": reused,
+                         "rebuild": lambda fx, sc=sc: build_prompt(FIXED_STYLE,
+                                                                   script.get("characters", []), sc, fx)})
+            last_img = img
+            done_pics += 1
+    if IMAGE_CHECK:
+        check_and_fix_images(jobs)
+
+    final = WORK / "azim_final.mp4"
+    total = build_video(scenes, durs, final, script.get("names") or {})
+    print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
+
+    caption = (f"{book['title_fa']}\n{book['author_fa']}\n\n"
+               f"{src.get('credit') or 'منبع خلاصه: ویکی‌پدیا (CC BY-SA)'}\n{src['url']}")
+    send_video(final, caption)
+
+    posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
+                   "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
+    save_json(POSTED_FILE, posted)
+    PENDING_FILE.unlink(missing_ok=True)
+    shutil.rmtree(WORK, ignore_errors=True)
+    print("Done.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except GeminiQuotaExhausted as exc:
+        print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
+              "No video now; the next run continues.", flush=True)
+        sys.exit(1)
+    except ImageServiceUnavailable as exc:
+        print(f"STOP: no good picture can be made now ({exc}). No video is posted with bad pictures; "
+              "the finished script is saved and the next run continues with it.", flush=True)
+        pend = load_json(PENDING_FILE, None)
+        if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
+            pend["attempts"] = int(pend["attempts"]) - 1
+            save_json(PENDING_FILE, pend)
+        sys.exit(1)
