@@ -233,5 +233,15 @@
   "date_pt": "2026-11-01",
   "wiki": "Billy Budd",
   "date": "2026-11-01"
+ },
+ {
+  "title_en": "Sharp Objects",
+  "title_fa": "چیزهای تیز",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-01",
+  "wiki": "Sharp Objects",
+  "date": "2026-11-01"
  }
 ]
