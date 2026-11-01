@@ -213,5 +213,15 @@
   "date_pt": "2026-10-31",
   "wiki": "Harry Potter and the Chamber of Secrets",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "Jurassic Park",
+  "title_fa": "پارک ژوراسیک",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-01",
+  "wiki": "Jurassic Park (novel)",
+  "date": "2026-11-01"
  }
 ]
