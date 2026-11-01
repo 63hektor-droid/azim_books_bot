@@ -1,0 +1,550 @@
+{
+ "book": {
+  "title_en": "Harry Potter and the Prisoner of Azkaban",
+  "title_fa": "هری پاتر و زندانی آزکابان",
+  "author_en": "J. K. Rowling",
+  "author_fa": "جی. کی. رولینگ",
+  "wikipedia_title_en": "Harry Potter and the Prisoner of Azkaban",
+  "wikipedia_title_fa": "هری پاتر و زندانی آزکابان",
+  "book_type": "novel"
+ },
+ "src": {
+  "text": "INTRODUCTION (what the novel is, who wrote it, when):\nHarry Potter and the Prisoner of Azkaban is a fantasy novel by British author J. K. Rowling. The third novel in the Harry Potter series, it follows the young wizard Harry Potter during his third year at Hogwarts School of Witchcraft and Wizardry. With his friends Ron Weasley and Hermione Granger, Harry investigates Sirius Black, an escaped prisoner who no one doubts to be one of Lord Voldemort's allies.\nThe book was published in the United Kingdom on 8 July 1999 by Bloomsbury and in the United States on 8 September 1999 by Scholastic, Inc. The book, which took Rowling one year to write, sold 64,000 copies in just three days after its release in the United Kingdom, and since has sold over three million in the country. The book won the 1999 Whitbread Children's Book Award, the Bram Stoker Award, and the 2000 Locus Award for Best Fantasy Novel and was short-listed for other awards, includin\n\nPLOT (an editor-reviewed concise summary of the whole story, 513 words; the ONLY source of the events):\nDuring the summer, 13-year-old Harry sees Muggle news about an escaped murderer named Sirius Black. Some time after this, Harry accidentally performs magic at the home of his Aunt Petunia and Uncle Vernon. He then uses The Knight Bus to flee his aunt and uncle and travel to London. While on the Knight Bus, he learns that Sirius Black is a wizard who broke out of Azkaban. When arriving in London, Harry is greeted by Cornelius Fudge, the Minister for Magic, who tells him to stay the rest of the summer in the Wizarding Diagon Alley. \nWith Black at large, Dementors have been stationed at Hogwarts as a security measure. Harry repeatedly faints in the presence of the Dementors, but eventually is taught by Professor Lupin how to repel them using the Patronus Charm. \nDuring a Care of Magical Creatures lesson with Hagrid, Draco Malfoy is injured after provoking a hippogriff named Buckbeak. Draco's father, Lucius Malfoy, gets Hagrid put on trial for owning a dangerous creature. When Harry is unable to participate in weekend trips to Hogsmeade Village, Fred and George give him a magical map that shows him how to get there using a secret passage. At the Three Broomsticks pub, Harry overhears that Black is his godfather, that he betrayed Harry's parents to Voldemort, and that he now seeks to kill Harry as well.\nWhen Ron's pet rat Scabbers disappears, he blames Hermione and her cat Crookshanks. Ron and Hermione stop talking to each other, although Hermione is distraught when Ron is attacked by Black inside the Gryffindor dormitory. After the attack, Black cannot be found. When Harry, Ron and Hermione learn that Buckbeak will be executed, they console Hagrid, and Ron and Hermione resume their friendship. Hermione and Ron also find Scabbers hiding in Hagrid's hut. As the friends make their way back to the castle, Ron is attacked by a large black dog, which drags him through the passageway leading to Hogsmeade. Harry and Hermione give chase, and find themselves in the Shrieking Shack, where the dog is revealed to be Black in his Animagus form. Lupin arrives, and Black states that he intends to kill Scabbers, not Harry. He explains that Scabbers is Peter Pettigrew, who betrayed Harry's parents to Voldemort and framed Black for mass murder. Black and Lupin compel Pettigrew to change into his human form, then haul him back to Hogwarts.\nOn the way to the castle, the full moon causes Lupin to transform into a werewolf. Pettigrew escapes and is pursued by Black, Harry and Hermione, who encounter Dementors and lose consciousness. They awaken in the castle, where Black is now being held captive. Harry and Hermione proclaim his innocence to Dumbledore, who suggests using Hermione's Time Turner. Harry and Hermione travel back in time and save both Black and Buckbeak, who fly away together. Snape blames Lupin for Black's disappearance and makes his werewolf identity public, which forces Lupin to resign. On the train back to London, Harry receives a letter from Black, expressing his gratitude to Harry for saving his life.\n\nSIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the novel matters):\n[Publication and reception]\nPre-release history: Harry Potter and the Prisoner of Azkaban is the third book in the Harry Potter series. The first, Harry Potter and the Philosopher's Stone, was published by Bloomsbury Publishing on 26 June 1997 and the second, Harry Potter and the Chamber of Secrets, was published on 2 July 1998. J. K. Rowling started to write the Prisoner of Azkaban the day after she finished The Chamber of Secrets. Rowling said in 2004 that Prisoner of Azkaban was \"the best writing experience I ever had...I was in a very comfortable place writing (number) three. Immediate financial worries were over, and press attention wasn't yet by any means excessive\".\nCritical reception: Gregory Maguire wrote a review in The New York Times for Prisoner of Azkaban: in it he said, \"So far, in terms of plot, the bo",
+  "en_words": 513,
+  "url": "https://en.wikipedia.org/wiki/Harry_Potter_and_the_Prisoner_of_Azkaban",
+  "title": "Harry Potter and the Prisoner of Azkaban",
+  "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"
+ },
+ "script": {
+  "characters": [
+   {
+    "name": "Harry Potter",
+    "look_en": "Male, 13 years old; thin build; round face; fair skin tone; green eyes; untidy black hair, short and messy; no facial hair; thin lightning-shaped scar on forehead; dark green knitted woolen sweater over a white collared shirt, dark grey trousers, and sturdy black leather shoes.",
+    "tag_en": "Male, 13 years old, short messy black hair, lightning-shaped forehead scar, thin build, dark green sweater."
+   },
+   {
+    "name": "Ron Weasley",
+    "look_en": "Male, 13 years old; tall and lanky build; long face; freckled pale skin tone; blue eyes; vivid red hair, short and straight; no facial hair; long narrow freckled nose; broad navy blue wool jumper, dark brown corduroy trousers, and worn brown leather boots with laces.",
+    "tag_en": "Male, 13 years old, short straight vivid red hair, long freckled nose, tall lanky build, navy blue jumper."
+   },
+   {
+    "name": "Hermione Granger",
+    "look_en": "Female, 13 years old; small and frail build; heart-shaped face; smooth fair skin tone; warm brown eyes; bushy dark brown hair, shoulder-length and frizzy; no facial hair; slightly prominent front teeth; thick purple hooded knit sweater, dark blue denim trousers, and sturdy brown leather boots.",
+    "tag_en": "Female, 13 years old, bushy frizzy dark brown hair, prominent front teeth, small frail build, purple sweater."
+   },
+   {
+    "name": "Sirius Black",
+    "look_en": "Male, 34 years old; gaunt and tall build; sunken rectangular face; pale sallow skin tone; hollow gray eyes; matted dark brown hair, long and untamed; unkempt thick stubble; deep faded tattoo on collarbone; ragged long black overcoat over a tattered gray tunic, dark trousers, and scuffed boots.",
+    "tag_en": "Male, 34 years old, long matted dark hair, tattoo on collarbone, gaunt tall build, black overcoat."
+   },
+   {
+    "name": "Remus Lupin",
+    "look_en": "Male, 34 years old; slim build, medium height; tired oval face; pale skin tone; amber eyes; light brown hair, short and flecked with gray; thin light mustache; faint silver scar across bridge of nose; patched mustard yellow tweed jacket, worn cream shirt, dark trousers, and brown shoes.",
+    "tag_en": "Male, 34 years old, short gray-flecked light brown hair, scar across nose, slim build, mustard yellow jacket."
+   },
+   {
+    "name": "Peter Pettigrew",
+    "look_en": "Male, 34 years old; short and round build; chubby round face; watery pale skin tone; watery blue eyes; thin light blond hair, short and balding; patchy scruffy stubble; pointed rat-like nose; deep red velvet waistcoat over a frayed beige shirt, baggy brown trousers, and worn slippers.",
+    "tag_en": "Male, 34 years old, thin short blond hair, pointed rat-like nose, short round build, deep red waistcoat."
+   }
+  ],
+  "outline": [
+   {
+    "event": "Harry accidentally performs magic and flees to London, learning about escaped prisoner Sirius Black.",
+    "because": "He flees his aunt and uncle's house to avoid punishment and learns of the danger facing him."
+   },
+   {
+    "event": "Dementors are stationed at Hogwarts, causing Harry to faint until Lupin teaches him the Patronus Charm.",
+    "because": "Harry must learn to defend himself against the terrifying effects of the guards of Azkaban."
+   },
+   {
+    "event": "Harry discovers Sirius Black is his godfather who betrayed his parents to Voldemort.",
+    "because": "This sparks anger and desire for truth within Harry regarding his parents' betrayal."
+   },
+   {
+    "event": "Ron's rat Scabbers vanishes, leading the trio to the Shrieking Shack where Black and Lupin reveal Scabbers is Peter Pettigrew.",
+    "because": "Pettigrew was the actual traitor who framed Black and betrayed Harry's parents."
+   },
+   {
+    "event": "Lupin turns into a werewolf, Pettigrew escapes, and Dementors attack Black, Harry, and Hermione.",
+    "because": "The unexpected transformation prevents Pettigrew's immediate capture and leaves Black endangered."
+   },
+   {
+    "event": "Harry and Hermione use the Time Turner to save Sirius Black and Buckbeak.",
+    "because": "Dumbledore guides them to alter past events safely and rescue innocent lives."
+   },
+   {
+    "event": "Lupin resigns after his identity is revealed, and Harry receives a letter of thanks from Black.",
+    "because": "Black escapes safely into freedom while expressing his gratitude to Harry."
+   }
+  ],
+  "cast": [
+   {
+    "name": "Harry Potter",
+    "sentence_fa": "Harry Potter جادوگر سیزده‌ساله‌ای است که در سومین سال تحصیل خود رازهای گذشته خانواده‌اش را کشف می‌کند."
+   },
+   {
+    "name": "Sirius Black",
+    "sentence_fa": "Sirius Black زندانی فراری Azkaban است که همه او را هم‌پیمان Voldemort و قاتل پدر و مادر Harry می‌دانند."
+   },
+   {
+    "name": "Remus Lupin",
+    "sentence_fa": "Remus Lupin استاد دفاع در برابر جادوی سیاه است که به Harry طلسم دفاع در برابر Dementors را می‌آموزد."
+   },
+   {
+    "name": "Hermione Granger",
+    "sentence_fa": "Hermione Granger دوست باهوش Harry Potter است که با ابزار زمان‌گرد خود رازهای بزرگ داستان را برملا می‌کند."
+   },
+   {
+    "name": "Ron Weasley",
+    "sentence_fa": "Ron Weasley دوست صمیمی Harry Potter است که با ناپدید شدن موش خانگی‌اش وارد ماجرایی غیرمنتظره می‌شود."
+   }
+  ],
+  "scenes": [
+   {
+    "narration_fa": "رمان فانتزی Harry Potter and the Prisoner of Azkaban نوشته J. K. Rowling، سومین سال تحصیلی جادوگر جوان Harry Potter را در مدرسه Hogwarts روایت می‌کند. در تابستان، Harry سیزده‌ساله پس از یک جادوی تصادفی، با اتوبوسی جادویی به London می‌گریزد. او در مسیر می‌فهمد جادوگری خطرناک به نام Sirius Black از زندان Azkaban فرار کرده و همه او را متحد Lord Voldemort می‌دانند. سپس Cornelius Fudge، وزیر جادو، از Harry می‌خواهد باقی تابستان را در Diagon Alley بماند. با این حال، Harry می‌خواهد به همراه دوستانش Ron Weasley و Hermione Granger، درباره این فراری خطرناک تحقیق کند.",
+    "source_en": "Harry Potter and the Prisoner of Azkaban is a fantasy novel by British author J. K. Rowling. During the summer, 13-year-old Harry accidentally performs magic. He then uses The Knight Bus to flee to London where he learns Sirius Black broke out of Azkaban.",
+    "characters_present": [
+     "Harry Potter"
+    ],
+    "setting_en": "The Knight Bus interior at night, flickering light, moving fast through British streets.",
+    "action_en": "Harry Potter sitting inside the bus looking anxious as he reads news about Sirius Black.",
+    "mood_en": "Mysterious and tense night atmosphere.",
+    "spoken_fa": "رمان فانتزی Harry Potter and the Prisoner of Azkaban نوشته J. K. Rowling، سومین سال تحصیلی جادوگر جوان Harry Potter را در مدرسه Hogwarts روایت می‌کند. در تابستان، Harry سیزده‌ساله پس از یک جادوی تصادفی، با اتوبوسی جادویی به London می‌گریزد. او در مسیر می‌فهمد جادوگری خطرناک به نام Sirius Black از زندان Azkaban فرار کرده و همه او را متحد Lord Voldemort می‌دانند. سپس Cornelius Fudge، وزیر جادو، از Harry می‌خواهد باقی تابستان را در Diagon Alley بماند. با این حال، Harry می‌خواهد به همراه دوستانش Ron Weasley و Hermione Granger، درباره این فراری خطرناک تحقیق کند.",
+    "beats": [
+     "رمان فانتزی Harry Potter and the Prisoner of Azkaban نوشته J. K. Rowling، سومین سال تحصیلی جادوگر جوان Harry Potter را در مدرسه Hogwarts روایت می‌کند.",
+     "در تابستان، Harry سیزده‌ساله پس از یک جادوی تصادفی، با اتوبوسی جادویی به London می‌گریزد. او در مسیر می‌فهمد جادوگری خطرناک به نام Sirius Black از زندان Azkaban فرار کرده و همه او را متحد Lord Voldemort می‌دانند.",
+     "سپس Cornelius Fudge، وزیر جادو، از Harry می‌خواهد باقی تابستان را در Diagon Alley بماند. با این حال، Harry می‌خواهد به همراه دوستانش Ron Weasley و Hermione Granger، درباره این فراری خطرناک تحقیق کند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Wide establishing shot showing Harry Potter sitting at a long wooden dining table inside the grand Hogwarts Great Hall during evening feast. Floating candles illuminate high stone walls, tall arched windows, and empty silver goblets. Background students in wizard robes eat and converse happily at surrounding tables.",
+      "event_en": "Harry Potter sits at a long table inside the Hogwarts Great Hall.",
+      "characters_present": [
+       "Harry Potter"
+      ],
+      "roles": {
+       "Harry Potter": "sitting at a long wooden dining table, looking across the hall"
+      }
+     },
+     {
+      "visual_en": "Wide shot with a strong foreground object depicting Harry Potter sitting on a plush bed inside the fast Knight Bus at night. He stares at a moving wanted poster of Sirius Black attached to a brass pole. Flickering lamps illuminate glass windows, iron railings, and moving city street lights outside.",
+      "event_en": "Harry Potter reads a poster of Sirius Black on the Knight Bus.",
+      "characters_present": [
+       "Harry Potter",
+       "Sirius Black"
+      ],
+      "roles": {
+       "Harry Potter": "sitting inside the bus, looking closely at the moving poster",
+       "Sirius Black": "depicted on the moving wanted poster attached to a brass pole"
+      }
+     },
+     {
+      "visual_en": "Medium-wide shot from head to knees showing Harry Potter, Ron Weasley, and Hermione Granger gathered around a rustic table inside the Leaky Cauldron. Sunlight streams through dusty windowpanes onto a folded newspaper, wooden chairs, and tea cups. Unnamed tavern guests in heavy wool coats walk in the dim background.",
+      "event_en": "Harry Potter discusses the escaped prisoner with Ron Weasley and Hermione Granger.",
+      "characters_present": [
+       "Harry Potter",
+       "Ron Weasley",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "sitting at a wooden table, listening intently to his friends",
+       "Ron Weasley": "pointing at an open wizarding newspaper spread across the table",
+       "Hermione Granger": "leaning forward over a thick book to speak to Harry"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "با فرار این زندانی، موجوداتی هولناک به نام Dementors برای نگهبانی در Hogwarts مستقر می‌شوند. حضور این موجودات بارها باعث بی‌هوش شدن Harry Potter می‌شود. اما Professor Lupin به او یاد می‌دهد که با طلسم Patronus Charm آن‌ها را عقب براند. Harry در این روزهای پر از اضطراب، به همراه دوستان صمیمی‌اش Ron Weasley و Hermione Granger سال تحصیلی جدید را ادامه می‌دهد.",
+    "source_en": "With Black at large, Dementors have been stationed at Hogwarts as a security measure. Harry repeatedly faints in the presence of the Dementors, but eventually is taught by Professor Lupin how to repel them using the Patronus Charm.",
+    "characters_present": [
+     "Harry Potter",
+     "Remus Lupin",
+     "Ron Weasley",
+     "Hermione Granger"
+    ],
+    "setting_en": "A dimly lit Hogwarts classroom with ancient wooden furniture.",
+    "action_en": "Professor Lupin guiding Harry Potter who is casting a glowing defensive spell with his wand while Ron Weasley and Hermione Granger watch.",
+    "mood_en": "Focused and magical training atmosphere.",
+    "spoken_fa": "با فِرارِ این زِندانی، مَوجوداتی هُولناک بِه نامِ Dementors بَرایِ نِگَهبانی دَر Hogwarts مُستَقَر می‌شَوَند. حُضورِ این مَوجودات بارها باعِثِ بی‌هوش شُدَنِ Harry Potter می‌شَوَد. اَما Professor Lupin بِه او یاد می‌دَهَد کِه با طِلِسمِ Patronus Charm آن‌ها را عَقَب بِرانَد. Harry دَر این روزهایِ پُر اَز اِضطِراب، بِه هَمراهِ دوستانِ صَمیمی‌اَش Ron Weasley وَ Hermione Granger سالِ تَحصیلیِ جَدید را اِدامه می‌دَهَد.",
+    "beats": [
+     "با فرار این زندانی، موجوداتی هولناک به نام Dementors برای نگهبانی در Hogwarts مستقر می‌شوند. حضور این موجودات بارها باعث بی‌هوش شدن Harry Potter می‌شود.",
+     "اما Professor Lupin به او یاد می‌دهد که با طلسم Patronus Charm آن‌ها را عقب براند. Harry در این روزهای پر از اضطراب، به همراه دوستان صمیمی‌اش Ron Weasley و Hermione Granger سال تحصیلی جدید را ادامه می‌دهد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "High-angle wide shot showing Harry Potter lying unconscious on the cold stone floor of a Hogwarts corridor during daytime. Cloaked Dementors float in the chilly air above him. Frost creeps along arched stone windows, iron wall torches, and heavy oak doors while distant students move away in fear.",
+      "event_en": "Harry Potter collapses on the castle floor as dark Dementors float nearby.",
+      "characters_present": [
+       "Harry Potter"
+      ],
+      "roles": {
+       "Harry Potter": "lying motionless on the stone floor of the gloomy corridor"
+      }
+     },
+     {
+      "visual_en": "Wide shot with full bodies showing Remus Lupin guiding Harry Potter in a shadowy classroom while Ron Weasley and Hermione Granger watch attentively. Silver light radiates from a wooden wand toward a dark wardrobe. Ancient books, brass telescopes, and parchment scrolls sit on heavy oak tables nearby.",
+      "event_en": "Remus Lupin teaches Harry Potter the magic charm beside Ron and Hermione.",
+      "characters_present": [
+       "Harry Potter",
+       "Remus Lupin",
+       "Ron Weasley"
+      ],
+      "roles": {
+       "Remus Lupin": "standing beside a wardrobe, raising his wand to instruct Harry",
+       "Harry Potter": "holding his wooden wand forward while practicing the defensive spell",
+       "Ron Weasley": "watching the magical lesson attentively from near the classroom desk",
+       "Hermione Granger": "observing the spell training with a serious expression beside Ron"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "مدتی بعد، Harry Potter در روستای Hogsmeade و در مسافرخانه‌ای راز تلخی را می‌شنود. او درمی‌یابد که Sirius Black پدرخوانده او بوده است، اما به پدر و مادرش خیانت کرده و آن‌ها را به Lord Voldemort تحویل داده است. بدتر از همه، این فراری اکنون به دنبال کشتن خود Harry است. این حقیقت هولناک، دلِ این نوجوان را لبریز از خشم و اندوه می‌کند.",
+    "source_en": "At the Three Broomsticks pub, Harry overhears that Black is his godfather, that he betrayed Harry's parents to Voldemort, and that he now seeks to kill Harry as well.",
+    "characters_present": [
+     "Harry Potter"
+    ],
+    "setting_en": "Inside the warm, crowded Three Broomsticks pub in Hogsmeade.",
+    "action_en": "Harry Potter hiding in shadow, listening intently with a look of shock and anger on his face.",
+    "mood_en": "Dramatic and heavy emotional atmosphere.",
+    "spoken_fa": "مدتی بعد، Harry Potter در روستای Hogsmeade و در مسافرخانه‌ای راز تلخی را می‌شنود. او درمی‌یابد که Sirius Black پدرخوانده او بوده است، اما به پدر و مادرش خیانت کرده و آن‌ها را به Lord Voldemort تحویل داده است. بدتر از همه، این فراری اکنون به دنبال کشتن خود Harry است. این حقیقت هولناک، دلِ این نوجوان را لبریز از خشم و اندوه می‌کند.",
+    "beats": [
+     "مدتی بعد، Harry Potter در روستای Hogsmeade و در مسافرخانه‌ای راز تلخی را می‌شنود. او درمی‌یابد که Sirius Black پدرخوانده او بوده است، اما به پدر و مادرش خیانت کرده و آن‌ها را به Lord Voldemort تحویل داده است.",
+     "بدتر از همه، این فراری اکنون به دنبال کشتن خود Harry است. این حقیقت هولناک، دل این نوجوان را لبریز از خشم و اندوه می‌کند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Eye-level wide shot through a doorway or window showing Harry Potter quietly crouching near a wooden partition inside the Three Broomsticks pub. In a faint misty memory floating nearby, Sirius Black stands in shadows. Glowing lanterns, wooden tankards, and a crackling fireplace warm the rustic tavern interior.",
+      "event_en": "Harry Potter overhears a secret conversation about Sirius Black inside a pub.",
+      "characters_present": [
+       "Harry Potter",
+       "Sirius Black"
+      ],
+      "roles": {
+       "Harry Potter": "crouching quietly near a wooden table to listen unnoticed",
+       "Sirius Black": "appearing as a dark remembered silhouette inside a misty memory frame"
+      }
+     },
+     {
+      "visual_en": "Wide shot from behind the characters showing Harry Potter standing alone on a snow-covered street in Hogsmeade at dusk. Warm lantern light glows through shop windows onto wooden barrels, cobblestone paths, and snow-laden rooftops. A couple wearing heavy nineties wool coats walks past in the distance.",
+      "event_en": "Harry Potter reacts with sorrow and anger in a snowy village street.",
+      "characters_present": [
+       "Harry Potter"
+      ],
+      "roles": {
+       "Harry Potter": "standing alone in the snow, looking down at the ground"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "سگی سیاه Ron Weasley را به مخفیگاهی در Shrieking Shack می‌کشاند و Harry Potter و Hermione Granger به دنبالش می‌روند. در آنجا آشکار می‌شود که سگ، همان Sirius Black است. Professor Lupin هم سر می‌رسد و حقیقت بزرگ‌تری فاش می‌شود. موش خانگی Ron در اصل جادوگری به نام Peter Pettigrew است؛ خیانت‌کار واقعی که والدین Harry را به Lord Voldemort لو داد و گناهش را به گردن Black انداخت.",
+    "source_en": "Ron and Hermione find Scabbers in Hagrid's hut. Ron is attacked by a large black dog that drags him to the Shrieking Shack. The dog is revealed to be Black, and Lupin arrives.",
+    "characters_present": [
+     "Harry Potter",
+     "Ron Weasley",
+     "Hermione Granger",
+     "Sirius Black",
+     "Remus Lupin",
+     "Peter Pettigrew"
+    ],
+    "setting_en": "Inside the dusty, abandoned Shrieking Shack with wooden floorboards.",
+    "action_en": "Sirius Black and Lupin forcing Peter Pettigrew back into human form in front of Harry, Ron, and Hermione.",
+    "mood_en": "Tense revelation and suspenseful mood.",
+    "spoken_fa": "سَگی سیاه Ron Weasley را بِه مَخفیگاهی دَر Shrieking Shack می‌کِشانَد وَ Harry Potter وَ Hermione Granger بِه دُنبَالَش می‌رَوَند. دَر آنجا آشکار می‌شَوَد کِه سَگ، هَمان Sirius Black اَست. Professor Lupin هَم سَر می‌رِسَد وَ حَقیقَتِ بُزُرگ‌تَری فاش می‌شَوَد. موشِ خانِگیِ Ron دَر اَصل جادوگَری بِه نامِ Peter Pettigrew اَست؛ خِیانَت‌کارِ واقِعی کِه والِدِینِ Harry را بِه Lord Voldemort لُو داد وَ گُناهَش را بِه گَردَنِ Black اَنداخت.",
+    "beats": [
+     "سگی سیاه Ron Weasley را به مخفیگاهی در Shrieking Shack می‌کشاند و Harry Potter و Hermione Granger به دنبالش می‌روند. در آنجا آشکار می‌شود که سگ، همان Sirius Black است.",
+     "Professor Lupin هم سر می‌رسد و حقیقت بزرگ‌تری فاش می‌شود. موش خانگی Ron در اصل جادوگری به نام Peter Pettigrew است؛ خیانت‌کار واقعی که والدین Harry را به Lord Voldemort لو داد و گناهش را به گردن Black انداخت."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Low wide shot with the sky or ceiling showing Sirius Black standing in a dusty room inside the Shrieking Shack before Harry Potter, Ron Weasley, and Hermione Granger. Moonlight beams through broken ceiling boards onto peeling wallpaper, broken wooden chairs, and scattered floor debris.",
+      "event_en": "Sirius Black confronts Harry Potter, Ron Weasley, and Hermione Granger inside the shack.",
+      "characters_present": [
+       "Harry Potter",
+       "Ron Weasley",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Sirius Black": "standing in the center of the dusty dilapidated room",
+       "Harry Potter": "standing near his friends, looking fiercely toward Sirius Black",
+       "Ron Weasley": "sitting injured on a wooden four-poster bed frame",
+       "Hermione Granger": "stepping protectively in front of Ron near the doorway"
+      }
+     },
+     {
+      "visual_en": "Wide shot with a strong foreground object showing Peter Pettigrew cowering on floorboards while Remus Lupin and Sirius Black confront him inside the ruined room. Harry Potter watches from near a broken door. Dusty window frames, fallen beams, and a brass lantern illuminate the dramatic confrontation.",
+      "event_en": "Peter Pettigrew turns back into a man before Lupin and Sirius Black.",
+      "characters_present": [
+       "Sirius Black",
+       "Remus Lupin",
+       "Peter Pettigrew"
+      ],
+      "roles": {
+       "Peter Pettigrew": "cowering on the wooden floorboards in fear before the wizards",
+       "Remus Lupin": "pointing his wand at Peter Pettigrew from across the room",
+       "Sirius Black": "standing beside Lupin, glaring down at Peter Pettigrew",
+       "Harry Potter": "watching the transformation intently from near a broken door"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "اما در راه بازگشت به قلعه، با بالا آمدن ماه کامل، Professor Lupin به گرگینه تبدیل می‌شود. در این آشفتگی، Peter Pettigrew می‌گریزد و هجوم Dementors باعث بی‌هوشی آن‌ها می‌شود. وقتی Harry Potter و Hermione Granger چشم باز می‌کنند، می‌بینند Sirius Black اسیر شده است. با این حال، Dumbledore به آن‌ها پیشنهاد می‌کند با ساعت زمان‌گرد Hermione، به عقب برگردند و همه چیز را دگرگون سازند.",
+    "source_en": "Lupin transforms into a werewolf. Pettigrew escapes and Black, Harry and Hermione encounter Dementors and lose consciousness. They awaken in the castle where Black is held captive. Dumbledore suggests using Hermione's Time Turner.",
+    "characters_present": [
+     "Harry Potter",
+     "Hermione Granger",
+     "Sirius Black",
+     "Remus Lupin"
+    ],
+    "setting_en": "Dark Hogwarts grounds under a bright full moon.",
+    "action_en": "Lupin transforming under the moonlight while dark Dementors swirl overhead toward Harry, Hermione, and Black.",
+    "mood_en": "Dangerous, dark, and urgent atmosphere.",
+    "spoken_fa": "اما در راه بازگشت به قلعه، با بالا آمدن ماه کامل، Professor Lupin به گرگینه تبدیل می‌شود. در این آشفتگی، Peter Pettigrew می‌گریزد و هجوم Dementors باعث بی‌هوشی آن‌ها می‌شود. وقتی Harry Potter و Hermione Granger چشم باز می‌کنند، می‌بینند Sirius Black اسیر شده است. با این حال، Dumbledore به آن‌ها پیشنهاد می‌کند با ساعت زمان‌گرد Hermione، به عقب برگردند و همه چیز را دگرگون سازند.",
+    "beats": [
+     "اما در راه بازگشت به قلعه، با بالا آمدن ماه کامل، Professor Lupin به گرگینه تبدیل می‌شود. در این آشفتگی، Peter Pettigrew می‌گریزد و هجوم Dementors باعث بی‌هوشی آن‌ها می‌شود.",
+     "وقتی Harry Potter و Hermione Granger چشم باز می‌کنند، می‌بینند Sirius Black اسیر شده است. با این حال، Dumbledore به آن‌ها پیشنهاد می‌کند با ساعت زمان‌گرد Hermione، به عقب برگردند و همه چیز را دگرگون سازند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "High-angle wide shot showing Remus Lupin transforming into a werewolf on the moonlit Hogwarts grounds while Peter Pettigrew scrambles away into tall grass. Harry Potter kneels near the lake bank. A bright full moon shines over dark castle towers, calm water, and gnarled tree roots.",
+      "event_en": "Remus Lupin transforms into a werewolf while Peter Pettigrew escapes into darkness.",
+      "characters_present": [
+       "Remus Lupin",
+       "Peter Pettigrew",
+       "Harry Potter"
+      ],
+      "roles": {
+       "Remus Lupin": "arching his back as he transforms under the full moon",
+       "Peter Pettigrew": "running away through tall grass toward the dark forest",
+       "Harry Potter": "kneeling on the grass, watching the transformation in shock"
+      }
+     },
+     {
+      "visual_en": "Medium-wide shot from head to knees showing Hermione Granger looping a golden time turner necklace around herself and Harry Potter inside the hospital wing. Soft moonlight filters through tall arched windows onto empty iron hospital beds, bedside tables, and a resting silhouette of Sirius Black behind a curtain.",
+      "event_en": "Hermione Granger uses a time turner with Harry Potter in the castle.",
+      "characters_present": [
+       "Harry Potter",
+       "Hermione Granger",
+       "Sirius Black"
+      ],
+      "roles": {
+       "Hermione Granger": "holding a small gold hourglass chain around herself and Harry",
+       "Harry Potter": "standing beside Hermione, looking closely at the tiny time turner",
+       "Sirius Black": "lying locked behind a distant reinforced door in the background"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در همین حال، آن‌ها به یاد سرنوشت تلخ Buckbeak می‌افتند. این موجود در کلاس درس Hagrid، پس از تحریک شدن به دست Draco Malfoy او را زخمی کرده بود. به دنبال این حادثه، پدر Draco کاری کرد که Hagrid محاکمه شود و حکم اعدام Buckbeak را گرفت. حالا این سفر در زمان فرصتی است تا Harry Potter و Hermione Granger، این موجود بی‌گناه را هم نجات دهند.",
+    "spoken_fa": "در همین حال، آن‌ها به یاد سرنوشت تلخ Buckbeak می‌افتند. این موجود در کلاس درس Hagrid، پس از تحریک شدن به دست Draco Malfoy او را زخمی کرده بود. به دنبال این حادثه، پدر Draco کاری کرد که Hagrid محاکمه شود و حکم اعدام Buckbeak را گرفت. حالا این سفر در زمان فرصتی است تا Harry Potter و Hermione Granger، این موجود بی‌گناه را هم نجات دهند.",
+    "source_en": "",
+    "characters_present": [],
+    "setting_en": "Dark Hogwarts grounds under a bright full moon.",
+    "action_en": "Lupin transforming under the moonlight while dark Dementors swirl overhead toward Harry, Hermione, and Black.",
+    "mood_en": "Dangerous, dark, and urgent atmosphere.",
+    "beats": [
+     "در همین حال، آن‌ها به یاد سرنوشت تلخ Buckbeak می‌افتند. این موجود در کلاس درس Hagrid، پس از تحریک شدن به دست Draco Malfoy او را زخمی کرده بود.",
+     "به دنبال این حادثه، پدر Draco کاری کرد که Hagrid محاکمه شود و حکم اعدام Buckbeak را گرفت. حالا این سفر در زمان فرصتی است تا Harry Potter و Hermione Granger، این موجود بی‌گناه را هم نجات دهند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Eye-level wide shot through a doorway or window showing Harry Potter and Hermione Granger watching Buckbeak tethered in a pumpkin patch near Hagrid's wooden hut. Evening shadow fills the valley behind stone walls, wooden fences, and large orange pumpkins while distant birds fly in the sky.",
+      "event_en": "Harry Potter and Hermione Granger observe Buckbeak tied near Hagrid's hut.",
+      "characters_present": [
+       "Harry Potter",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "peering out from behind a wooden fence at the creature",
+       "Hermione Granger": "watching quietly beside Harry near the edge of the patch"
+      }
+     },
+     {
+      "visual_en": "Wide shot with full bodies showing Harry Potter and Hermione Granger carefully untying the leather rope from Buckbeak near the pumpkin patch at twilight. Deep shadows fall across wooden garden stakes, overgrown vines, and stone castle walls while crows perch on nearby wooden fences.",
+      "event_en": "Harry Potter and Hermione Granger untie Buckbeak in the pumpkin patch.",
+      "characters_present": [
+       "Harry Potter",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "unfastening the heavy rope tied to the wooden post",
+       "Hermione Granger": "holding out a dead ferret to lure Buckbeak forward quietly"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "بنابراین، Harry Potter و Hermione Granger در زمان به عقب برمی‌گردند و Sirius Black و Buckbeak را نجات می‌دهند تا هر دو بگریزند. پس از این ماجرا، Snape راز گرگینه بودن Lupin را فاش می‌کند و او ناچار به استعفا می‌شود. در پایان، Harry در قطار بازگشت به London، نامه‌ای سرشار از سپاس از طرف پدرخوانده‌اش دریافت می‌کند که امید را در دلش زنده نگه می‌دارد.",
+    "source_en": "Harry and Hermione travel back in time and save both Black and Buckbeak, who fly away together. Snape makes Lupin's werewolf identity public, forcing Lupin to resign. On the train, Harry receives a letter from Black.",
+    "characters_present": [
+     "Harry Potter",
+     "Hermione Granger",
+     "Sirius Black"
+    ],
+    "setting_en": "Inside a compartment on the Hogwarts Express train heading to London during daytime.",
+    "action_en": "Harry Potter holding an open parchment letter, smiling gently while Hermione Granger sits nearby.",
+    "mood_en": "Warm, hopeful, and relieving atmosphere.",
+    "spoken_fa": "بنابراین، Harry Potter و Hermione Granger در زمان به عقب برمی‌گردند و Sirius Black و Buckbeak را نجات می‌دهند تا هر دو بگریزند. پس از این ماجرا، Snape راز گرگینه بودن Lupin را فاش می‌کند و او ناچار به استعفا می‌شود. در پایان، Harry در قطار بازگشت به London، نامه‌ای سرشار از سپاس از طرف پدرخوانده‌اش دریافت می‌کند که امید را در دلش زنده نگه می‌دارد.",
+    "beats": [
+     "بنابراین، Harry Potter و Hermione Granger در زمان به عقب برمی‌گردند و Sirius Black و Buckbeak را نجات می‌دهند تا هر دو بگریزند. پس از این ماجرا، Snape راز گرگینه بودن Lupin را فاش می‌کند و او ناچار به استعفا می‌شود.",
+     "در پایان، Harry در قطار بازگشت به London، نامه‌ای سرشار از سپاس از طرف پدرخوانده‌اش دریافت می‌کند که امید را در دلش زنده نگه می‌دارد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Wide shot from behind the characters showing Sirius Black soaring into the night sky mounted on Buckbeak while Remus Lupin walks away from Hogwarts carrying a leather suitcase. Stars twinkle above dark mountain peaks, stone ramparts, and winding gravel paths through the valley.",
+      "event_en": "Sirius Black flies away on Buckbeak as Remus Lupin leaves the school.",
+      "characters_present": [
+       "Sirius Black",
+       "Remus Lupin",
+       "Harry Potter"
+      ],
+      "roles": {
+       "Sirius Black": "riding on the back of Buckbeak soaring into the sky",
+       "Remus Lupin": "walking along a gravel path carrying a battered leather suitcase",
+       "Harry Potter": "standing near the stone wall, looking up into the sky"
+      }
+     },
+     {
+      "visual_en": "Low wide shot with the sky or ceiling showing Harry Potter reading a handwritten letter inside a Hogwarts Express compartment during daytime while Ron Weasley and Hermione Granger sit nearby. Daylight streams through the train window onto plush upholstered seats, luggage racks, and green rolling hills outside.",
+      "event_en": "Harry Potter reads a hopeful letter from his godfather on the train.",
+      "characters_present": [
+       "Harry Potter",
+       "Ron Weasley",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "holding an unfolded parchment letter, reading it with a smile",
+       "Ron Weasley": "sitting on the padded bench across from Harry, looking cheerful",
+       "Hermione Granger": "sitting beside Ron, smiling while looking at a small owl"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در یک جمع‌بندی، رمان Harry Potter and the Prisoner of Azkaban داستانی درباره روبه‌رو شدن با حقیقت و رهایی از بند گذشته است. این اثر، سومین رمان از مجموعه J. K. Rowling به شمار می‌رود که نگارش آن درست یک روز پس از کتاب دوم آغاز شد. به گفته خود Rowling، نوشتن این اثر بهترین و آسوده‌ترین تجربه نویسندگی او در تمام این مجموعه بوده است.",
+    "source_en": "Harry Potter and the Prisoner of Azkaban is the third book in the Harry Potter series. J. K. Rowling started to write the Prisoner of Azkaban the day after she finished The Chamber of Secrets. Rowling said it was the best writing experience.",
+    "characters_present": [
+     "Harry Potter"
+    ],
+    "setting_en": "Overlooking the majestic Hogwarts castle against a bright twilight sky.",
+    "action_en": "Harry Potter standing on a high balcony, looking out at the castle horizon with confidence.",
+    "mood_en": "Reflective, inspiring, and grand atmosphere.",
+    "spoken_fa": "در یک جمع‌بندی، رمان Harry Potter and the Prisoner of Azkaban داستانی درباره روبه‌رو شدن با حقیقت و رهایی از بند گذشته است. این اثر، سومین رمان از مجموعه J. K. Rowling به شمار می‌رود که نگارش آن درست یک روز پس از کتاب دوم آغاز شد. به گفته خود Rowling، نوشتن این اثر بهترین و آسوده‌ترین تجربه نویسندگی او در تمام این مجموعه بوده است.",
+    "beats": [
+     "در یک جمع‌بندی، رمان Harry Potter and the Prisoner of Azkaban داستانی درباره روبه‌رو شدن با حقیقت و رهایی از بند گذشته است. این اثر، سومین رمان از مجموعه J.",
+     "K. Rowling به شمار می‌رود که نگارش آن درست یک روز پس از کتاب دوم آغاز شد. به گفته خود Rowling، نوشتن این اثر بهترین و آسوده‌ترین تجربه نویسندگی او در تمام این مجموعه بوده است."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Wide establishing shot depicting Harry Potter watching a glowing silver stag Patronus leap across a serene forest lake under twilight skies. Misty mountains, tall pine trees, and smooth water stones surround the quiet shore while soft blue magical light illuminates the tranquil woodland setting.",
+      "event_en": "Harry Potter watches a glowing stag Patronus leap across the twilight landscape.",
+      "characters_present": [
+       "Harry Potter"
+      ],
+      "roles": {
+       "Harry Potter": "standing at the edge of a calm lake, watching the glowing stag"
+      }
+     },
+     {
+      "visual_en": "Wide shot with full bodies showing Harry Potter, Ron Weasley, and Hermione Granger walking together along a sunny grassy hillside outside Hogwarts castle. Clear blue sky frames ancient stone turrets, wooden footbridges, and lush green meadows while other school students stroll in the far distance.",
+      "event_en": "Harry Potter walks happily alongside Ron Weasley and Hermione Granger outdoors.",
+      "characters_present": [
+       "Harry Potter",
+       "Ron Weasley",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "walking in the middle of his two best friends, chatting warmly",
+       "Ron Weasley": "walking on the left, smiling and gesturing with his hands",
+       "Hermione Granger": "walking on the right, holding a leather book under her arm"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "این کتاب به دست ناشرانی چون Bloomsbury و Scholastic, Inc. به چاپ رسید و تنها در سه روز نخست، شصت و چهار هزار نسخه فروخت. موفقیت اثر به همین‌جا ختم نشد و جوایزی مانند Whitbread Children's Book Award و Bram Stoker Award را به دست آورد. این اثر با پیوند دادن تاریکی گذشته و پیوندهای دوستی، جایگاهی درخشان در میان آثار ماندگار ادبیات داستانی جهان پیدا کرد.",
+    "source_en": "The book sold 64,000 copies in just three days after its release in the United Kingdom. The book won the 1999 Whitbread Children's Book Award, the Bram Stoker Award, and the 2000 Locus Award for Best Fantasy Novel.",
+    "characters_present": [],
+    "setting_en": "An elegant vintage library with glowing sunlight shining on open magical books.",
+    "action_en": "A beautiful hardbound fantasy book resting on a wooden table with golden magical light shining around it.",
+    "mood_en": "Triumphant, classic, and timeless atmosphere.",
+    "spoken_fa": "این کِتاب بِه دَستِ ناشِرانی چون Bloomsbury وَ Scholastic, Inc. بِه چاپ رَسید وَ تَنها دَر سِه روزِ نُخُست، شَصت وَ چَهار هِزار نُسخِه فُروخت. مُوَفَّقیَّتِ اَثَر بِه هَمین‌جا خَتم نَشُد وَ جَوایِزی مانندِ Whitbread Children's Book Award وَ Bram Stoker Award را بِه دَست آوَرد. این اَثَر با پِیوند دادَنِ تاریکیِ گُذَشتِه وَ پِیوندهایِ دوستی، جایگاهی دِرَخشان دَر میانِ آثارِ ماندِگارِ اَدَبیّاتِ داستانیِ جَهان پِیدا کَرد.",
+    "beats": [
+     "این کتاب به دست ناشرانی چون Bloomsbury و Scholastic, Inc. به چاپ رسید و تنها در سه روز نخست، شصت و چهار هزار نسخه فروخت.",
+     "موفقیت اثر به همین‌جا ختم نشد و جوایزی مانند Whitbread Children's Book Award و Bram Stoker Award را به دست آورد. این اثر با پیوند دادن تاریکی گذشته و پیوندهای دوستی، جایگاهی درخشان در میان آثار ماندگار ادبیات داستانی جهان پیدا کرد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "High-angle wide shot showing Harry Potter holding an open magical book that casts warm golden light inside a grand vintage library. Sunbeams filter through high stained-glass windows onto tall oak bookshelves, leather-bound volumes, and polished wooden study desks surrounded by quiet stone arches.",
+      "event_en": "Harry Potter holds a glowing book illuminating the ancient magical library.",
+      "characters_present": [
+       "Harry Potter"
+      ],
+      "roles": {
+       "Harry Potter": "standing in the central library aisle, looking down at an open book"
+      }
+     },
+     {
+      "visual_en": "Low wide shot with the sky or ceiling showing Harry Potter, Ron Weasley, and Hermione Granger standing together on a castle balcony under a starlit night sky. Glowing constellations illuminate stone balustrades, soaring Gothic arches, and distant mountain silhouettes surrounding the tranquil school grounds.",
+      "event_en": "Harry Potter, Ron Weasley, and Hermione Granger stand together under night skies.",
+      "characters_present": [
+       "Harry Potter",
+       "Ron Weasley",
+       "Hermione Granger"
+      ],
+      "roles": {
+       "Harry Potter": "standing in the center of the castle balcony, looking upward",
+       "Ron Weasley": "standing beside Harry, looking out toward the starry horizon",
+       "Hermione Granger": "standing beside Harry, looking up at the glowing constellations"
+      }
+     }
+    ]
+   }
+  ],
+  "style_key": "storybook",
+  "art_style_en": "hand-drawn storybook illustration in the style of a gentle animated film, fine dark ink outlines, soft painterly colors, warm cozy lamplight and atmospheric weather, richly detailed backgrounds, natural proportions, expressive realistic faces, whole picture in this one style",
+  "era_en": "United Kingdom, 1990s. Clothing of that time: British muggle and wizarding wear in the nineties featured oversized knitted jumpers, denim jackets, pleated school trousers, heavy wool coats, sturdy leather shoes, cotton collared shirts, and tailored robes.",
+  "names": {
+   "Harry Potter and the Prisoner of Azkaban": "هَری پاتِر اَند دِ پِریزِنِر آو آزکابان",
+   "J. K. Rowling": "جِی. کِی. رُولینگ",
+   "Harry Potter": "هَری پاتِر",
+   "Harry": "هَری",
+   "Hogwarts": "هاگْوارْتْز",
+   "London": "لَندَن",
+   "Sirius Black": "سیریوس بلَک",
+   "Black": "بلَک",
+   "Azkaban": "آزکابان",
+   "Cornelius Fudge": "کورنِلیوس فاج",
+   "Diagon Alley": "دایاگون اَلی",
+   "Dementors": "دِمِنتُورز",
+   "Professor Lupin": "پِروفِسور لوپین",
+   "Lupin": "لوپین",
+   "Patronus Charm": "پاترونوس چارم",
+   "Ron Weasley": "ران ویزلی",
+   "Ron": "ران",
+   "Hermione Granger": "هِرمایِنی گرِینجِر",
+   "Hermione": "هِرمایِنی",
+   "Hogsmeade": "هاگزمید",
+   "Lord Voldemort": "لُرد وُلدِمورت",
+   "Shrieking Shack": "شریکینگ شَک",
+   "Peter Pettigrew": "پیتر پِتی‌گرو",
+   "Dumbledore": "دامبلدور",
+   "Buckbeak": "باک‌بیک",
+   "Snape": "اِسنِیپ",
+   "Rowling": "رُولینگ",
+   "Bloomsbury": "بلومزبِری",
+   "Scholastic, Inc.": "اسکولاستیک اینک",
+   "Whitbread Children's Book Award": "ویت‌برِد چیلدرِنز بوک اِوارد",
+   "Bram Stoker Award": "برام استوکِر اِوارد"
+  },
+  "visual_version": 3
+ },
+ "attempts": 0,
+ "version": 9,
+ "date": "2026-11-01"
+}
