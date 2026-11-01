@@ -223,5 +223,15 @@
   "date_pt": "2026-11-01",
   "wiki": "Jurassic Park (novel)",
   "date": "2026-11-01"
+ },
+ {
+  "title_en": "Billy Budd",
+  "title_fa": "بیلی باد",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-01",
+  "wiki": "Billy Budd",
+  "date": "2026-11-01"
  }
 ]
