@@ -1,3 +1,4 @@
+import atexit
 import base64
 import json
 import math
@@ -20,7 +21,8 @@ CHANNEL_ID = os.environ["CHANNEL_ID"]
 GEMINI_KEY = os.environ["GEMINI_API_KEY"]
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
-# Optional free image service (Cloudflare Workers AI, FLUX). If these two are missing, Pollinations is used.
+# The ONLY image service (free Cloudflare Workers AI, FLUX). Without these two secrets the bot stops before it spends
+# any Gemini quota. There is no slow fallback any more: its pictures were not checked and were often wrong.
 CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "").strip()
 CF_API_TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
 USE_CF = bool(CF_ACCOUNT_ID and CF_API_TOKEN)
@@ -121,6 +123,17 @@ class GeminiQuotaExhausted(RuntimeError):
     """The DAILY quota of every model is finished: stop quickly instead of waiting for nothing."""
 
 
+CALLS = {"gemini": 0, "voice": 0, "cloudflare": 0}      # how many calls this run made (printed at the end)
+CALLS_BY_MODEL = {}
+
+
+@atexit.register
+def print_call_counts():
+    per = ", ".join(f"{m}: {n}" for m, n in sorted(CALLS_BY_MODEL.items()))
+    print(f"CALLS THIS RUN: Gemini text/picture/audio {CALLS['gemini']} ({per or '-'}), "
+          f"Gemini voice {CALLS['voice']}, Cloudflare pictures {CALLS['cloudflare']}", flush=True)
+
+
 DEAD_MODELS = set()      # models whose daily quota is finished (not tried again in this run)
 SAFETY = [{"category": c, "threshold": "BLOCK_ONLY_HIGH"} for c in (
     "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
@@ -157,8 +170,14 @@ def parse_json_text(text):
         raise
 
 
-def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, audio=None):
+def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, audio=None, images=None):
     parts = [{"text": prompt}]
+    if images:                      # several pictures in one call, each one labeled with its number
+        pre = []
+        for k, im in enumerate(images, 1):
+            pre += [{"text": f"IMAGE {k}:"},
+                    {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(im).decode()}}]
+        parts = pre + parts
     if image is not None:
         parts.insert(0, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(image).decode()}})
     if audio is not None:
@@ -189,6 +208,8 @@ def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, a
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 print(f"Gemini: round={round_no} model={model}", flush=True)
+                CALLS["gemini"] += 1
+                CALLS_BY_MODEL[model] = CALLS_BY_MODEL.get(model, 0) + 1
                 r = requests.post(url, headers=headers, json=body, timeout=(30, read_timeout))
                 if r.status_code == 200:
                     j = r.json()
@@ -501,6 +522,31 @@ NAMES_RULE = """- NAMES: write the names of people, places, the novel and its au
   rephrase so that the name stands alone."""
 
 
+# Starting points that guarantee VARIETY (the source, the place, the era and the age always win over them).
+DIVERSITY_SLOTS = (
+    ("black hair", "tall and thin", "dark green"),
+    ("blond hair", "short and round", "deep red"),
+    ("red or copper hair", "broad-shouldered and muscular", "navy blue"),
+    ("gray or white hair", "slim, of medium height", "mustard yellow"),
+    ("dark brown hair", "small and frail", "purple"),
+    ("light brown hair", "heavy and tall", "light gray"),
+)
+
+
+def diversity_text():
+    rows = "\n".join(f"  character {k + 1}: {h}; {b}; main outfit color {c}"
+                     for k, (h, b, c) in enumerate(DIVERSITY_SLOTS))
+    return ("- VARIETY SLOTS (starting points so that nobody looks alike; the SOURCE, the place, the era, the gender and "
+            "the age always win: when a slot does not fit a character, choose another hair color, build and outfit color "
+            "that nobody else has):\n" + rows)
+
+
+def char_tag(c):
+    """A SHORT face tag (the image model reads only the first ~250 tokens, so long sheets get cut)."""
+    t = " ".join(str(c.get("tag_en") or "").split())
+    return t or " ".join(str(c.get("look_en") or "").split()[:26])
+
+
 def design_cast(book, src):
     """Step B0: BEFORE the script is written, design the era and ONE fixed look sheet for every important character
     (ages that fit the family, very different faces and bodies, different clothes, true to the era)."""
@@ -517,12 +563,14 @@ Return JSON with exactly these keys:
 - "era_en": the time and place of the story in one short English phrase (for example "provincial Russia, 1860s").
 - "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
   (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
-- "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "..."}}.
+- "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "..."}}.
   "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 45 to 65 English words in
   this fixed order: gender and exact age in years; body build; face shape; skin tone; eye color; hair (color, length,
   style); facial hair; ONE distinctive feature; the usual outfit with colors. It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
-  no action, no names of actors.
+  no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
+  makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
+  main outfit color). It never contradicts "look_en".
 
 Rules:
 - AGES: use the ages of the source; otherwise decide them so they fit the story and the family tree. A parent is at least
@@ -536,7 +584,8 @@ Rules:
   character is heavy unless the source says that more are.
 - CLOTHES: every character wears a different outfit with different main colors, true to his or her job, class, age and
   the era, and historically correct for that time and place.
-- Never contradict the source (gender, age, hair, body, job, family relations)."""
+- Never contradict the source (gender, age, hair, body, job, family relations).
+""" + diversity_text() + "\n"
     try:
         d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
         era = " ".join(str(d.get("era_en") or "").split())
@@ -544,7 +593,8 @@ Rules:
         chars = []
         for c in d.get("characters") or []:
             if isinstance(c, dict) and str(c.get("name") or "").strip() and str(c.get("look_en") or "").strip():
-                chars.append({"name": str(c["name"]).strip(), "look_en": " ".join(str(c["look_en"]).split())})
+                chars.append({"name": str(c["name"]).strip(), "look_en": " ".join(str(c["look_en"]).split()),
+                              "tag_en": " ".join(str(c.get("tag_en") or "").split())})
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -1387,6 +1437,7 @@ def gemini_tts(text, kind, out_wav, style=""):
     last = ""
     for attempt in range(3):
         try:
+            CALLS["voice"] += 1
             r = requests.post("https://generativelanguage.googleapis.com/v1beta/interactions",
                               headers=headers, json=body, timeout=(30, 180))
             if r.status_code == 200:
@@ -1466,14 +1517,51 @@ _VOICE_WORDS = (("در", "دَر"), ("این", "اِین"), ("را", "رَا"), 
 
 # Words that the Gemini voice reads with a wrong vowel. The entry matches the word AND every form that starts with it
 # (رسوا -> رسوا، رسوایی، رسواکننده...). Only the voice text gets the vowel mark: the subtitles stay clean.
-_VOICE_PREFIX = (("رسوا", "رُسوا"),)
+_VOICE_PREFIX = (("رسوا", "رُسوا"), ("دسر", "دِسِر"), ("دلهره", "دلهُره"))
+# «عمو» is read with fatha (عَمو) but «عمومی» keeps its damma: so only these exact word forms are marked.
+_VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|یم|یت|یش|یمان|یتان|یشان)?(?![{_PL}]))", "عَمو"),)
+
+
+PRON_FILE = ROOT / "azim_pronunciation.json"
+_PRON = {}
+
+
+def load_pronunciation():
+    """Words that the voice reads wrongly. The built-in list is the default; the file azim_pronunciation.json
+    (keys: words = exact word, prefixes = the word and every form that starts with it, regex = pattern -> marked text;
+    {PL} inside a pattern means 'a Persian letter') adds to it or replaces an entry. A bad entry is skipped."""
+    words = dict(_VOICE_WORDS)
+    prefixes = dict(_VOICE_PREFIX)
+    regexes = {pat: mark for pat, mark in _VOICE_REGEX}
+    try:
+        if PRON_FILE.exists():
+            d = json.loads(PRON_FILE.read_text(encoding="utf-8"))
+            words.update({str(k): str(v) for k, v in (d.get("words") or {}).items()})
+            prefixes.update({str(k): str(v) for k, v in (d.get("prefixes") or {}).items()})
+            for pat, mark in (d.get("regex") or {}).items():
+                pat = str(pat).replace("{PL}", _PL)
+                try:
+                    re.compile(pat)
+                    regexes[pat] = str(mark)
+                except re.error as e:
+                    print(f"Pronunciation: bad pattern skipped ({e})", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"Pronunciation file ignored: {e}", flush=True)
+    return words, prefixes, regexes
 
 
 def gemini_voice_text(t):
-    for plain, marked in _VOICE_WORDS:
-        t = re.sub(rf"(?<![{_PL}]){plain}(?![{_PL}])", marked, t)
-    for plain, marked in _VOICE_PREFIX:
-        t = re.sub(rf"(?<![{_PL}]){plain}", marked, t)
+    if not _PRON:
+        _PRON["rules"] = load_pronunciation()
+        w, pf, rx = _PRON["rules"]
+        print(f"Pronunciation rules: {len(w)} words, {len(pf)} prefixes, {len(rx)} patterns", flush=True)
+    words, prefixes, regexes = _PRON["rules"]
+    for plain, marked in words.items():
+        t = re.sub(rf"(?<![{_PL}]){re.escape(plain)}(?![{_PL}])", marked, t)
+    for plain, marked in prefixes.items():
+        t = re.sub(rf"(?<![{_PL}]){re.escape(plain)}", marked, t)
+    for pattern, marked in regexes.items():
+        t = re.sub(pattern, marked, t)
     return t
 
 
@@ -1859,33 +1947,58 @@ def _make_voice(scenes, kind, names, use_gemini):
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
 CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, pure illustration"
+CLEAN_SHORT = "sharp focus, crisp clean details, high clarity"
 
 
-def build_prompt(art, chars, scene):
-    """The style comes FIRST (the end of a long prompt can be cut); then the fixed character sheets, the picture, and
-    the era so that clothes and objects always fit the time of the story."""
+def _wc(t):
+    return len(str(t).split())
+
+
+PROMPT_WORDS = 165        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
+
+
+def _trim_words(t, n):
+    w = str(t).split()
+    return " ".join(w[:n])
+
+
+def build_prompt(art, chars, scene, fix=""):
+    """The picture first (style, what must be shown, the action), then the people, then the era. The whole text stays
+    inside PROMPT_WORDS words so that the end of it (people, era) is never cut away. Names are not written: the image
+    model does not know them (a name like «Harry» can even pull in a film face); the short look tag is enough."""
     names = scene.get("characters_present") or []
-    present = [c for c in chars if isinstance(c, dict) and c.get("name") in names]
-    looks = " ".join(f"{c['name']}: {c['look_en']}." for c in present)
-    if len(present) > 1:
-        looks += " These people look completely different from each other: different faces, ages, body builds and clothes."
+    present = [c for c in chars if isinstance(c, dict) and c.get("name") in names][:3]
     era_full = str(scene.get("era_en") or "").strip()
+    era_short = era_full.split(". Clothing of that time")[0]
+    if scene.get("visual_en"):
+        main = str(scene["visual_en"]).strip()
+    else:
+        main = (f"{scene['action_en']}. Setting: {scene['setting_en']}. Mood: {scene.get('mood_en', 'cinematic')}.")
+    head = f"Art style: {art}. " + (f"The picture must clearly show: {fix}. " if fix else "")
 
-    def compose(era):
-        era_part = (f"Setting: {era}. Everything shown (clothes, buildings, objects) belongs to that time. "
-                    if era else "")
-        chars_part = (f"Characters (always with exactly this face, body and clothes): {looks} " if looks else "")
-        if scene.get("visual_en"):
-            main = f"{scene['visual_en']} "
-        else:
-            main = (f"{scene['action_en']}. Setting: {scene['setting_en']}. "
-                    f"Mood: {scene.get('mood_en', 'cinematic')}. ")
-        return f"Art style: {art}. {main}{chars_part}{era_part}Cinematic 16:9 composition, {CLEAN}"
+    def people(full):
+        if not present:
+            return ""
+        if len(present) == 1:
+            c = present[0]
+            return "The person (always exactly this face, body and clothes): " + (
+                _trim_words(c["look_en"], 42) if full else char_tag(c)) + ". "
+        ords = ("first", "second", "third")
+        body = "; ".join(f"the {ords[k]} person: {char_tag(c)}" for k, c in enumerate(present))
+        return ("People (each always exactly this face, body and clothes): " + body +
+                ". They look completely different from each other: different faces, ages, builds and clothes. ")
 
-    out = compose(era_full)
-    if len(out) > 1850:                                   # keep the style and the characters: shorten the era
-        out = compose(era_full.split(". Clothing of that time")[0])
-    return out
+    def compose(main_t, full, era, tail):
+        era_part = (f"Setting: {era}. Everything shown belongs to that time. " if era else "")
+        return f"{head}{main_t} {people(full)}{era_part}Cinematic 16:9 composition, {tail}"
+
+    for full, era, tail in ((True, era_full, CLEAN), (True, era_short, CLEAN), (True, era_short, CLEAN_SHORT),
+                            (False, era_short, CLEAN_SHORT)):
+        out = compose(main, full, era, tail)
+        if _wc(out) <= PROMPT_WORDS:
+            return out
+    spare = PROMPT_WORDS - _wc(compose("", False, era_short, CLEAN_SHORT))     # keep the people, shorten the picture
+    return compose(_trim_words(main, max(spare, 25)), False, era_short, CLEAN_SHORT)
 
 
 def _build_prompt_old(art, chars, scene):
@@ -1900,6 +2013,11 @@ def _build_prompt_old(art, chars, scene):
             + (f"Characters: {looks}. " if looks else "")
             + f"Mood: {scene.get('mood_en', 'cinematic')}. "
             + f"Art style: {art}. Wide 16:9 composition, {CLEAN}")
+
+
+class ImageServiceUnavailable(RuntimeError):
+    """Cloudflare cannot draw now (daily free quota finished, key refused, or down for a long time). The video is NOT
+    made with bad pictures: the finished script stays saved and the next run continues with it."""
 
 
 _cf_size_ok = True
@@ -1919,6 +2037,7 @@ def cf_image(prompt, path, seed=None):
             payload.update({"width": 1024, "height": 576})
         try:
             print(f"Image(CF): attempt={attempt}", flush=True)
+            CALLS["cloudflare"] += 1
             r = requests.post(url, headers=headers, json=payload, timeout=120)
             if r.status_code == 200:
                 ctype = r.headers.get("content-type", "")
@@ -1930,105 +2049,137 @@ def cf_image(prompt, path, seed=None):
                     path.write_bytes(base64.b64decode(b64))
                     return True
             print(f"  -> status={r.status_code} body={r.text[:200]!r}", flush=True)
+            low = r.text.lower()
+            if "daily free allocation" in low or "4006" in low:
+                raise ImageServiceUnavailable("the daily free quota of Cloudflare Workers AI is finished")
+            if r.status_code in (401, 403):
+                raise ImageServiceUnavailable("Cloudflare refused the key (CF_API_TOKEN / CF_ACCOUNT_ID are wrong)")
+            if r.status_code == 429:
+                time.sleep(30)
+                continue
             if r.status_code in (400, 422) and _cf_size_ok:
                 _cf_size_ok = False      # this model does not accept width/height: use default size
                 continue
-            if r.status_code in (401, 403):
-                return False
+        except ImageServiceUnavailable:
+            raise
         except Exception as e:  # noqa: BLE001
             print(f"  -> error: {e}", flush=True)
         time.sleep(8 * attempt)
     return False
 
 
-def pollinations_image(prompt, path, seed):
-    """Free Pollinations allows 1 image every 45 s per IP: on a 402 we wait the time it asks for."""
-    q = urllib.parse.quote(prompt[:1500])
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
-    for attempt in range(1, 12):
-        url = (f"https://image.pollinations.ai/prompt/{q}?width={W}&height={H}"
-               f"&nologo=true&seed={seed}&model=flux")
-        try:
-            print(f"Image(Pollinations): attempt={attempt}", flush=True)
-            r = requests.get(url, headers=headers, timeout=150)
-            ctype = r.headers.get("content-type", "")
-            if r.status_code == 200 and ctype.startswith("image") and len(r.content) > 5000:
-                path.write_bytes(r.content)
-                time.sleep(47)   # respect the free limit before the next image
-                return
-            print(f"  -> status={r.status_code} type={ctype} body={r.text[:160]!r}", flush=True)
-            if r.status_code == 402:
-                m = re.search(r"Retry after (\d+)s", r.text)
-                time.sleep(min((int(m.group(1)) + 3) if m else 47, 60))
-                continue
-        except requests.RequestException as e:
-            print(f"  -> error: {e}", flush=True)
-        time.sleep(10)
-    raise RuntimeError("Image generation failed")
-
-
 def make_image(prompt, path, seed, scenes_left):
-    """Try Cloudflare first. If it fails, fall back to Pollinations only when the time budget allows."""
-    if USE_CF:
+    """Cloudflare only. If it fails, wait (2 and 5 minutes) and try again; if it still fails the run stops quietly."""
+    for wait in (0, 120, 300):
+        if wait:
+            if time.time() - START_TIME + wait + (scenes_left + 1) * 15 > JOB_BUDGET:
+                break
+            print(f"Cloudflare could not draw this picture: waiting {wait} s and trying again.", flush=True)
+            time.sleep(wait)
         if cf_image(prompt, path, seed):
             time.sleep(1)
             return
-        print("WARNING: Cloudflare failed for this image, falling back to Pollinations (slow).", flush=True)
-    needed = (scenes_left + 1) * 50
-    if time.time() - START_TIME + needed > JOB_BUDGET:
-        raise RuntimeError("Not enough time left for slow image generation")
-    pollinations_image(prompt, path, seed)
+    raise ImageServiceUnavailable("Cloudflare could not draw a picture after waiting")
 
 
-def check_image(path, scene):
-    """Ask Gemini (it looks at the picture) how well the picture shows the narration. (score 0-10, what is missing)."""
-    sheets = scene.get("look_sheets") or []
-    look_part = ("Also check the CHARACTERS: each person must look exactly like his or her sheet (age, hair, body build, "
-                 "clothes); if there are several people they must be clearly different from each other in face, body "
-                 "and clothes; clothes and objects must fit the era (" + str(scene.get("era_en") or "the story") + "). "
-                 "Sheets: " + " | ".join(sheets) + "\nGive \"look_score\" from 0 to 10 for that (10 = all correct) "
-                 "and put what is wrong in \"missing\".\n") if sheets else ""
-    prompt = f"""You check illustrations for a video. Narration (Persian): "{scene['narration_fa']}"
-Intended picture: "{scene.get('visual_en', scene.get('action_en', ''))}"
-Look at the image. Score from 0 to 10 how clearly it shows the main subject and the main action of the narration
-(10 = a viewer understands what is said just by looking; 0 = unrelated).
-{look_part}Return JSON: {{"score": 7, "look_score": 7, "missing": "short English phrase: the key thing that is missing or wrong"}}"""
+CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
+MIN_SCORE = 6
+
+
+def check_images(jobs):
+    """ONE Gemini call looks at up to CHECK_BATCH pictures. Returns a list with (score, what is missing) or None for
+    each picture; returns None if the check is not available (the pictures are then kept as they are)."""
+    blocks = []
+    for k, j in enumerate(jobs, 1):
+        sc = j["sc"]
+        sheets = sc.get("look_sheets") or []
+        blocks.append({"n": k, "narration_fa": sc["narration_fa"],
+                       "intended_picture": sc.get("visual_en", sc.get("action_en", "")),
+                       "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
+    prompt = f"""You check illustrations for a video. The pictures above are labeled IMAGE 1 to IMAGE {len(jobs)}.
+For each one you get the Persian narration that is read while it is shown, the intended picture, and (maybe) the look
+sheets of its characters. Items: {json.dumps(blocks, ensure_ascii=False)}
+
+For EACH picture return:
+- "score" 0-10: how clearly it shows the main subject and main action of ITS narration (10 = a viewer understands what is
+  said just by looking; 0 = unrelated). A picture that is physically absurd (a head lying on a car, extra or missing
+  limbs, merged or floating bodies, melted faces) gets at most 3.
+- "look_score" 0-10, only when sheets are given: each person looks like his or her sheet (age, hair, build, clothes);
+  several people are clearly different from each other in face, body and clothes; clothes and objects fit the era
+  (10 = all correct).
+- "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
+Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "..."}}]}} with one item per picture."""
     try:
-        r = gemini_json(prompt, minutes=2, models=CHEAP_MODELS, image=path.read_bytes())
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS, images=[j["img"].read_bytes() for j in jobs])
         time.sleep(3)
-        score = int(r.get("score", 10))
-        if sheets:
-            score = min(score, int(r.get("look_score", 10)))
-        return score, str(r.get("missing", "")).strip()
+        by_n = {}
+        for c in out.get("checks") or []:
+            if isinstance(c, dict) and str(c.get("n", "")).isdigit():
+                by_n[int(c["n"])] = c
+        res = []
+        for k, j in enumerate(jobs, 1):
+            c = by_n.get(k)
+            if not c:
+                res.append(None)
+                continue
+            score = int(c.get("score", 10))
+            if j["sc"].get("look_sheets"):
+                score = min(score, int(c.get("look_score", 10)))
+            res.append((score, str(c.get("missing", "")).strip()))
+        return res
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
     except Exception as e:  # noqa: BLE001
         print("Image check skipped:", e, flush=True)
         return None
 
 
-def make_checked_image(prompt, path, seed, scenes_left, scene):
-    """Make the picture; if the check says it does not match the text, draw it again (up to 2 more times)."""
-    make_image(prompt, path, seed, scenes_left)
-    if not IMAGE_CHECK:
-        return
-    best = None                      # (score, bytes)
-    for retry in range(2):
-        res = check_image(path, scene)
-        if res is None:
-            return                   # the check is not available: keep the current picture
-        score, missing = res
-        print(f"Image check: score {score}/10 {('- ' + missing) if score < 6 else ''}", flush=True)
-        if best is None or score > best[0]:
-            best = (score, path.read_bytes())
-        if score >= 6 or retry == 1:
+def check_and_fix_images(jobs):
+    """Every picture is checked (4 per Gemini call). A picture with a low score is drawn again with the missing
+    thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
+    redraw is not available, the pictures that already exist are kept: the video never fails because of this step."""
+    best = {}                                              # picture number -> (score, bytes)
+    todo = [k for k, j in enumerate(jobs) if not j.get("reused")]
+    for rnd in range(3):
+        results = {}
+        for a in range(0, len(todo), CHECK_BATCH):
+            grp = todo[a:a + CHECK_BATCH]
+            res = check_images([jobs[k] for k in grp])
+            if res is None:
+                continue
+            for k, r in zip(grp, res):
+                if r is not None:
+                    results[k] = r
+        if not results:
             break
+        low = []
+        for k, (score, missing) in sorted(results.items()):
+            data = jobs[k]["img"].read_bytes()
+            if k not in best or score > best[k][0]:
+                best[k] = (score, data)
+            if score < MIN_SCORE:
+                print(f"Image check: picture {k + 1} score {score}/10 - {missing}", flush=True)
+                low.append((k, missing))
+        print(f"Image check round {rnd + 1}: {len(results)} checked, {len(low)} to draw again.", flush=True)
+        if rnd == 2 or not low:
+            break
+        todo = []
         try:
-            make_image(prompt + f" The picture must clearly show: {missing}.", path,
-                       seed + 1000 * (retry + 1), scenes_left)
+            for k, missing in low:
+                j = jobs[k]
+                make_image(j["rebuild"](missing), j["img"], j["seed"] + 1000 * (rnd + 1), 0)
+                todo.append(k)
+        except ImageServiceUnavailable as e:
+            print(f"Redraw stopped ({e}): the best pictures so far are kept.", flush=True)
+            break
         except Exception as e:  # noqa: BLE001
             print("Redraw failed:", e, flush=True)
             break
-    if best is not None:
-        path.write_bytes(best[1])    # keep the best picture of all tries
+    for k, (score, data) in best.items():                  # keep the best picture of all tries
+        jobs[k]["img"].write_bytes(data)
+    if best:
+        low_left = sum(1 for sc_, _ in best.values() if sc_ < MIN_SCORE)
+        print(f"Image check done: {len(best)} pictures, {low_left} still below {MIN_SCORE}/10.", flush=True)
 
 
 # ---------------------------------------------------------------- video
@@ -2297,7 +2448,9 @@ def main():
         shutil.rmtree(WORK)
     WORK.mkdir(parents=True)
 
-    print(f"Image service: {'Cloudflare FLUX' if USE_CF else 'Pollinations (slow)'}; "
+    if not USE_CF:
+        raise ImageServiceUnavailable("the secrets CF_ACCOUNT_ID and CF_API_TOKEN are missing or empty in GitHub")
+    print(f"Image service: Cloudflare FLUX; "
           f"image check: {'on' if IMAGE_CHECK else 'off'}; voice text prep: {'on' if VOICE_PREP else 'off'}",
           flush=True)
 
@@ -2372,6 +2525,7 @@ def main():
     n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
     done_pics = 0
     last_img = None
+    jobs = []
     for i, s in enumerate(scenes):
         beats = s.get("beats") or [s["narration_fa"]]
         bvs = s.get("beat_visuals") or []
@@ -2386,17 +2540,25 @@ def main():
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
+            reused = False
             try:
-                present = [n for n in (sc.get("characters_present") or []) if isinstance(n, str)]
-                make_checked_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1, sc)
+                make_image(prompt, img, seed + i * 10 + j, n_pics - done_pics - 1)
+            except ImageServiceUnavailable:
+                raise
             except Exception as e:  # noqa: BLE001
                 if last_img is None:
                     raise
                 # one failed picture must not lose the whole video: reuse the previous picture
                 print(f"WARNING: image {i}.{j} failed ({e}); reusing the previous picture.", flush=True)
                 shutil.copy(last_img, img)
+                reused = True
+            jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": reused,
+                         "rebuild": lambda fx, sc=sc: build_prompt(script["art_style_en"],
+                                                                   script.get("characters", []), sc, fx)})
             last_img = img
             done_pics += 1
+    if IMAGE_CHECK:
+        check_and_fix_images(jobs)
 
     final = WORK / "azim_final.mp4"
     total = build_video(scenes, durs, final, script.get("names") or {})
@@ -2420,4 +2582,12 @@ if __name__ == "__main__":
     except GeminiQuotaExhausted as exc:
         print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
               "No video now; the next run continues.", flush=True)
+        sys.exit(1)
+    except ImageServiceUnavailable as exc:
+        print(f"STOP: no good picture can be made now ({exc}). No video is posted with bad pictures; "
+              "the finished script is saved and the next run continues with it.", flush=True)
+        pend = load_json(PENDING_FILE, None)
+        if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
+            pend["attempts"] = int(pend["attempts"]) - 1
+            save_json(PENDING_FILE, pend)
         sys.exit(1)
