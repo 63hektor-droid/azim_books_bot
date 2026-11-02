@@ -2061,6 +2061,36 @@ class ImageServiceUnavailable(RuntimeError):
     made with bad pictures: the finished script stays saved and the next run continues with it."""
 
 
+class ImagePromptRefused(RuntimeError):
+    """Cloudflare's safety filter refused every wording of ONE picture. This is not a quota problem and not a reason
+    to stop the video: the caller reuses the previous picture."""
+
+
+def _cf_errors(r):
+    """(set of numeric error codes, lower-case message text) of a Cloudflare answer. Codes are read ONLY from the JSON
+    field, never searched inside the raw text (a request id such as 'be240066-...' contains '4006' and was once taken
+    for 'the daily quota is finished')."""
+    codes, msgs = set(), []
+    try:
+        for e in (r.json().get("errors") or []):
+            if isinstance(e, dict):
+                try:
+                    codes.add(int(e.get("code")))
+                except (TypeError, ValueError):
+                    pass
+                msgs.append(str(e.get("message") or ""))
+    except Exception:  # noqa: BLE001
+        pass
+    msg = " ".join(msgs).lower()
+    if not codes and not msg:
+        msg = (r.text or "").lower()
+    return codes, msg
+
+
+SAFE_PREFIX = ("Gentle peaceful children's storybook illustration, calm friendly mood, warm soft light, "
+               "everyone fully clothed. ")
+
+
 # FLUX.2 [klein] 4B on Cloudflare (free daily allowance, same as before): it takes width/height (so the picture is
 # really 9:16 and nothing has to be cut off) and up to 4 reference pictures (the same face in every picture).
 CF_MODEL = os.environ.get("AZIM_IMG_MODEL") or "@cf/black-forest-labs/flux-2-klein-4b"
@@ -2072,13 +2102,17 @@ _STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0}
 
 
 def cf_image(model, prompt, path, seed=None, refs=None, size=None):
-    """One Cloudflare Workers AI picture. Returns "ok", "hard" (this way of asking is refused: do not repeat it) or
+    """One Cloudflare Workers AI picture. Returns "ok", "hard" (this way of asking is refused: do not repeat it),
+    "flagged" (the safety filter refused this wording: waiting does not help, a gentler wording may) or
     "soft" (a short problem: waiting may help)."""
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
     klein = "flux-2" in model
     w, h = size or (IMG_W, IMG_H)
+    base_prompt = prompt
+    last_flagged = False
     for attempt in range(1, 4):
+        last_flagged = False
         try:
             print(f"Image(CF {'klein' if klein else 'schnell'}{' +' + str(len(refs)) + ' ref' if refs else ''}): "
                   f"attempt={attempt}", flush=True)
@@ -2103,32 +2137,37 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
                     path.write_bytes(base64.b64decode(b64))
                     return "ok"
             print(f"  -> status={r.status_code} body={r.text[:200]!r}", flush=True)
-            low = r.text.lower()
-            if "daily free allocation" in low or "4006" in low:
+            codes, msg = _cf_errors(r)
+            if 4006 in codes or "daily free allocation" in msg:
                 raise ImageServiceUnavailable("the daily free quota of Cloudflare Workers AI is finished")
             if r.status_code in (401, 403):
                 raise ImageServiceUnavailable("Cloudflare refused the key (CF_API_TOKEN / CF_ACCOUNT_ID are wrong)")
-            if "3030" in low or "nsfw" in low or "flagged" in low:       # false alarm of the safety filter: other seed + wording
+            if 3030 in codes or "flagged" in msg or "nsfw" in msg:       # false alarm of the safety filter
+                last_flagged = True
                 seed = (seed or 0) + 7
-                prompt = "Fully clothed people, modest, family-friendly children's storybook picture. " + prompt
+                prompt = SAFE_PREFIX + base_prompt                        # other seed + gentler wording (not stacked)
                 continue
             if r.status_code == 429:
                 time.sleep(30)
                 continue
-            if r.status_code in (400, 404, 405, 415, 422, 500) or "5006" in low or "7000" in low:
+            if r.status_code in (400, 404, 405, 415, 422, 500) or 5006 in codes or 7000 in codes:
                 return "hard"
         except ImageServiceUnavailable:
             raise
         except Exception as e:  # noqa: BLE001
             print(f"  -> error: {e}", flush=True)
         time.sleep(8 * attempt)
+    if last_flagged:
+        return "flagged"
     return "soft"
 
 
-def make_image(build, path, seed, scenes_left, fix=""):
+def make_image(build, path, seed, scenes_left, fix="", safe_build=None):
     """build(fix, use_refs) -> (prompt, [reference files]). First FLUX.2 klein with the references, then klein without
-    them, then the old square model. If Cloudflare still fails, wait (2 and 5 minutes) and try again; if it still
-    fails the run stops quietly (nothing is posted with a bad picture)."""
+    them, then the old square model. If Cloudflare has a short problem, wait (2 and 5 minutes) and try again.
+    If the SAFETY FILTER refuses the picture, waiting is useless: gentler wordings are tried (safe_build level 1, then
+    level 2 = a quiet scene without people), and if even that fails ImagePromptRefused is raised (the caller reuses the
+    previous picture). A refused picture NEVER stops the whole video."""
     for wait in (0, 120, 300):
         if wait:
             if time.time() - START_TIME + wait + (scenes_left + 1) * 15 > JOB_BUDGET:
@@ -2141,14 +2180,19 @@ def make_image(build, path, seed, scenes_left, fix=""):
                 plans.append((CF_MODEL, True))
             plans.append((CF_MODEL, False))
         plans.append((CF_FALLBACK_MODEL, False))
+        tried = flagged = 0
         for model, use_refs in plans:
             prompt, refs = build(fix, use_refs, KLEIN_WORDS if model == CF_MODEL else PROMPT_WORDS)
             if use_refs and not refs:
                 continue                                  # nobody in this picture has a reference: same as no refs
             res = cf_image(model, prompt, path, seed, refs if use_refs else None)
+            tried += 1
             if res == "ok":
                 time.sleep(1)
                 return
+            if res == "flagged":
+                flagged += 1
+                continue
             if res == "hard":
                 if use_refs:
                     _STATE["refs_fail"] += 1
@@ -2160,7 +2204,21 @@ def make_image(build, path, seed, scenes_left, fix=""):
                     if _STATE["klein_fail"] >= 3:
                         _STATE["klein_ok"] = False
                         print("WARNING: FLUX.2 klein is refused: using the old square model from now on.", flush=True)
-    raise ImageServiceUnavailable("Cloudflare could not draw a picture after waiting")
+        if tried and flagged == tried:
+            print("Safety filter refused this picture in every way: trying gentler wordings (no waiting).", flush=True)
+            break
+    if safe_build:
+        for level in (1, 2):
+            for model in (CF_MODEL, CF_FALLBACK_MODEL):
+                if model == CF_MODEL and not _STATE["klein_ok"]:
+                    continue
+                lim = KLEIN_WORDS if model == CF_MODEL else PROMPT_WORDS
+                print(f"Gentler wording, level {level} ({'klein' if model == CF_MODEL else 'schnell'}).", flush=True)
+                res = cf_image(model, safe_build(level, lim), path, seed + 13 * level, None)
+                if res == "ok":
+                    time.sleep(1)
+                    return
+    raise ImagePromptRefused("the safety filter refused this picture in every wording")
 
 
 def make_cast_refs(chars, era, book, seed):
@@ -2763,8 +2821,20 @@ def main():
                 rn = [n for n in names if n in cast_refs] if use_refs else []
                 return (build_prompt(FIXED_STYLE, chars, sc, fix, ref_names=rn, limit=limit), [cast_refs[n] for n in rn])
 
+            def safe_build(level, limit=None, sc=sc):
+                """Gentler wordings for a picture the safety filter refused (positive words only)."""
+                era = str(sc.get("era_en") or "").split(". Clothing of that time")[0]
+                if level == 1:       # same event, no reference faces, calm mood
+                    lim = max((limit or PROMPT_WORDS) - 20, 60)
+                    return SAFE_PREFIX + build_prompt(FIXED_STYLE, script.get("characters", []), sc, "",
+                                                      ref_names=[], limit=lim)
+                art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
+                return (f"Hand-drawn storybook illustration of a calm, quiet place in a peaceful moment. "
+                        f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
+                        f"soft warm light, {CLEAN_SHORT}")
+
             try:
-                make_image(build, img, seed + i * 10 + j, n_pics - done_pics - 1)
+                make_image(build, img, seed + i * 10 + j, n_pics - done_pics - 1, safe_build=safe_build)
             except ImageServiceUnavailable:
                 raise
             except Exception as e:  # noqa: BLE001
