@@ -2095,9 +2095,10 @@ SAFE_PREFIX = ("Gentle peaceful children's storybook illustration, calm friendly
 # really 9:16 and nothing has to be cut off) and up to 4 reference pictures (the same face in every picture).
 CF_MODEL = os.environ.get("AZIM_IMG_MODEL") or "@cf/black-forest-labs/flux-2-klein-4b"
 CF_FALLBACK_MODEL = "@cf/black-forest-labs/flux-1-schnell"       # square only: the video builder fits it without cutting
-IMG_W = int(os.environ.get("AZIM_IMG_W") or 576)
-IMG_H = int(os.environ.get("AZIM_IMG_H") or 1024)
-REF_SIDE = 512            # reference pictures must be at most 512 px
+IMG_W = int(os.environ.get("AZIM_IMG_W") or 432)      # was 576x1024: about 44% fewer free neurons per picture
+IMG_H = int(os.environ.get("AZIM_IMG_H") or 768)
+REF_SIDE = 384            # reference pictures must be at most 512 px (smaller = cheaper)
+MAX_REFS = int(os.environ.get("AZIM_MAX_REFS") or 2)   # reference pictures sent with ONE picture (each one costs like a picture)
 _STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0}
 
 
@@ -2270,7 +2271,7 @@ def make_cast_refs(chars, era, book, seed):
             refs[c["name"]] = small
             continue
         try:
-            if cf_image(CF_MODEL, prompt, raw, cseed, None, size=(512, 640)) != "ok":
+            if cf_image(CF_MODEL, prompt, raw, cseed, None, size=(384, 480)) != "ok":
                 continue
             sh(["ffmpeg", "-y", "-loglevel", "error", "-i", raw.name, "-vf", f"scale=-2:{REF_SIDE}", small.name], cwd=WORK)
             refs[c["name"]] = small
@@ -2283,6 +2284,7 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 1)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
@@ -2373,7 +2375,7 @@ def check_and_fix_images(jobs):
                 print(f"Image check: picture {k + 1} score {score}/10 - {missing}", flush=True)
                 low.append((k, missing))
         print(f"Image check round {rnd + 1}: {len(results)} checked, {len(low)} to draw again.", flush=True)
-        if rnd == 2 or not low:
+        if rnd >= REDRAW_ROUNDS or not low:
             break
         todo = []
         try:
@@ -2854,7 +2856,7 @@ def main():
             def build(fix="", use_refs=True, limit=None, sc=sc):
                 chars = script.get("characters", [])
                 names = [n for n in (sc.get("characters_present") or [])][:MAX_PEOPLE]
-                rn = [n for n in names if n in cast_refs] if use_refs else []
+                rn = [n for n in names if n in cast_refs][:MAX_REFS] if use_refs else []
                 return (build_prompt(FIXED_STYLE, chars, sc, fix, ref_names=rn, limit=limit), [cast_refs[n] for n in rn])
 
             def safe_build(level, limit=None, sc=sc):
