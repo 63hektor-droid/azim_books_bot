@@ -3,8 +3,9 @@ name: azim-book-video
 on:
   workflow_dispatch:
   schedule:
-    # Iran time (UTC+3:30): 12:00 and 20:00 (two videos a day, both with the Gemini voice)
-    - cron: "30 8,16 * * *"
+    # Iran time (UTC+3:30): the video is POSTED at 08:00 and 15:00. The run starts one hour earlier
+    # (07:00 and 14:00 Iran = 03:30 and 10:30 UTC); the bot holds the finished video until the exact hour.
+    - cron: "30 3,10 * * *"
 
 permissions:
   contents: write
