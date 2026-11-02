@@ -2392,7 +2392,24 @@ def check_and_fix_images(jobs):
         results = {}
         for a in range(0, len(todo), CHECK_BATCH):
             grp = todo[a:a + CHECK_BATCH]
-            res = check_images([jobs[k] for k in grp])
+            try:
+                res = check_images([jobs[k] for k in grp])
+            except GeminiBlocked as e:
+                # one picture in the group was refused by Gemini: check them one by one, keep the refused ones as they are
+                print(f"Image check blocked for a group ({e}); checking pictures one by one.", flush=True)
+                res = []
+                for k in grp:
+                    try:
+                        one = check_images([jobs[k]])
+                        res.append(one[0] if one else None)
+                    except GeminiBlocked:
+                        print(f"Image check: picture {k + 1} refused by Gemini, kept as it is.", flush=True)
+                        res.append(None)
+                    except GeminiQuotaExhausted:
+                        res.append(None)
+            except GeminiQuotaExhausted as e:
+                print(f"Image check stopped ({e}): the pictures are kept as they are.", flush=True)
+                res = None
             if res is None:
                 continue
             for k, r in zip(grp, res):
