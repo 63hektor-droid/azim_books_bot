@@ -3,8 +3,8 @@ name: azim-book-video
 on:
   workflow_dispatch:
   schedule:
-    # Iran time (UTC+3:30): 12:00 and 20:00 (two videos a day, both with the Gemini voice)
-    - cron: "30 8,16 * * *"
+    # Iran time (UTC+3:30): 04:00, 12:00 and 20:00 (three videos a day; the first two use the Gemini voice, the third uses Pocket TTS)
+    - cron: "30 0,8,16 * * *"
 
 permissions:
   contents: write
