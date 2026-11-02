@@ -2146,6 +2146,8 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
                 last_flagged = True
                 seed = (seed or 0) + 7
                 prompt = SAFE_PREFIX + base_prompt                        # other seed + gentler wording (not stacked)
+                if attempt >= 2:                                          # every try may cost free neurons: stop here
+                    return "flagged"
                 continue
             if r.status_code == 429:
                 time.sleep(30)
@@ -2221,6 +2223,33 @@ def make_image(build, path, seed, scenes_left, fix="", safe_build=None):
     raise ImagePromptRefused("the safety filter refused this picture in every wording")
 
 
+SAVE_DIR = ROOT / "azim_saved_pics"      # pictures already drawn for the book that is still unfinished (kept in git)
+
+
+def saved_pics_dir(book):
+    """The folder with the pictures already drawn for THIS book (made in an earlier run that stopped because the free
+    daily Cloudflare allowance ended). Pictures of another book are deleted. Nothing is drawn (and paid for) twice."""
+    key = norm(book["title_en"])
+    marker = SAVE_DIR / "azim_book.txt"
+    try:
+        if not (marker.exists() and marker.read_text(encoding="utf-8").strip() == key):
+            if SAVE_DIR.exists():
+                shutil.rmtree(SAVE_DIR, ignore_errors=True)
+            SAVE_DIR.mkdir(parents=True, exist_ok=True)
+            marker.write_text(key, encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        print(f"Saved pictures folder not usable ({e}).", flush=True)
+    return SAVE_DIR
+
+
+def keep_saved(src_file, name):
+    try:
+        if SAVE_DIR.exists():
+            shutil.copy(src_file, SAVE_DIR / name)
+    except Exception as e:  # noqa: BLE001
+        print(f"Picture could not be saved for the next run ({e}).", flush=True)
+
+
 def make_cast_refs(chars, era, book, seed):
     """ONE reference picture per important character (drawn once per video, then sent with every picture of that
     character so the face, hair and clothes stay the same). Returns {name: file}. Without klein: no references."""
@@ -2235,11 +2264,17 @@ def make_cast_refs(chars, era, book, seed):
                   f"Sharp focus, crisp clean details.")
         raw, small = WORK / f"refraw_{k}.jpg", WORK / f"ref_{k}.jpg"
         cseed = zlib.crc32((book["title_en"] + c["name"]).encode("utf-8")) % 1000000
+        saved = SAVE_DIR / f"ref_{k}.jpg"
+        if saved.exists():                                # drawn in an earlier run: not drawn (and paid for) again
+            shutil.copy(saved, small)
+            refs[c["name"]] = small
+            continue
         try:
             if cf_image(CF_MODEL, prompt, raw, cseed, None, size=(512, 640)) != "ok":
                 continue
             sh(["ffmpeg", "-y", "-loglevel", "error", "-i", raw.name, "-vf", f"scale=-2:{REF_SIDE}", small.name], cwd=WORK)
             refs[c["name"]] = small
+            keep_saved(small, f"ref_{k}.jpg")
         except ImageServiceUnavailable:
             raise
         except Exception as e:  # noqa: BLE001
@@ -2793,6 +2828,7 @@ def main():
     durs = make_voice(scenes, kind, script.get("names") or {})
 
     seed = int(time.time()) % 100000
+    saved_pics_dir(book)
     cast_refs = make_cast_refs(script.get("characters", []), script.get("era_en", ""), book, seed)
     n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
     done_pics = 0
@@ -2833,8 +2869,14 @@ def main():
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
+            saved_img = SAVE_DIR / img.name
             try:
-                make_image(build, img, seed + i * 10 + j, n_pics - done_pics - 1, safe_build=safe_build)
+                if saved_img.exists():
+                    shutil.copy(saved_img, img)          # drawn in an earlier run: not drawn (and paid for) again
+                    print(f"Picture {i}.{j}: taken from the earlier run.", flush=True)
+                else:
+                    make_image(build, img, seed + i * 10 + j, n_pics - done_pics - 1, safe_build=safe_build)
+                    keep_saved(img, img.name)
             except ImageServiceUnavailable:
                 raise
             except Exception as e:  # noqa: BLE001
@@ -2863,6 +2905,7 @@ def main():
                    "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
     save_json(POSTED_FILE, posted)
     PENDING_FILE.unlink(missing_ok=True)
+    shutil.rmtree(SAVE_DIR, ignore_errors=True)
     shutil.rmtree(WORK, ignore_errors=True)
     print("Done.")
 
