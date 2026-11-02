@@ -11,7 +11,7 @@ import sys
 import time
 import unicodedata
 import urllib.parse
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -132,6 +132,9 @@ class GeminiQuotaExhausted(RuntimeError):
 
 CALLS = {"gemini": 0, "voice": 0, "cloudflare": 0}      # how many calls this run made (printed at the end)
 CALLS_BY_MODEL = {}
+# Cloudflare accounting of THIS run (to compare with the dashboard "Neurons used today"): picture calls that
+# worked / failed and the neurons they should cost by the official price list (an ESTIMATE, not the real bill).
+CF_STATS = {"ok": 0, "fail": 0, "est_neurons": 0.0, "by_status": {}}
 
 
 @atexit.register
@@ -139,6 +142,11 @@ def print_call_counts():
     per = ", ".join(f"{m}: {n}" for m, n in sorted(CALLS_BY_MODEL.items()))
     print(f"CALLS THIS RUN: Gemini text/picture/audio {CALLS['gemini']} ({per or '-'}), "
           f"Gemini voice {CALLS['voice']}, Cloudflare pictures {CALLS['cloudflare']}", flush=True)
+    if CALLS["cloudflare"]:
+        print(f"CLOUDFLARE THIS RUN: {CF_STATS['ok']} pictures drawn, {CF_STATS['fail']} calls failed "
+              f"(by status: {CF_STATS['by_status']}); estimated neurons by the official price list: "
+              f"{CF_STATS['est_neurons']:.0f}. Compare this number with 'Neurons used today' in the Cloudflare "
+              f"dashboard (Workers AI) after this run.", flush=True)
 
 
 DEAD_MODELS = set()      # models whose daily quota is finished (not tried again in this run)
@@ -2102,6 +2110,30 @@ MAX_REFS = int(os.environ.get("AZIM_MAX_REFS") or 2)   # reference pictures sent
 _STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0}
 
 
+def _cf_log(r, klein, w, h, n_refs, secs):
+    """One line for every Cloudflare picture call: status, time, size, estimated neurons (official price list:
+    FLUX.2 klein 26.05 per output 512x512 tile + 5.37 per reference tile; FLUX.1 schnell 4.8 per tile + 9.6 per
+    step, 4 steps). A failed call also prints the answer headers (rate-limit / retry information)."""
+    if klein:
+        est = math.ceil(w / 512) * math.ceil(h / 512) * 26.05 + n_refs * 5.37
+    else:
+        est = 4 * 4.8 + 4 * 9.6
+    ok = r.status_code == 200
+    CF_STATS["by_status"][r.status_code] = CF_STATS["by_status"].get(r.status_code, 0) + 1
+    if ok:
+        CF_STATS["ok"] += 1
+        CF_STATS["est_neurons"] += est
+    else:
+        CF_STATS["fail"] += 1
+    print(f"  CF call #{CALLS['cloudflare']}: status={r.status_code} {secs:.1f}s size={w}x{h} refs={n_refs} "
+          f"est_neurons={est:.0f} | run total: {CF_STATS['ok']} ok, {CF_STATS['fail']} failed, "
+          f"~{CF_STATS['est_neurons']:.0f} neurons", flush=True)
+    if not ok:
+        hdr = {k: v for k, v in r.headers.items()
+               if k.lower() not in ("set-cookie", "server", "date", "connection", "vary")}
+        print(f"  CF answer headers: {str(hdr)[:700]}", flush=True)
+
+
 def cf_image(model, prompt, path, seed=None, refs=None, size=None):
     """One Cloudflare Workers AI picture. Returns "ok", "hard" (this way of asking is refused: do not repeat it),
     "flagged" (the safety filter refused this wording: waiting does not help, a gentler wording may) or
@@ -2118,6 +2150,7 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
             print(f"Image(CF {'klein' if klein else 'schnell'}{' +' + str(len(refs)) + ' ref' if refs else ''}): "
                   f"attempt={attempt}", flush=True)
             CALLS["cloudflare"] += 1
+            t_call = time.time()
             if klein:           # multipart form (also for a prompt alone), references as input_image_0..3
                 files = {"prompt": (None, prompt[:1900]), "width": (None, str(w)), "height": (None, str(h))}
                 if seed is not None:
@@ -2128,6 +2161,7 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
             else:               # schnell accepts ONLY prompt and steps (a square 1024 picture)
                 r = requests.post(url, headers={**headers, "Content-Type": "application/json"},
                                   json={"prompt": prompt[:1900], "steps": 4}, timeout=120)
+            _cf_log(r, klein, w, h, len(refs or []), time.time() - t_call)
             if r.status_code == 200:
                 ctype = r.headers.get("content-type", "")
                 if ctype.startswith("image"):
@@ -2137,7 +2171,7 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
                 if b64:
                     path.write_bytes(base64.b64decode(b64))
                     return "ok"
-            print(f"  -> status={r.status_code} body={r.text[:200]!r}", flush=True)
+            print(f"  -> status={r.status_code} body={r.text[:600]!r}", flush=True)
             codes, msg = _cf_errors(r)
             if 4006 in codes or "daily free allocation" in msg:
                 raise ImageServiceUnavailable("the daily free quota of Cloudflare Workers AI is finished")
@@ -2713,6 +2747,41 @@ def build_video(scenes, durs, out_path, names=None):
 
 
 # ---------------------------------------------------------------- telegram
+IRAN_TZ = timezone(timedelta(hours=3, minutes=30))        # Iran has no daylight saving time any more
+PUBLISH_HOURS = (os.environ.get("AZIM_PUBLISH_HOURS") or "8,15").strip()     # Iran hours; "off" = post at once
+PUBLISH_MAX_WAIT = int(os.environ.get("AZIM_PUBLISH_MAX_WAIT") or 75) * 60   # never wait longer than this
+
+
+def wait_for_publish_time():
+    """The finished video waits until the next publishing hour (Iran time, default 08:00 and 15:00) if that hour
+    is at most PUBLISH_MAX_WAIT seconds away. A video that is already late, or a manual run far from a publishing
+    hour, is posted at once. The wait never goes beyond the job's time budget."""
+    if PUBLISH_HOURS.lower() in ("off", "0", "no"):
+        return
+    try:
+        hours = sorted({int(x) for x in PUBLISH_HOURS.split(",") if x.strip()})
+    except ValueError:
+        print(f"AZIM_PUBLISH_HOURS={PUBLISH_HOURS!r} is not understood: posting at once.", flush=True)
+        return
+    now = datetime.now(IRAN_TZ)
+    slots = [datetime(d.year, d.month, d.day, h, 0, tzinfo=IRAN_TZ)
+             for d in (now.date(), now.date() + timedelta(days=1)) for h in hours]
+    nxt = [t for t in slots if t > now]
+    if not nxt:
+        return
+    wait = (min(nxt) - now).total_seconds()
+    left = JOB_BUDGET - (time.time() - START_TIME) - 600
+    if wait > PUBLISH_MAX_WAIT or wait > left:
+        print(f"Iran time is {now:%H:%M}: the next publishing hour is {min(nxt):%H:%M} ({wait / 60:.0f} min away): "
+              f"posting now.", flush=True)
+        return
+    print(f"Video is ready at {now:%H:%M} Iran time: waiting {wait / 60:.0f} min and posting at "
+          f"{min(nxt):%H:%M}.", flush=True)
+    end = time.time() + wait
+    while time.time() < end:
+        time.sleep(min(60, max(end - time.time(), 0)))
+
+
 def send_video(path, caption):
     with open(path, "rb") as f:
         r = requests.post(
@@ -2901,6 +2970,7 @@ def main():
 
     caption = (f"{book['title_fa']}\n{book['author_fa']}\n\n"
                f"{src.get('credit') or 'منبع خلاصه: ویکی‌پدیا (CC BY-SA)'}\n{src['url']}")
+    wait_for_publish_time()
     send_video(final, caption)
 
     posted.append({"title_en": book["title_en"], "title_fa": book["title_fa"],
