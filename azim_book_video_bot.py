@@ -61,7 +61,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 3        # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 4        # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -548,6 +548,42 @@ def char_tag(c):
     return t or " ".join(str(c.get("look_en") or "").split()[:26])
 
 
+PLACES_SPEC = """- "locations": the 3 to 7 places where the story really happens, most important first, each {{"id": "short_snake_case",
+  "name_en": "...", "detail_en": "35 to 50 English words: the concrete look of this place in that era: kind of building
+  or landscape, materials, colors, furniture and objects, plants, typical light and weather, what is seen far away.
+  Geographically and historically correct for THIS story; take it from the SOURCE TEXT, and where the source is silent
+  choose what surely fits the place and the era (never modern things in an old story)."}}"""
+
+
+def clean_locations(raw):
+    out = []
+    for x in raw or []:
+        if isinstance(x, dict) and str(x.get("id") or "").strip() and str(x.get("detail_en") or "").strip():
+            out.append({"id": re.sub(r"[^a-z0-9_]+", "_", str(x["id"]).strip().lower()).strip("_") or f"place_{len(out)}",
+                        "name_en": " ".join(str(x.get("name_en") or x["id"]).split()),
+                        "detail_en": " ".join(str(x["detail_en"]).split())})
+    return out[:7]
+
+
+def design_places(book, src, era):
+    """Only for an OLD saved script that has no places yet (one cheap Gemini call)."""
+    prompt = f"""You are a film production designer. Design the places of the novel "{book['title_en']}" by {book['author_en']}
+(era and place: {era}) for a picture video.
+
+SOURCE TEXT:
+{src['text']}
+
+Return JSON with exactly this key:
+{PLACES_SPEC}"""
+    try:
+        return clean_locations(gemini_json(prompt, minutes=5, models=WRITE_MODELS).get("locations"))
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Place design skipped:", e, flush=True)
+        return []
+
+
 def design_cast(book, src):
     """Step B0: BEFORE the script is written, design the era and ONE fixed look sheet for every important character
     (ages that fit the family, very different faces and bodies, different clothes, true to the era)."""
@@ -561,13 +597,15 @@ SOURCE TEXT:
 {src['text']}
 
 Return JSON with exactly these keys:
+{PLACES_SPEC}
 - "era_en": the time and place of the story in one short English phrase (for example "provincial Russia, 1860s").
 - "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
   (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
 - "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "..."}}.
-  "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 45 to 65 English words in
-  this fixed order: gender and exact age in years; body build; face shape; skin tone; eye color; hair (color, length,
-  style); facial hair; ONE distinctive feature; the usual outfit with colors. It is pasted into EVERY picture of this
+  "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 55 to 75 English words in
+  this fixed order: gender and exact age in years; body build; face shape and jawline; skin tone; eyes (color and shape);
+  eyebrows; nose; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
+  freckles, glasses...); the usual outfit with colors. It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
@@ -589,6 +627,7 @@ Rules:
 """ + diversity_text() + "\n"
     try:
         d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
+        locations = clean_locations(d.get("locations"))
         era = " ".join(str(d.get("era_en") or "").split())
         costume = " ".join(str(d.get("costume_en") or "").split())
         chars = []
@@ -599,7 +638,8 @@ Rules:
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
-        return {"era_en": era + (f". Clothing of that time: {costume}" if costume else ""), "characters": chars[:6]}
+        return {"era_en": era + (f". Clothing of that time: {costume}" if costume else ""), "characters": chars[:6],
+                "locations": locations}
     except (GeminiBlocked, GeminiQuotaExhausted):
         raise
     except Exception as e:  # noqa: BLE001
@@ -704,6 +744,7 @@ Rules for the visuals:
         if cast:                                          # the fixed, designed cast replaces the robot's own sheets
             data["characters"] = cast["characters"]
             data["era_en"] = cast["era_en"]
+            data["locations"] = cast.get("locations") or []
             okn = {c["name"] for c in cast["characters"]}
             for s in data.get("scenes") or []:
                 if isinstance(s, dict):
@@ -728,7 +769,7 @@ Rules for the visuals:
             if CAST_SCENE:
                 data = add_cast_scene(data)
             data = sanitize_narration(data, book)
-            return align_visuals(data, book)
+            return align_visuals(data, book, src)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
 
@@ -1074,15 +1115,17 @@ def make_beats(text):
     return beats or [text]
 
 
-SHOTS = ("wide establishing shot", "wide shot with full bodies", "medium-wide shot from head to knees",
-         "high-angle wide shot", "eye-level wide shot through a doorway or window", "wide shot from behind the characters",
-         "low wide shot with the sky or ceiling", "wide shot with a strong foreground object")
-FRAMING = ("FRAMING (very important): the camera is FAR from the subject. Every person is completely inside the picture, "
-           "head and feet included, with empty space around him or her; nothing important touches or crosses the border "
-           "of the picture. Never a close-up, never a detail or macro shot, never a zoomed face.")
+SHOTS = ("medium-wide shot from head to knees", "full-body shot with the people large in the frame",
+         "medium shot from the waist up with the place clearly visible behind", "over-the-shoulder medium-wide shot",
+         "low-angle medium-wide shot", "high-angle medium-wide shot", "eye-level shot through a doorway or window",
+         "side-view medium-wide shot", "wide establishing shot with a detailed place (only when no named person is in it)")
+FRAMING = ("FRAMING (very important): a medium-wide shot, NOT far away and NOT a close-up. The named people are LARGE: "
+           "each one fills about half of the picture height, so the face is big enough to show clear eyes, nose and mouth. "
+           "The whole head and body of every person is inside the picture (nothing cut by the border). The rest of the "
+           "picture is a rich, detailed place. The lower fifth of the picture is only floor or ground (subtitles cover it).")
 POSE = ("POSE (very important): the people are INSIDE the scene and busy with the action of the sentence. They look at each "
-        "other, at the object of the action or away; they are seen from the side, from three quarters or from behind. "
-        "Nobody stands still facing the viewer and nobody looks into the camera.")
+        "other, at the object of the action or away; they are seen from the side, from three quarters or from behind, but "
+        "most of the time the face stays visible. Nobody stands still facing the viewer and nobody looks into the camera.")
 
 
 def _vwords(t):
@@ -1096,7 +1139,7 @@ def _too_similar(a, b):
     if a.get("shot") and a.get("shot") == b.get("shot"):
         return True
     wa, wb = _vwords(a["visual_en"]), _vwords(b["visual_en"])
-    return bool(wa and wb) and len(wa & wb) / len(wa | wb) > 0.45
+    return bool(wa and wb) and len(wa & wb) / len(wa | wb) > 0.6
 
 
 def diversify_visuals(vis, items, book):
@@ -1112,7 +1155,7 @@ def diversify_visuals(vis, items, book):
 below. Each one must still show exactly what its narration says, but with a DIFFERENT shot (choose from
 {json.dumps(SHOTS)}), a different part of the place or a different background detail, different light or time of day
 where the story allows, and different foreground objects than "previous_picture" and "next_picture".
-Keep the same characters and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 35 to 55 English words, start with the shot type. Always a wide or medium-wide picture: nobody cropped by the border, no close-ups.
+Keep the same characters, the SAME PLACE (its concrete details stay, only the viewpoint and the part of the place change) and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 60 to 85 English words, start with the shot type. Medium-wide pictures with large people: nobody cropped by the border, no extreme close-ups.
 Return JSON {{"visuals": [{{"i": 0, "shot": "...", "visual_en": "..."}}]}}
 Pictures: {json.dumps(jobs, ensure_ascii=False)}"""
     try:
@@ -1147,12 +1190,16 @@ def force_named_characters(present, narration, chars):
     return out[:MAX_PEOPLE]
 
 
-def align_visuals(data, book):
+def align_visuals(data, book, src=None):
     """Step D: write ONE picture for EVERY beat (about 2 sentences) of the FINAL narration (skipped if it fails).
-    Every picture shows the place, the light and the objects of ITS sentence, and neighbouring pictures change the
-    camera and the background even when the same character is in them."""
+    Every picture shows the REAL place of ITS moment of the story (taken from the source and from a fixed list of
+    places), with rich foreground / middle / background details, and the people in it are large enough for clear faces."""
     scenes = data["scenes"]
     chars = data.get("characters", [])
+    places = data.get("locations") or []
+    if not places and src:
+        places = design_places(book, src, data.get("era_en", ""))
+        data["locations"] = places
     items, ctx = [], []
     for i, s in enumerate(scenes):
         s.pop("beat_visuals", None)
@@ -1168,15 +1215,28 @@ def align_visuals(data, book):
                     "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", "")})
         for j, b in enumerate(s["beats"]):
             items.append({"i": len(items), "scene": i, "narration_fa": b})
-    prompt = f"""You are a film storyboard artist. Below are the FINAL Persian narration parts, in order, of a video
-that summarizes the book "{book['title_en']}" by {book['author_en']} (era: {data.get('era_en', '')}). While each part is
-read aloud (about 10 seconds), ONE picture is shown. For EACH part write the picture so that it illustrates the exact
-content of THAT part, so a viewer who sees only the picture understands what is being said at that moment.
+    for k, it in enumerate(items):                     # neighbours: pronouns ("he", "she") and the place continue from them
+        it["previous_part_fa"] = items[k - 1]["narration_fa"] if k else ""
+        it["next_part_fa"] = items[k + 1]["narration_fa"] if k + 1 < len(items) else ""
+    place_ids = [x["id"] for x in places]
+    source_block = f"\nSOURCE TEXT (the truth about who is where and when):\n{src['text']}\n" if src else ""
+    prompt = f"""You are a film storyboard artist and a production designer. Below are the FINAL Persian narration parts, in
+order, of a video that summarizes the book "{book['title_en']}" by {book['author_en']} (era and place: {data.get('era_en', '')}).
+While each part is read aloud (about 10 seconds), ONE vertical picture is shown. For EACH part write the picture so that
+it illustrates the exact content of THAT part: a viewer who sees only the picture understands what is being said and
+where it happens at that moment.
+{source_block}
+PLACES OF THE STORY (fixed, always drawn the same way): {json.dumps(places, ensure_ascii=False)}
 
-Return JSON: {{"visuals": [{{"i": 0, "characters_present": ["..."], "shot": "...", "event_en": "...", "roles": {{"Name": "..."}}, "visual_en": "..."}}, ...]}}
+Return JSON: {{"visuals": [{{"i": 0, "location": "...", "characters_present": ["..."], "shot": "...", "event_en": "...", "roles": {{"Name": "..."}}, "visual_en": "..."}}, ...]}}
 with exactly {len(items)} items, in the same order.
 
 Rules:
+- "location": the id of the place (from PLACES OF THE STORY: {json.dumps(place_ids)}) where THIS part really happens
+  according to the SOURCE TEXT and the story so far. If the sentence does not name the place, the story is still where the
+  previous part was (use "previous_part_fa" and the paragraph); it changes only when the story moves (a journey, a new
+  chapter, a flashback). Never pick a place only because it looks nice, never a generic place. If none of the listed
+  places fits, write "other" and describe the real place in "visual_en".
 - "event_en": ONE English sentence (6 to 14 words) with the central EVENT of this part, as a picture: who does or
   suffers what (for example "a woman is pulled out of the river by two fishermen"). This is the first thing a viewer must
   see. Take it from the sentence itself: what HAPPENS in the sentence (a death, a fight, a meeting, a departure, a
@@ -1187,24 +1247,25 @@ Rules:
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
   (caregiver and patient, parent and child, killer and victim, speaker and listener).
-- "visual_en": English, 35 to 55 words. It STARTS with the shot type, then the event of "event_en" with the people doing
-  it, then the PLACE of that sentence with its concrete details (room, street, ship, forest, court...), the time of day, the
-  light and the weather, and 3 or 4 specific objects of THAT sentence. Unnamed people in the background: what they wear and do.
+- "visual_en": English, 60 to 85 words. It STARTS with the shot type, then the event of "event_en" with the people doing it,
+  then the PLACE in three layers: (1) the foreground: 2 concrete objects of THIS moment; (2) the middle ground: the
+  architecture or landscape around the people with its materials, colors and 3 or 4 characteristic details copied from the
+  place description of the chosen location (furniture, windows, doors, trees, walls, floor, tools...); (3) the background:
+  what is far away, the sky, the weather. Then the time of day and the direction and color of the light. Unnamed people in
+  the background: what they wear and do. Everything belongs to the era of the story; nothing modern in an old story.
 - "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
 - {FRAMING}
 - {POSE}
-- PLACE AND SITUATION: the picture takes place exactly where the sentence (or the paragraph it belongs to) says it
-  happens. If the place is not named in the sentence, take it from the paragraph context; never invent a place or object
-  that contradicts the source, and never show anything that does not belong to the era of the story.
 - EVERY CHARACTER OF THE SENTENCE IS IN THE PICTURE: every character who is named in the part, or is meant by "he", "she",
-  "they", "his", "her" or "the two of them", is listed in "characters_present" (names exactly as in the characters list)
-  AND is doing something visible in the picture. Never leave a character out of the picture when the sentence is about
-  him or her. When the sentence names more than 3 characters, list the 3 most important and show the others as a small
-  crowd. Write only what the characters DO ("the boy sits alone on a bench"): their fixed look is added automatically,
-  so never write their faces, ages, bodies or clothes, and never write names or book titles in the picture description.
-- VARIETY: when several parts are about the SAME place or character, every picture changes the camera angle, the part of
-  the place, the light and the objects, but the event of its own sentence always stays the main thing.
-  For the closing wrap-up parts, show a symbolic scene of the book's central message.
+  "they", "his", "her" or "the two of them" (look at "previous_part_fa" to know who is meant), is listed in
+  "characters_present" (names exactly as in the characters list) AND is doing something visible in the picture. When the
+  sentence names more than 3 characters, list the 3 most important and show the others as a small crowd. Write only what
+  the characters DO ("the boy sits alone on a bench"): their fixed look is added automatically, so never write their
+  faces, ages, bodies or clothes, and never write names or book titles in the picture description.
+- VARIETY: when several parts are about the SAME place, the place stays the same (same walls, same objects, same
+  landscape) but every picture shows another part of it, another angle, other light and other foreground objects; the event
+  of its own sentence always stays the main thing. For the closing wrap-up parts, show a symbolic scene of the book's
+  central message in the main place of the story.
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
 - Do not write an art style (it is added separately).
 
@@ -1212,11 +1273,12 @@ Characters: {json.dumps(chars, ensure_ascii=False)}
 Paragraphs (context): {json.dumps(ctx, ensure_ascii=False)}
 Parts: {json.dumps(items, ensure_ascii=False)}"""
     try:
-        vis = gemini_json(prompt, minutes=8, models=WRITE_MODELS)["visuals"]
+        vis = gemini_json(prompt, minutes=10, models=WRITE_MODELS)["visuals"]
         if len(vis) == len(items) and all(isinstance(v.get("visual_en"), str) and v["visual_en"].strip()
                                           for v in vis):
             vis = [{"visual_en": v["visual_en"].strip(), "shot": str(v.get("shot") or "").strip().lower(),
                     "event_en": " ".join(str(v.get("event_en") or "").split()),
+                    "location": str(v.get("location") or "").strip(),
                     "characters_present": v.get("characters_present") or [],
                     "roles": v.get("roles") if isinstance(v.get("roles"), dict) else {}} for v in vis]
             vis = diversify_visuals(vis, items, book)
@@ -1228,11 +1290,13 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                     continue
                 n = len(s["beats"])
                 s["beat_visuals"] = [{"visual_en": v["visual_en"], "event_en": v.get("event_en", ""),
+                                      "location": v.get("location", ""),
                                       "characters_present": v["characters_present"],
                                       "roles": v.get("roles", {})} for v in vis[k:k + n]]
                 k += n
             data["visual_version"] = VISUAL_VERSION
-            print(f"Visuals aligned: {len(items)} pictures for {len(scenes)} paragraphs.", flush=True)
+            print(f"Visuals aligned: {len(items)} pictures for {len(scenes)} paragraphs, {len(places)} fixed places.",
+                  flush=True)
     except (GeminiBlocked, GeminiQuotaExhausted):
         raise
     except Exception as e:  # noqa: BLE001
@@ -1992,29 +2056,32 @@ def _wc(t):
     return len(str(t).split())
 
 
-KLEIN_WORDS = 200         # FLUX.2 klein reads a longer text than the old square model
+KLEIN_WORDS = 270         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 3          # at most this many named people in one picture (more of them blend their faces)
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
 
 
 def _trim_words(t, n):
     w = str(t).split()
-    return " ".join(w[:n])
+    return " ".join(w[:n]).rstrip(",;:- ")
 
 
 def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
-    """What happens (the event) comes first, then the people, then the era and the style. The whole text stays inside
-    PROMPT_WORDS words so that nothing important is cut away. When a person has a reference picture (ref_names, in the
-    order in which the pictures are sent), the prompt points to it by number: the model copies the face from there."""
+    """What happens (the event) and the detailed place come first, then the people, then the era and the style. The whole
+    text stays inside the word limit so that nothing important is cut away: when it is too long, the people's notes are
+    made shorter first, the picture description is cut only as the very last step. When a person has a reference picture
+    (ref_names, in the order in which the pictures are sent), the prompt points to it by number: the model copies the
+    face from there."""
     byname = {c.get("name"): c for c in chars if isinstance(c, dict) and c.get("name")}
     names = [n for n in (scene.get("characters_present") or []) if n in byname][:MAX_PEOPLE]
     present = [byname[n] for n in names]
     ref_idx = {n: k + 1 for k, n in enumerate(ref_names or [])}
     roles = scene.get("roles") if isinstance(scene.get("roles"), dict) else {}
+    rw = {"n": 10}                 # words of the "who does what" note of each person (made shorter if the text is too long)
 
     def role_txt(name):          # who does WHAT in this picture (so e.g. the mother and the daughter are never swapped)
         r = " ".join(str(roles.get(name) or "").split())
-        return f", who is {_trim_words(r, 12)}" if r else ""
+        return f", who is {_trim_words(r, rw['n'])}" if (r and rw["n"]) else ""
 
     era_full = str(scene.get("era_en") or "").strip()
     era_short = era_full.split(". Clothing of that time")[0]
@@ -2035,33 +2102,40 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
         if len(present) == 1:
             c = present[0]
             if ref_idx.get(c["name"]):
-                return (f"The person is exactly like reference image 1: same face, hair, age, body and clothes ({char_tag(c)}), "
-                        f"but NOT its pose or head direction{role_txt(c['name'])}. ")
+                return (f"The person is the SAME person as reference image 1: identical face, eyes, nose, mouth, hair, age, "
+                        f"body and clothes ({_trim_words(char_tag(c), 10)}), but NOT its pose or head direction"
+                        f"{role_txt(c['name'])}. ")
             return ("The person (always exactly this face, body and clothes): "
                     + (_trim_words(c["look_en"], 42) if full else char_tag(c)) + role_txt(c["name"]) + ". ")
         parts = []
         for k, c in enumerate(present):
             ri = ref_idx.get(c["name"])
-            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "") + f": {char_tag(c)}"
-                         + role_txt(c["name"]))
-        lead = ("Copy only the face, hair and clothes from each reference image, NOT its pose or head direction. "
+            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "")
+                         + f": {_trim_words(char_tag(c), 10) if ri else char_tag(c)}" + role_txt(c["name"]))
+        lead = ("Copy each person's face, hair and clothes from the reference image with his or her number, not its pose. "
                 if ref_idx else "")
-        return (lead + "All of them are in the picture, clearly different from each other: " + "; ".join(parts) + ". ")
+        return (lead + "Clearly different people: " + "; ".join(parts) + ". ")
 
     def compose(main_t, full, era, tail):
-        era_part = (f"Setting: {era}. Everything shown belongs to that time. " if era else "")
-        return (f"{head}Hand-drawn storybook illustration. {main_t} {people(full)}{era_part}Style: {art_s}. "
-                f"People are busy with the action, turned toward each other or the action, never looking at the camera. "
-                f"Vertical 9:16 composition, wide framing: every person completely inside the picture with empty space "
-                f"around, nothing cropped by the border, camera far away, {tail}")
+        era_part = f"Setting: {era}. " if era else ""
+        return (f"{head}{art_s}. {main_t} {people(full)}{era_part}"
+                f"Vertical 9:16 medium-wide shot: people large (about half of the picture height) with clear, carefully "
+                f"drawn faces (eyes, nose, mouth), whole heads and bodies inside the picture, busy with the action, never "
+                f"looking at the camera; detailed environment; the lower fifth only floor or ground; {tail}")
 
-    for full, era, tail in ((True, era_full, CLEAN), (True, era_short, CLEAN), (True, era_short, CLEAN_SHORT),
-                            (False, era_short, CLEAN_SHORT)):
+    for full, era, tail, n_role in ((True, era_full, CLEAN, 10), (True, era_short, CLEAN, 8),
+                                    (True, era_short, CLEAN_SHORT, 6), (False, era_short, CLEAN_SHORT, 0)):
+        rw["n"] = n_role
         out = compose(main, full, era, tail)
-        if _wc(out) <= limit:
+        if _wc(out) <= limit and len(out) <= 1850:
             return out
+    rw["n"] = 0
     spare = limit - _wc(compose("", False, era_short, CLEAN_SHORT))     # keep the people, shorten the picture
-    return compose(_trim_words(main, max(spare, 25)), False, era_short, CLEAN_SHORT)
+    out = compose(_trim_words(main, max(spare, 25)), False, era_short, CLEAN_SHORT)
+    while len(out) > 1850 and len(main.split()) > 25:                   # the character limit of the service
+        main = _trim_words(main, len(main.split()) - 4)
+        out = compose(main, False, era_short, CLEAN_SHORT)
+    return out
 
 
 class ImageServiceUnavailable(RuntimeError):
@@ -2103,11 +2177,17 @@ SAFE_PREFIX = ("Gentle peaceful children's storybook illustration, calm friendly
 # really 9:16 and nothing has to be cut off) and up to 4 reference pictures (the same face in every picture).
 CF_MODEL = os.environ.get("AZIM_IMG_MODEL") or "@cf/black-forest-labs/flux-2-klein-4b"
 CF_FALLBACK_MODEL = "@cf/black-forest-labs/flux-1-schnell"       # square only: the video builder fits it without cutting
-IMG_W = int(os.environ.get("AZIM_IMG_W") or 432)      # was 576x1024: about 44% fewer free neurons per picture
-IMG_H = int(os.environ.get("AZIM_IMG_H") or 768)
-REF_SIDE = 384            # reference pictures must be at most 512 px (smaller = cheaper)
-MAX_REFS = int(os.environ.get("AZIM_MAX_REFS") or 2)   # reference pictures sent with ONE picture (each one costs like a picture)
-_STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0}
+IMG_W = int(os.environ.get("AZIM_IMG_W") or 512)      # 512x912 costs the SAME free neurons as 432x768 (2 tiles of 512x512) but has 40% more pixels
+IMG_H = int(os.environ.get("AZIM_IMG_H") or 912)
+SAFE_SIZE = (432, 768)    # the size that already worked on Cloudflare: used if 512x912 is refused
+REF_SIDE = 512            # reference pictures must be at most 512 px (one tile = the same price as 384 px)
+MAX_REFS = int(os.environ.get("AZIM_MAX_REFS") or 3)   # reference pictures sent with ONE picture (each one costs like a picture)
+_STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0, "size_ok": True, "scene_ok": False}
+CAST_REFS = {}            # {character name: reference picture file}, filled in main() (the image check looks at them too)
+
+
+def img_size():
+    return (IMG_W, IMG_H) if _STATE["size_ok"] else SAFE_SIZE
 
 
 def _cf_log(r, klein, w, h, n_refs, secs):
@@ -2141,7 +2221,7 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
     klein = "flux-2" in model
-    w, h = size or (IMG_W, IMG_H)
+    w, h = size or img_size()
     base_prompt = prompt
     last_flagged = False
     for attempt in range(1, 4):
@@ -2223,8 +2303,16 @@ def make_image(build, path, seed, scenes_left, fix="", safe_build=None):
             if use_refs and not refs:
                 continue                                  # nobody in this picture has a reference: same as no refs
             res = cf_image(model, prompt, path, seed, refs if use_refs else None)
+            if (res == "hard" and model == CF_MODEL and _STATE["size_ok"] and not _STATE["scene_ok"]
+                    and img_size() != SAFE_SIZE):
+                _STATE["size_ok"] = False
+                print(f"WARNING: the size {IMG_W}x{IMG_H} was refused: using {SAFE_SIZE[0]}x{SAFE_SIZE[1]} instead.",
+                      flush=True)
+                res = cf_image(model, prompt, path, seed, refs if use_refs else None)
             tried += 1
             if res == "ok":
+                if model == CF_MODEL:
+                    _STATE["scene_ok"] = True
                 time.sleep(1)
                 return
             if res == "flagged":
@@ -2264,7 +2352,7 @@ SAVE_DIR = ROOT / "azim_saved_pics"      # pictures already drawn for the book t
 def saved_pics_dir(book):
     """The folder with the pictures already drawn for THIS book (made in an earlier run that stopped because the free
     daily Cloudflare allowance ended). Pictures of another book are deleted. Nothing is drawn (and paid for) twice."""
-    key = norm(book["title_en"])
+    key = norm(book["title_en"]) + f"|v{VISUAL_VERSION}|{IMG_W}x{IMG_H}"
     marker = SAVE_DIR / "azim_book.txt"
     try:
         if not (marker.exists() and marker.read_text(encoding="utf-8").strip() == key):
@@ -2285,6 +2373,71 @@ def keep_saved(src_file, name):
         print(f"Picture could not be saved for the next run ({e}).", flush=True)
 
 
+def _ref_prompt(c, era_short, extra=""):
+    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 75)}. From the head down to the "
+            f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
+            f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
+            f"background, nothing else. {extra}Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. "
+            f"Sharp focus, crisp clean details.")
+
+
+def _draw_ref(c, k, prompt, cseed):
+    raw, small = WORK / f"refraw_{k}.jpg", WORK / f"ref_{k}.jpg"
+    if cf_image(CF_MODEL, prompt, raw, cseed, None, size=(512, 512)) != "ok":
+        return None
+    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", raw.name, "-vf", f"scale=-2:{REF_SIDE}", small.name], cwd=WORK)
+    keep_saved(small, f"ref_{k}.jpg")
+    return small
+
+
+def check_cast_refs(chars, refs, index, era_short):
+    """ONE Gemini call looks at all reference faces: a face that is distorted, does not fit its look sheet or looks like
+    another character is drawn again (once). Every picture of the video copies these faces, so they must be good."""
+    if not (IMAGE_CHECK and refs):
+        return
+    names = list(refs)
+    by_name = {c["name"]: c for c in chars if isinstance(c, dict) and c.get("name")}
+    blocks = [{"n": k, "name": n, "look_sheet": by_name.get(n, {}).get("look_en", "")} for k, n in enumerate(names, 1)]
+    prompt = f"""You check character reference portraits for an illustrated video. The images above are labeled IMAGE 1 to
+IMAGE {len(names)}. Items: {json.dumps(blocks, ensure_ascii=False)}
+For EACH image answer: "ok": true only if (a) the face is drawn cleanly and naturally (two eyes, one nose, one mouth,
+natural proportions, nothing melted, doubled or cut off), (b) gender, age, hair, build and clothes fit the look sheet,
+(c) the whole head is inside the picture, (d) this person looks clearly DIFFERENT from every other image (face shape, hair,
+age, clothes), (e) no text or letters. Otherwise "ok": false and "fix_en": what the new portrait must clearly show, in
+positive words, at most 25 words.
+Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}]}} with one item per image."""
+    try:
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS, images=[refs[n].read_bytes() for n in names])
+        time.sleep(3)
+    except Exception as e:  # noqa: BLE001
+        print("Reference face check skipped:", e, flush=True)
+        return
+    bad = []
+    for c in out.get("checks") or []:
+        try:
+            k = int(c.get("n"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= k <= len(names) and c.get("ok") is False:
+            bad.append((names[k - 1], " ".join(str(c.get("fix_en") or "").split())))
+    print(f"Reference face check: {len(names)} checked, {len(bad)} to draw again.", flush=True)
+    for n, fix in bad:
+        c = by_name.get(n)
+        k = index.get(n)
+        if not c or k is None:
+            continue
+        try:
+            cseed = zlib.crc32(("again" + n).encode("utf-8")) % 1000000
+            new = _draw_ref(c, k, _ref_prompt(c, era_short, f"The portrait must clearly show: {fix}. " if fix else ""),
+                            cseed)
+            if new:
+                refs[n] = new
+        except ImageServiceUnavailable:
+            raise
+        except Exception as e:  # noqa: BLE001
+            print(f"Reference picture of {n} not redrawn: {e}", flush=True)
+
+
 def make_cast_refs(chars, era, book, seed):
     """ONE reference picture per important character (drawn once per video, then sent with every picture of that
     character so the face, hair and clothes stay the same). Returns {name: file}. Without klein: no references."""
@@ -2292,28 +2445,30 @@ def make_cast_refs(chars, era, book, seed):
     if not (_STATE["klein_ok"] and "flux-2" in CF_MODEL):
         return refs
     era_short = str(era or "").split(". Clothing of that time")[0]
+    index = {}
     for k, c in enumerate([x for x in chars if isinstance(x, dict) and x.get("name") and x.get("look_en")][:6]):
-        prompt = (f"Hand-drawn storybook character reference picture. {_trim_words(c['look_en'], 60)}. Waist-up, "
-                  f"facing the viewer, calm neutral expression, the whole head and both shoulders inside the picture, "
-                  f"plain soft light-gray background, nothing else. Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. "
-                  f"Sharp focus, crisp clean details.")
-        raw, small = WORK / f"refraw_{k}.jpg", WORK / f"ref_{k}.jpg"
         cseed = zlib.crc32((book["title_en"] + c["name"]).encode("utf-8")) % 1000000
         saved = SAVE_DIR / f"ref_{k}.jpg"
+        small = WORK / f"ref_{k}.jpg"
+        index[c["name"]] = k
         if saved.exists():                                # drawn in an earlier run: not drawn (and paid for) again
             shutil.copy(saved, small)
             refs[c["name"]] = small
             continue
         try:
-            if cf_image(CF_MODEL, prompt, raw, cseed, None, size=(384, 480)) != "ok":
-                continue
-            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", raw.name, "-vf", f"scale=-2:{REF_SIDE}", small.name], cwd=WORK)
-            refs[c["name"]] = small
-            keep_saved(small, f"ref_{k}.jpg")
+            got = _draw_ref(c, k, _ref_prompt(c, era_short), cseed)
+            if got:
+                refs[c["name"]] = got
         except ImageServiceUnavailable:
             raise
         except Exception as e:  # noqa: BLE001
             print(f"Reference picture of {c['name']} skipped: {e}", flush=True)
+    if not (SAVE_DIR / "azim_refs_checked.txt").exists():       # a reference set that was already checked is not checked again
+        check_cast_refs(chars, refs, index, era_short)
+        try:
+            (SAVE_DIR / "azim_refs_checked.txt").write_text("1", encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
     print(f"Reference pictures: {len(refs)} of {len(chars)} characters.", flush=True)
     return refs
 
@@ -2333,10 +2488,22 @@ def check_images(jobs):
         blocks.append({"n": k, "narration_fa": sc["narration_fa"],
                        "intended_picture": sc.get("visual_en", sc.get("action_en", "")),
                        "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
-    prompt = f"""You check illustrations for a video. The pictures above are labeled IMAGE 1 to IMAGE {len(jobs)}.
+    ref_names = []
+    for j in jobs:
+        for n in (j["sc"].get("characters_present") or []):
+            if n in CAST_REFS and n not in ref_names:
+                ref_names.append(n)
+    ref_names = ref_names[:4]
+    ref_note = ""
+    if ref_names:
+        ref_note = ("\nAfter the pictures come REFERENCE portraits of characters, labeled IMAGE "
+                    f"{len(jobs) + 1} and up: {json.dumps({n: len(jobs) + 1 + k for k, n in enumerate(ref_names)}, ensure_ascii=False)} "
+                    "(character name: its IMAGE number). Every picture must show that character with THE SAME face (face shape, "
+                    "eyes, nose, hair, age) and the same clothes as in his or her reference portrait.\n")
+    prompt = f"""You check illustrations for a video. The pictures to check are labeled IMAGE 1 to IMAGE {len(jobs)}.
 For each one you get the Persian narration that is read while it is shown, the intended picture, and (maybe) the look
 sheets of its characters. Items: {json.dumps(blocks, ensure_ascii=False)}
-
+{ref_note}
 For EACH picture return:
 - "score" 0-10: how clearly it shows the main subject and main action of ITS narration (10 = a viewer understands what is
   said just by looking; 0 = unrelated). Strict limits:
@@ -2350,15 +2517,17 @@ For EACH picture return:
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * a picture that is physically absurd (a head lying on a car, extra or missing limbs, merged or floating bodies,
     melted faces) gets at most 3.
-- "look_score" 0-10, only when sheets are given: each person looks like his or her sheet (age, hair, build, clothes);
-  several people are clearly different from each other in face, body and clothes; clothes and objects fit the era
-  (10 = all correct).
+- "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
+  portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
+  from the reference: at most 4; a face that is blurred, distorted or too small to see: at most 5; several people are
+  clearly different from each other in face, body and clothes; clothes and objects fit the era (10 = all correct).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
 Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
-        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS, images=[j["img"].read_bytes() for j in jobs])
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS,
+                          images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names])
         time.sleep(3)
         by_n = {}
         for c in out.get("checks") or []:
@@ -2890,7 +3059,7 @@ def main():
 
     if script.get("visual_version") != VISUAL_VERSION:
         print("The pictures of this script are planned again (wide shots, event first, all characters).", flush=True)
-        script = align_visuals(script, book)
+        script = align_visuals(script, book, src)
         if pending:
             pending["script"] = script
             save_json(PENDING_FILE, pending)
@@ -2918,6 +3087,8 @@ def main():
     seed = int(time.time()) % 100000
     saved_pics_dir(book)
     cast_refs = make_cast_refs(script.get("characters", []), script.get("era_en", ""), book, seed)
+    CAST_REFS.clear()
+    CAST_REFS.update(cast_refs)
     n_pics = sum(len(sc.get("beats") or [1]) for sc in scenes)
     done_pics = 0
     last_img = None
