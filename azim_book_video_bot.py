@@ -52,6 +52,8 @@ TOTAL_BOOKS = 2000              # only novels
 MAX_SECONDS = 470         # up to 7:50 (hard limit 8 minutes)
 MAX_SPEED = 1.2           # maximum voice speed-up (higher sounds unnatural)
 ZOOM_MAX = 1 + float(os.environ.get("AZIM_ZOOM") or 0.04)    # slow zoom of at most 4 % (0 = no zoom at all)
+WATERMARK = os.environ.get("AZIM_WATERMARK", "Samurai Reader").strip()   # Telegram channel name, bottom-left of EVERY picture ("" = none)
+TITLE_CARDS = os.environ.get("AZIM_TITLE_CARDS", "1") != "0"   # author / book / theme parts: a title card instead of an AI picture
 SUB_FONT_SIZE = 10        # subtitle size in 288-line units = about 44 px on the 1280 px tall vertical video
 SUB_FONT = "Vazirmatn"        # bold Persian font like the user's reference subtitle (free); DejaVu Sans is the safe fallback
 SUB_FONT_URLS = (             # free download, tried in order (the first that works is used)
@@ -61,7 +63,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 4        # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 6        # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -542,6 +544,90 @@ def diversity_text():
             "that nobody else has):\n" + rows)
 
 
+# ----- every character gets a DIFFERENT hair color, shirt color and trousers/skirt color (checked by CODE, not only
+# by the prompt): when two characters share one of them, the later one gets a free color from the palette.
+_COLOR_FAMILIES = (
+    ("black", "black"), ("white", "white"), ("gray", "gray"), ("grey", "gray"), ("silver", "gray"),
+    ("red", "red"), ("crimson", "red"), ("maroon", "red"), ("burgundy", "red"), ("copper", "red"),
+    ("auburn", "red"), ("ginger", "red"), ("pink", "pink"), ("orange", "orange"), ("yellow", "yellow"),
+    ("mustard", "yellow"), ("gold", "yellow"), ("blond", "yellow"), ("green", "green"), ("olive", "green"),
+    ("teal", "teal"), ("blue", "blue"), ("navy", "blue"), ("purple", "purple"), ("violet", "purple"),
+    ("brown", "brown"), ("tan", "brown"), ("beige", "cream"), ("cream", "cream"),
+)
+OUTFIT_PALETTE = ("red", "navy blue", "forest green", "mustard yellow", "purple", "white", "black", "orange", "teal",
+                  "brown", "gray", "pink")
+HAIR_PALETTE = ("black", "blond", "copper red", "brown")
+
+
+def color_family(s):
+    s = str(s or "").lower()
+    for key, fam in _COLOR_FAMILIES:
+        if key in s:
+            return fam
+    return ""
+
+
+def _swap_in(txt, olds, new, what):
+    for w in olds:
+        if what == "hair":      # the color word that stands in front of the word "hair"
+            t2, n = re.subn(rf"\b{re.escape(w)}\b(?=(?:[\s-]+\w+){{0,2}}[\s-]+hair)", new, txt, count=1, flags=re.I)
+            if n:
+                return t2, True
+        t2, n = re.subn(rf"\b{re.escape(w)}\b", new, txt, count=1, flags=re.I)
+        if n:
+            return t2, True
+    return txt, False
+
+
+def _swap_color(c, old, new, what):
+    """Write the new color into the look sheet and the short tag instead of the old one (the exact old words first,
+    then any word of the same color family). Only when the color is not written there, a short note is added."""
+    fam = color_family(old)
+    olds = ([str(old)] if old else []) + [k for k, f in _COLOR_FAMILIES if f == fam and k != str(old).lower()]
+    for key in ("look_en", "tag_en"):
+        txt = c.get(key) or ""
+        if not txt:
+            continue
+        txt2, done = _swap_in(txt, olds, new, what)
+        if not done:
+            txt2 = txt.rstrip(". ") + f". The {what} color is {new}."
+        c[key] = txt2
+
+
+def enforce_distinct_cast(chars):
+    """No two characters share a hair color, a shirt color or a trousers/skirt color (two old people may both have gray
+    hair). Fills "key_en": the short who-wears-what line that is pasted into every picture of the person."""
+    used = {"hair_color": set(), "top_color": set(), "bottom_color": set()}
+    for c in chars:
+        try:
+            age = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
+        except (IndexError, ValueError):
+            age = 0
+        for field, what, palette in (("hair_color", "hair", HAIR_PALETTE), ("top_color", "shirt", OUTFIT_PALETTE),
+                                     ("bottom_color", "trousers or skirt", OUTFIT_PALETTE)):
+            val = str(c.get(field) or "").strip()
+            fam = color_family(val)
+            if not fam:
+                continue
+            old_ok = field == "hair_color" and age >= 60 and fam in ("gray", "white")
+            if fam in used[field] and not old_ok:
+                pool = (("gray", "white") + palette) if (field == "hair_color" and age >= 60) else palette
+                free = [p for p in pool if color_family(p) not in used[field]]
+                if free:
+                    print(f"Cast: {c.get('name')} shared the {what} color '{val}': changed to '{free[0]}'.", flush=True)
+                    _swap_color(c, val, free[0], what)
+                    c[field] = free[0]
+                    fam = color_family(free[0])
+            used[field].add(fam)
+        hair = " ".join(x for x in (c.get("hair_color"), c.get("hair_style")) if x)
+        top = " ".join(x for x in (c.get("top_color"), c.get("top_en")) if x)
+        bottom = " ".join(x for x in (c.get("bottom_color"), c.get("bottom_en")) if x)
+        c["key_en"] = (f"{hair} hair, " if hair else "") + (f"wearing a {top}" if top else "") + \
+                      (f" and {bottom}" if (top and bottom) else (f"wearing {bottom}" if bottom else ""))
+        c["key_en"] = c["key_en"].strip(" ,")
+    return chars
+
+
 def char_tag(c):
     """A SHORT face tag (the image model reads only the first ~250 tokens, so long sheets get cut)."""
     t = " ".join(str(c.get("tag_en") or "").split())
@@ -601,7 +687,8 @@ Return JSON with exactly these keys:
 - "era_en": the time and place of the story in one short English phrase (for example "provincial Russia, 1860s").
 - "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
   (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
-- "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "..."}}.
+- "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "...",
+  "age": 30, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "..."}}.
   "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 55 to 75 English words in
   this fixed order: gender and exact age in years; body build; face shape and jawline; skin tone; eyes (color and shape);
   eyebrows; nose; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
@@ -610,6 +697,10 @@ Return JSON with exactly these keys:
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
   main outfit color). It never contradicts "look_en".
+  The extra keys say the same thing in one word or two: "age" is a number of years; "hair_color" (one plain color word:
+  black, blond, copper red, brown, gray or white), "hair_style" (for example "short curly", "long braided"), "top_en" (the
+  upper garment, for example "linen shirt"), "top_color", "bottom_en" (trousers, skirt or long dress) and "bottom_color"
+  (one plain color word each). They must agree with "look_en".
 
 Rules:
 - AGES: use the ages of the source; otherwise decide them so they fit the story and the family tree. A parent is at least
@@ -622,7 +713,11 @@ Rules:
   broad-shouldered, round). A build is never copied from the main character unless the source says so; at most ONE
   character is heavy unless the source says that more are.
 - CLOTHES: every character wears a different outfit with different main colors, true to his or her job, class, age and
-  the era, and historically correct for that time and place.
+  the era, and historically correct for that time and place. STRICT: no two characters have the same "hair_color", the same
+  "top_color" or the same "bottom_color" (only two old people may both have gray hair), and the garments ("top_en",
+  "bottom_en") differ in cut too (one in a long coat, one in a waistcoat, one in a shawl and a long skirt...). Choose
+  colors that are far apart (red / navy blue / green / yellow / purple / white / black), never two shades of one color.
+  A mother and her daughter, or two brothers, also differ in hair style and in clothes colors.
 - Never contradict the source (gender, age, hair, body, job, family relations).
 """ + diversity_text() + "\n"
     try:
@@ -634,7 +729,11 @@ Rules:
         for c in d.get("characters") or []:
             if isinstance(c, dict) and str(c.get("name") or "").strip() and str(c.get("look_en") or "").strip():
                 chars.append({"name": str(c["name"]).strip(), "look_en": " ".join(str(c["look_en"]).split()),
-                              "tag_en": " ".join(str(c.get("tag_en") or "").split())})
+                              "tag_en": " ".join(str(c.get("tag_en") or "").split()),
+                              **{k: (c.get(k) if k == "age" else " ".join(str(c.get(k) or "").split()))
+                                 for k in ("age", "hair_color", "hair_style", "top_en", "top_color", "bottom_en",
+                                           "bottom_color")}})
+        chars = enforce_distinct_cast(chars[:6])
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -1190,6 +1289,161 @@ def force_named_characters(present, narration, chars):
     return out[:MAX_PEOPLE]
 
 
+def _str_list(x, n):
+    return [" ".join(str(i).split()) for i in (x if isinstance(x, list) else []) if str(i).strip()][:n]
+
+
+def strip_colors(text):
+    """The text without color words (\"a gray-haired man in a brown coat\" -> \"a man in a coat\")."""
+    keys = sorted({k for k, _ in _COLOR_FAMILIES}, key=len, reverse=True)
+    t = re.sub(r"\b(?:" + "|".join(keys) + r")(?:[- ]?(?:haired|colou?red|skinned))?\b,?\s*", "", str(text), flags=re.I)
+    return " ".join(t.split())
+
+
+def fix_others_in_code(vis, chars):
+    """FREE check in code: every unnamed person of a picture (rescuer, doctor, neighbour...) gets a hair color, a shirt
+    color and a trousers color that NO named person of that picture and no other unnamed person has. The model only
+    reads colors well when they are written plainly, so the colors are decided here and not left to chance."""
+    byname = {c["name"]: c for c in chars if isinstance(c, dict) and c.get("name")}
+    changed = 0
+    for v in vis:
+        others = v.get("others") or []
+        if not others:
+            continue
+        used = {"hair": set(), "top": set(), "bottom": set()}
+        for n in v.get("characters_present") or []:
+            c = byname.get(n) or {}
+            for f, k in (("hair_color", "hair"), ("top_color", "top"), ("bottom_color", "bottom")):
+                fam = color_family(c.get(f))
+                if fam:
+                    used[k].add(fam)
+        new = []
+        keys = sorted({k for k, _ in _COLOR_FAMILIES}, key=len, reverse=True)
+        color_re = re.compile(r"\b(" + "|".join(keys) + r")\b((?:[- ]?(?:haired|colou?red|skinned))?)", re.I)
+        for o in others:
+            o = " ".join(str(o).split()[:18])
+            old = bool(re.search(r"\b(old|elderly|aged|grandmother|grandfather|white-haired|gray-haired|grey-haired)\b", o, re.I))
+            hair_pool = (("gray", "white") + HAIR_PALETTE) if old else HAIR_PALETTE
+            hair = next((x for x in hair_pool if color_family(x) not in used["hair"]), "")
+            tops = [x for x in OUTFIT_PALETTE if color_family(x) not in used["top"]]
+            bots = [x for x in OUTFIT_PALETTE if color_family(x) not in used["bottom"]]
+            top = tops[0] if tops else ""
+            bottom = next((x for x in bots if color_family(x) != color_family(top)), "")
+            seq = [x for x in (top, bottom) if x]          # colors of the clothes, in the order they appear in the text
+            state = {"n": 0}
+
+            def recolor(m):
+                tail_w = m.group(2) or ""
+                after = o[m.end():m.end() + 14].lower()
+                if tail_w.lower().strip(" -") == "haired" or re.match(r"\W*(?:\w+\W+){0,1}hair", after):
+                    return (hair or m.group(1)) + tail_w
+                if "skin" in tail_w.lower():
+                    return m.group(0)
+                col = seq[state["n"] % len(seq)] if seq else m.group(1)
+                state["n"] += 1
+                return col + tail_w
+
+            text, n_sub = color_re.subn(recolor, o)
+            if not n_sub:             # the model wrote no colors at all: they are added plainly
+                text = text.rstrip(" .,") + ", " + ", ".join(
+                    x for x in ((f"{hair} hair" if hair else ""),
+                                (f"clothes in {top} and {bottom}" if (top and bottom) else "")) if x)
+            for k, val in (("hair", hair), ("top", top), ("bottom", bottom)):
+                if val:
+                    used[k].add(color_family(val))
+            new.append(text)
+        if new != others:
+            changed += 1
+        v["others"] = new
+    print(f"Unnamed people: colors fixed in {changed} pictures.", flush=True)
+    return vis
+
+
+def review_visual_plan(vis, items, book, chars, src=None):
+    """ONE text-only Gemini call (no picture is sent) BEFORE anything is drawn: every picture plan is read next to its
+    Persian sentence, and a plan with a mistake is rewritten on the spot (number of people, place and event, must-show
+    things, who does what to whom, at most 2 large faces). Closing parts (author / book / theme) are not drawn, so
+    they are not reviewed."""
+    idx = [k for k, v in enumerate(vis) if str(v.get("kind") or "event") == "event"]
+    if not idx:
+        return vis
+    names = {c["name"]: c.get("key_en") or char_tag(c) for c in chars if isinstance(c, dict) and c.get("name")}
+    rows = []
+    for k in idx:
+        v = vis[k]
+        rows.append({"i": k, "narration_fa": items[k]["narration_fa"],
+                     "previous_fa": items[k - 1]["narration_fa"] if k else "",
+                     "plan": {"event_en": v.get("event_en", ""), "location": v.get("location", ""),
+                              "characters_present": v.get("characters_present", []), "people_en": v.get("people_en", ""),
+                              "must_show": v.get("must_show", []), "others": v.get("others", []),
+                              "roles": v.get("roles", {}), "visual_en": v.get("visual_en", "")}})
+    source_block = f"\nSOURCE TEXT (the truth about who is where and when):\n{src['text']}\n" if src else ""
+    prompt = f"""You are a strict script supervisor. Below are picture PLANS (text only) for a video about the novel
+"{book['title_en']}" by {book['author_en']}. Each plan will be drawn by an image model while its Persian narration part is
+read aloud. Find the plans that have a mistake and rewrite them. Nothing is drawn yet, so every mistake you fix now saves
+a wasted picture.
+{source_block}
+Main characters (name: how they look): {json.dumps(names, ensure_ascii=False)}
+
+Check EVERY plan:
+1. PEOPLE COUNT: "people_en", "characters_present" and "others" together name exactly the people that the narration (and
+   the source) says, no more, no fewer. "a mother and her child" is ONE adult and ONE child; when the source says she has
+   one child, a second child never appears; no crowd, helper or family member that the part does not mention.
+2. PLACE AND EVENT: "event_en" and "visual_en" show exactly what HAPPENS in the narration, in the place where it happens
+   (inside/outside, kind of place, time, weather); never a calm unrelated scene when something happens.
+3. MUST_SHOW: every item of "must_show" is written in "visual_en".
+4. WHO TO WHOM: "roles" are right (caregiver/patient, rescuer/rescued, killer/victim, speaker/listener never swapped); the
+   rescuer, helper or attacker is a DIFFERENT kind of person (age, gender, build) from the person he or she acts on.
+5. TWO FACES AT MOST: at most 2 people have a large clear face; every other person is a small figure far away or seen
+   from behind, and "visual_en" says it.
+6. Nothing modern in an old story; no names, no text, no logos in "visual_en".
+For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
+"problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
+(English, 60 to 85 words, starts with the shot type, written again completely whenever the people or the event change),
+"people_en", "must_show", "characters_present" (names exactly as in the characters), "others" (one short English
+description per unnamed person), "roles".
+Return JSON {{"checks": [...]}} with one item per plan, in the same order.
+Plans: {json.dumps(rows, ensure_ascii=False)}"""
+    try:
+        out = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
+    except GeminiQuotaExhausted:
+        raise
+    except GeminiBlocked as e:
+        print("Plan review skipped (blocked):", e, flush=True)
+        return vis
+    except Exception as e:  # noqa: BLE001
+        print("Plan review skipped:", e, flush=True)
+        return vis
+    fixed = 0
+    for c in out.get("checks") or []:
+        try:
+            k = int(c.get("i"))
+        except (TypeError, ValueError):
+            continue
+        fx = c.get("fix")
+        if k not in idx or c.get("ok") is not False or not isinstance(fx, dict):
+            continue
+        v = vis[k]
+        if isinstance(fx.get("visual_en"), str) and len(fx["visual_en"].split()) >= 25:
+            v["visual_en"] = " ".join(fx["visual_en"].split())
+        for key in ("event_en", "people_en"):
+            if isinstance(fx.get(key), str) and fx[key].strip():
+                v[key] = " ".join(fx[key].split())
+        if isinstance(fx.get("must_show"), list):
+            v["must_show"] = _str_list(fx["must_show"], 5) or v.get("must_show", [])
+        if isinstance(fx.get("others"), list):
+            v["others"] = _str_list(fx["others"], 3)
+        if isinstance(fx.get("roles"), dict):
+            v["roles"] = fx["roles"]
+        if isinstance(fx.get("characters_present"), list):
+            ok = [n for n in fx["characters_present"] if n in names]
+            v["characters_present"] = ok[:MAX_PEOPLE]
+        fixed += 1
+        print(f"Plan review: picture plan {k} rewritten - {str(c.get('problem') or '')[:120]}", flush=True)
+    print(f"Plan review: {len(idx)} plans read, {fixed} rewritten before drawing.", flush=True)
+    return vis
+
+
 def align_visuals(data, book, src=None):
     """Step D: write ONE picture for EVERY beat (about 2 sentences) of the FINAL narration (skipped if it fails).
     Every picture shows the REAL place of ITS moment of the story (taken from the source and from a fixed list of
@@ -1228,12 +1482,20 @@ where it happens at that moment.
 {source_block}
 PLACES OF THE STORY (fixed, always drawn the same way): {json.dumps(places, ensure_ascii=False)}
 
-Return JSON: {{"visuals": [{{"i": 0, "location": "...", "characters_present": ["..."], "shot": "...", "event_en": "...", "roles": {{"Name": "..."}}, "visual_en": "..."}}, ...]}}
+Return JSON: {{"visuals": [{{"i": 0, "text_en": "...", "kind": "event", "location": "...", "characters_present": ["..."], "shot": "...", "event_en": "...", "must_show": ["..."], "people_en": "...", "others": ["..."], "roles": {{"Name": "..."}}, "time_en": "", "visual_en": "..."}}, ...]}}
 with exactly {len(items)} items, in the same order.
 
 Rules:
-- "location": the id of the place (from PLACES OF THE STORY: {json.dumps(place_ids)}) where THIS part really happens
-  according to the SOURCE TEXT and the story so far. If the sentence does not name the place, the story is still where the
+- "text_en": a faithful English translation of THIS part, only what the Persian says (nothing added, nothing left out).
+  Write it FIRST: the picture is drawn from this text, not from your idea of the book.
+- "kind": "event" when the part tells something that happens in the story (people who do things, the places of the
+  story); "author" when it speaks about the writer, his or her life or how the book was written; "book" when it speaks
+  about the book itself (its fame, translations, readers, influence, awards, films); "theme" when it explains the meaning,
+  the message or the moral of the story. A closing part that only retells what happened in the story is "event".
+- "location": the id of the place (from PLACES OF THE STORY: {json.dumps(place_ids)}) where THIS part really happens.
+  FIRST read the sentence: when it names or clearly implies a place (a kitchen, a river, a ship's deck, a courtroom, a road,
+  a field, a bedroom...), that is the place and "visual_en" draws exactly that place; the fixed list only lends its
+  materials and details when it holds the same kind of place. When the sentence names no place, the story is still where the
   previous part was (use "previous_part_fa" and the paragraph); it changes only when the story moves (a journey, a new
   chapter, a flashback). Never pick a place only because it looks nice, never a generic place. If none of the listed
   places fits, write "other" and describe the real place in "visual_en".
@@ -1243,6 +1505,29 @@ Rules:
   discovery, a betrayal, a wedding, a trial...) is drawn as that very event, never replaced by a calm unrelated scene or
   a symbol. A death or a killing is shown in a non-graphic storybook way that is still unmistakable: the still body on the
   ground or on the bed, the dropped weapon, the shocked or grieving people around, a dark mood; never blood or gore.
+- "must_show": 3 to 5 short English phrases: the concrete things that the sentences of THIS part name or clearly imply
+  (people with their NUMBER, objects, features of the place, the action). Every one of them must be visible in the picture,
+  so "visual_en" contains all of them. Never add anything that the part does not say.
+- "people_en": ONE English sentence with the EXACT number and kind of people who are in the picture, counted from the
+  sentence and from the SOURCE TEXT, ending with "nobody else" (for example "exactly 2 people: the young mother and her only
+  child, a small boy, nobody else"). «a mother and her child» is ONE adult and ONE child; when the source says that she has
+  one child, a second child is NEVER drawn; a crowd, a family or any other person appears only when the part says so.
+  Kind "author": "exactly one person, seen only from behind". Kinds "book" and "theme": "no people" (or only those that the
+  part names).
+- "others": a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
+  (a rescuer, a doctor, a neighbour, a soldier, a child of the crowd...): gender, age, hair color, build and clothes (color
+  and kind). Each of them must look completely different from every named character and from each other: another hair
+  color, other clothes colors and another age or build (the rescuer never looks like the person who is rescued, a stranger
+  never looks like the hero). Empty list when there is nobody else.
+- PICTURE BY KIND. "event": as described above. "author": the world of the WRITER in the time when the book was written
+  (not the time of the story): a writing desk with an inkwell, a pen and manuscript pages, a lamp, a window that shows the
+  writer's town and country, the writer seen ONLY from behind or as a silhouette (never a face, never a portrait of a real
+  person); write that time and place in "time_en". "book": the book as an object and its readers: an old book (nothing
+  written on its cover), a hand turning a page, a library, a bookshop or a reading room of its time, and in it ONE concrete
+  sign of THIS story (a window that shows the main place of the story, the key object of the story), so it is clearly THIS
+  book; "time_en" only when the time differs from the story. "theme": ONE symbolic scene made ONLY of concrete things of
+  THIS story (its main place and its key object or key situation) that shows exactly the idea named in the part, never an
+  unrelated landscape. "time_en" is empty for "event".
 - "roles": an object that maps EVERY name in "characters_present" to 4 to 12 English words: his or her role in THIS picture and
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
@@ -1259,13 +1544,17 @@ Rules:
 - EVERY CHARACTER OF THE SENTENCE IS IN THE PICTURE: every character who is named in the part, or is meant by "he", "she",
   "they", "his", "her" or "the two of them" (look at "previous_part_fa" to know who is meant), is listed in
   "characters_present" (names exactly as in the characters list) AND is doing something visible in the picture. When the
-  sentence names more than 3 characters, list the 3 most important and show the others as a small crowd. Write only what
+  sentence names more than 2 characters, list the 2 most important (only they get large clear faces) and show the
+  others in "others" as small figures far away or seen from behind, or as a small crowd. Write only what
   the characters DO ("the boy sits alone on a bench"): their fixed look is added automatically, so never write their
   faces, ages, bodies or clothes, and never write names or book titles in the picture description.
+- TWO FACES AT MOST: in one picture at most 2 people have a large, clear face. Every other person (named or not) is a
+  small figure far in the background or seen from behind, and "visual_en" says so. Only the people that the part really
+  names or implies are drawn: never add a child, a crowd or a helper that the part does not mention.
 - VARIETY: when several parts are about the SAME place, the place stays the same (same walls, same objects, same
   landscape) but every picture shows another part of it, another angle, other light and other foreground objects; the event
-  of its own sentence always stays the main thing. For the closing wrap-up parts, show a symbolic scene of the book's
-  central message in the main place of the story.
+  of its own sentence always stays the main thing. The kind of a part (author / book / theme) decides its picture as
+  described in PICTURE BY KIND: the closing parts never get a random symbolic scene.
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
 - Do not write an art style (it is added separately).
 
@@ -1280,10 +1569,19 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                     "event_en": " ".join(str(v.get("event_en") or "").split()),
                     "location": str(v.get("location") or "").strip(),
                     "characters_present": v.get("characters_present") or [],
+                    "kind": str(v.get("kind") or "event").strip().lower(),
+                    "must_show": _str_list(v.get("must_show"), 5),
+                    "people_en": " ".join(str(v.get("people_en") or "").split()),
+                    "others": _str_list(v.get("others"), 3),
+                    "time_en": " ".join(str(v.get("time_en") or "").split()),
                     "roles": v.get("roles") if isinstance(v.get("roles"), dict) else {}} for v in vis]
             vis = diversify_visuals(vis, items, book)
             for v, it in zip(vis, items):      # a character NAMED in the sentence is always in the picture
                 v["characters_present"] = force_named_characters(v["characters_present"], it["narration_fa"], chars)
+            vis = review_visual_plan(vis, items, book, chars, src)        # text-only check BEFORE drawing
+            for v, it in zip(vis, items):
+                v["characters_present"] = force_named_characters(v["characters_present"], it["narration_fa"], chars)
+            fix_others_in_code(vis, chars)                                # free check in code: unnamed people look different
             k = 0
             for s in scenes:
                 if s.get("cast_names"):
@@ -1292,6 +1590,9 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                 s["beat_visuals"] = [{"visual_en": v["visual_en"], "event_en": v.get("event_en", ""),
                                       "location": v.get("location", ""),
                                       "characters_present": v["characters_present"],
+                                      "kind": v.get("kind", "event"), "must_show": v.get("must_show", []),
+                                      "people_en": v.get("people_en", ""), "others": v.get("others", []),
+                                      "time_en": v.get("time_en", ""),
                                       "roles": v.get("roles", {})} for v in vis[k:k + n]]
                 k += n
             data["visual_version"] = VISUAL_VERSION
@@ -1614,7 +1915,8 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 # and every form that starts with it, even if the text already carries some vowel marks (so it also works on spoken_fa).
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
-_FORCE_MARKS = (("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"))
+#   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
+_FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"))
 
 
 def force_marks(t):
@@ -2057,7 +2359,8 @@ def _wc(t):
 
 
 KLEIN_WORDS = 270         # FLUX.2 klein reads a longer text than the old square model
-MAX_PEOPLE = 3          # at most this many named people in one picture (more of them blend their faces)
+MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
+                        # every other person is small and far away or seen from behind
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
 
 
@@ -2096,29 +2399,64 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     limit = limit or PROMPT_WORDS
     art_s = ", ".join(art.split(", ")[:4])
 
+    others = [" ".join(str(o).split()) for o in (scene.get("others") or []) if str(o).strip()][:3]
+    total = len(present) + len(others)
+    people_en = " ".join(str(scene.get("people_en") or "").split()).rstrip(". ")
+    if people_en:
+        count = people_en[0].upper() + people_en[1:] + ". "
+    elif total:
+        count = f"Exactly {total} {'person' if total == 1 else 'people'} in the picture, nobody else. "
+    else:
+        count = ""
+    if total >= 2:
+        count += "Every person has a different face, different hair and clothes of different colors. "
+    if total > MAX_PEOPLE:
+        count += f"Only {MAX_PEOPLE} people show a large clear face; the others are small, far away or seen from behind. "
+
     def people(full):
-        if not present:
+        if not (present or others):
             return ""
-        if len(present) == 1:
+        if len(present) == 1 and not others and ref_idx.get(present[0]["name"]):
             c = present[0]
-            if ref_idx.get(c["name"]):
-                return (f"The person is the SAME person as reference image 1: identical face, eyes, nose, mouth, hair, age, "
-                        f"body and clothes ({_trim_words(char_tag(c), 10)}), but NOT its pose or head direction"
-                        f"{role_txt(c['name'])}. ")
-            return ("The person (always exactly this face, body and clothes): "
-                    + (_trim_words(c["look_en"], 42) if full else char_tag(c)) + role_txt(c["name"]) + ". ")
+            return (f"The person is the SAME person as reference image 1: identical face, eyes, nose, mouth, hair, age, "
+                    f"body and clothes ({_trim_words(c.get('key_en') or char_tag(c), 14)}), but NOT its pose or head "
+                    f"direction{role_txt(c['name'])}. ")
         parts = []
         for k, c in enumerate(present):
             ri = ref_idx.get(c["name"])
-            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "")
-                         + f": {_trim_words(char_tag(c), 10) if ri else char_tag(c)}" + role_txt(c["name"]))
-        lead = ("Copy each person's face, hair and clothes from the reference image with his or her number, not its pose. "
-                if ref_idx else "")
-        return (lead + "Clearly different people: " + "; ".join(parts) + ". ")
+            key = c.get("key_en") or ""
+            if ri:
+                desc = key or _trim_words(char_tag(c), 12)
+            elif len(present) == 1 and not others:
+                desc = _trim_words(c["look_en"], 42) if full else char_tag(c)
+            else:
+                desc = char_tag(c)
+            parts.append(f"person {k + 1}" + (f" = reference image {ri}" if ri else "") + f": {desc}"
+                         + role_txt(c["name"]))
+        slots = max(MAX_PEOPLE - len(present), 0)
+        for j, o in enumerate(others):
+            if j >= slots:        # only MAX_PEOPLE faces are large and clear: everybody else is small, far away or from behind
+                parts.append(f"person {len(present) + j + 1} (a small figure far in the background or seen from behind, "
+                             f"no clear face): {_trim_words(o, 14)}")
+            elif present or len(others) > 1:
+                parts.append(f"person {len(present) + j + 1} (a stranger, in no reference image, a completely different "
+                             f"face): {_trim_words(o, 22)}")
+            else:
+                parts.append(_trim_words(o, 22))
+        lead = ("Copy each person's face, hair and clothes from the reference image with his or her number, not its pose; "
+                "a stranger never copies a reference face. " if (ref_idx and present) else "")
+        return lead + ("Clearly different people: " if len(parts) > 1 else "The person: ") + "; ".join(parts) + ". "
+
+    non_event = (str(scene.get("kind") or "event") != "event") or people_en.lower().startswith("no people")
 
     def compose(main_t, full, era, tail):
         era_part = f"Setting: {era}. " if era else ""
-        return (f"{head}{art_s}. {main_t} {people(full)}{era_part}"
+        if non_event:       # the writer's desk, a book and its readers, a symbolic scene: objects and place first
+            return (f"{head}{art_s}. {count}{main_t} {people(full)}{era_part}"
+                    f"Vertical 9:16 medium-wide shot: the main subject large and fully inside the picture, nothing cut by "
+                    f"the border, rich detailed foreground, middle ground and background, no writing on any object; "
+                    f"the lower fifth only floor or ground; {tail}")
+        return (f"{head}{art_s}. {count}{main_t} {people(full)}{era_part}"
                 f"Vertical 9:16 medium-wide shot: people large (about half of the picture height) with clear, carefully "
                 f"drawn faces (eyes, nose, mouth), whole heads and bodies inside the picture, busy with the action, never "
                 f"looking at the camera; detailed environment; the lower fifth only floor or ground; {tail}")
@@ -2473,12 +2811,12 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
-REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 1)   # a bad picture is drawn again this many times (each costs free neurons)
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 2)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
 
-def check_images(jobs):
+def check_images(jobs, models=None):
     """ONE Gemini call looks at up to CHECK_BATCH pictures. Returns a list with (score, what is missing) or None for
     each picture; returns None if the check is not available (the pictures are then kept as they are)."""
     blocks = []
@@ -2487,6 +2825,8 @@ def check_images(jobs):
         sheets = sc.get("look_sheets") or []
         blocks.append({"n": k, "narration_fa": sc["narration_fa"],
                        "intended_picture": sc.get("visual_en", sc.get("action_en", "")),
+                       "exact_people": sc.get("people_en") or "", "must_show": sc.get("must_show") or [],
+                       "kind": sc.get("kind") or "event",
                        "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
     ref_names = []
     for j in jobs:
@@ -2516,17 +2856,27 @@ For EACH picture return:
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * a picture that is physically absurd (a head lying on a car, extra or missing limbs, merged or floating bodies,
-    melted faces) gets at most 3.
+    melted faces) gets at most 3;
+  * COUNT THE PEOPLE: their number and kind must equal "exact_people" (for example one mother and ONE child: two girls
+    next to the mother is wrong); one person too many or too few: at most 4;
+  * every item of "must_show" must be visible; two or more of them missing: at most 5;
+  * two different people who look like twins or clones (the same face, the same hair, the same clothes): at most 3, and
+    the person who rescues, helps, attacks or talks to another person must not look like that other person;
+  * with 3 or more people, any two with the same hair color or the same color of shirt or trousers: at most 4;
+  * kind "author": no face of a writer and no portrait, a desk of the writer's time; kind "book": a book and readers of its
+    time with one sign of THIS story; kind "theme": a symbolic scene made of things of THIS story; an unrelated landscape
+    or a random scene for these kinds: at most 3.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
   from the reference: at most 4; a face that is blurred, distorted or too small to see: at most 5; several people are
-  clearly different from each other in face, body and clothes; clothes and objects fit the era (10 = all correct).
+  clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
+  color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
 Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
-        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS,
+        out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names])
         time.sleep(3)
         by_n = {}
@@ -2551,25 +2901,86 @@ Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "..."
         return None
 
 
+def _is_multi(sc):
+    return len(sc.get("characters_present") or []) + len(sc.get("others") or []) >= 2
+
+
+def _judge_groups(todo, jobs):
+    """Pictures with 2 or more people (counting them and telling twins apart is hard) are judged by the stronger
+    models, the others by the cheap ones. The number of Gemini calls stays about the same; a finished quota falls
+    back to the next model by itself."""
+    multi = [k for k in todo if _is_multi(jobs[k]["sc"])]
+    ms = set(multi)
+    single = [k for k in todo if k not in ms]
+    out = []
+    for lst, models in ((multi, WRITE_MODELS), (single, CHEAP_MODELS)):
+        for a in range(0, len(lst), CHECK_BATCH):
+            out.append((lst[a:a + CHECK_BATCH], models))
+    return out
+
+
+def make_title_cards(jobs, book):
+    """Parts about the author, the book or its message are NOT drawn by the AI (its symbolic scenes were unrelated):
+    a card with the Persian name of the author / the book is laid over a dimmed picture of the story itself."""
+    cards = [k for k, j in enumerate(jobs) if j.get("card")]
+    if not cards:
+        return
+    pool = [k for k, j in enumerate(jobs) if not j.get("card") and not j.get("reused")] \
+        or [k for k, j in enumerate(jobs) if not j.get("card")]
+    tail = pool[len(pool) * 2 // 3:] or pool
+    font = setup_sub_font()
+
+    def esc(t):
+        return re.sub(r"[{}\\]", "", str(t or "")).replace("\n", " ").strip()
+
+    for n, k in enumerate(cards):
+        kind = jobs[k]["card"]
+        title, author = esc(book.get("title_fa")), esc(book.get("author_fa"))
+        if kind == "author":
+            text = author or title
+        elif kind == "book" and title and author:
+            text = "{\\fs74}" + title + "\\N{\\fs46}" + author
+        else:
+            text = title or author
+        base = jobs[tail[min(int((n + 0.5) * len(tail) / len(cards)), len(tail) - 1)]]["img"]
+        ass = ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
+               "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+               "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+               "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+               "Style: Card,%s,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,%d,0,0,0,100,100,0,0,1,4,2,5,70,70,0,1\n\n"
+               "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+               "Dialogue: 0,0:00:00.00,0:00:10.00,Card,,0,0,0,,%s\n") % (W, H, font, 1 if _sub_bold else 0, text)
+        (WORK / f"card_{n}.ass").write_text(ass, encoding="utf-8")
+        try:
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", base.name, "-vf",
+                f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=6:2,"
+                f"eq=brightness=-0.32:saturation=0.9,subtitles=card_{n}.ass:fontsdir=azim_fonts",
+                "-frames:v", "1", "-q:v", "2", jobs[k]["img"].name], cwd=WORK)
+        except Exception as e:  # noqa: BLE001
+            print(f"Title card {n} failed ({e}): the dimmed story picture alone is used.", flush=True)
+            shutil.copy(base, jobs[k]["img"])
+    print(f"Title cards: {len(cards)} parts about the author / book / message got a card instead of an AI picture.",
+          flush=True)
+
+
 def check_and_fix_images(jobs):
     """Every picture is checked (4 per Gemini call). A picture with a low score is drawn again with the missing
     thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
     redraw is not available, the pictures that already exist are kept: the video never fails because of this step."""
     best = {}                                              # picture number -> (score, bytes)
-    todo = [k for k, j in enumerate(jobs) if not j.get("reused")]
+    todo = [k for k, j in enumerate(jobs) if not j.get("card")]     # a copied (failed) picture is checked too
     for rnd in range(3):
         results = {}
-        for a in range(0, len(todo), CHECK_BATCH):
-            grp = todo[a:a + CHECK_BATCH]
+        for grp, models in _judge_groups(todo, jobs):
             try:
-                res = check_images([jobs[k] for k in grp])
+                res = check_images([jobs[k] for k in grp], models)
             except GeminiBlocked as e:
                 # one picture in the group was refused by Gemini: check them one by one, keep the refused ones as they are
                 print(f"Image check blocked for a group ({e}); checking pictures one by one.", flush=True)
                 res = []
                 for k in grp:
                     try:
-                        one = check_images([jobs[k]])
+                        one = check_images([jobs[k]], models)
                         res.append(one[0] if one else None)
                     except GeminiBlocked:
                         print(f"Image check: picture {k + 1} refused by Gemini, kept as it is.", flush=True)
@@ -2601,13 +3012,16 @@ def check_and_fix_images(jobs):
         try:
             for k, missing in low:
                 j = jobs[k]
-                make_image(j["build"], j["img"], j["seed"] + 1000 * (rnd + 1), 0, fix=missing)
-                todo.append(k)
+                try:
+                    make_image(j["build"], j["img"], j["seed"] + 1000 * (rnd + 1), 0, fix=missing)
+                    j["reused"] = False
+                    todo.append(k)
+                except ImageServiceUnavailable:
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    print(f"Redraw of picture {k + 1} failed ({e}): the others continue.", flush=True)
         except ImageServiceUnavailable as e:
             print(f"Redraw stopped ({e}): the best pictures so far are kept.", flush=True)
-            break
-        except Exception as e:  # noqa: BLE001
-            print("Redraw failed:", e, flush=True)
             break
     for k, (score, data) in best.items():                  # keep the best picture of all tries
         jobs[k]["img"].write_bytes(data)
@@ -2915,11 +3329,24 @@ def build_video(scenes, durs, out_path, names=None):
     style = (f"FontName={font_family},FontSize={SUB_FONT_SIZE},Bold={1 if _sub_bold else 0},"
              "PrimaryColour=&H00FFFFFF,OutlineColour=&H8C141414,BackColour=&H8C141414,"
              "BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=62,MarginL=12,MarginR=12")
+    vf_final = f"subtitles=subs.srt:fontsdir=azim_fonts:force_style='{style}'"
+    if WATERMARK:     # channel name in the bottom-left corner of every picture: same font, one size smaller than the subtitle
+        wm = re.sub(r"[{}\\]", "", WATERMARK)
+        (WORK / "wm.ass").write_text(
+            "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
+            "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+            "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+            "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            f"Style: WM,{font_family},{max(SUB_FONT_SIZE - 1, 1)},&H00FFFFFF,&H00FFFFFF,&H8C141414,&H8C141414,"
+            f"{1 if _sub_bold else 0},0,0,0,100,100,0,0,3,2,0,1,10,10,10,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            f"Dialogue: 0,0:00:00.00,9:59:59.00,WM,,0,0,0,,{wm}\n", encoding="utf-8")
+        vf_final += ",subtitles=wm.ass:fontsdir=azim_fonts"
     # the only lossy pass: best quality that still fits under Telegram's 50 MB limit
     fits = False
     for crf, maxrate in (("23", "720k"), ("27", "520k"), ("31", "380k")):
         sh(["ffmpeg", "-y", "-loglevel", "error", "-i", "joined.mp4",
-            "-vf", f"subtitles=subs.srt:fontsdir=azim_fonts:force_style='{style}'",
+            "-vf", vf_final,
             "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
             "-maxrate", maxrate, "-bufsize", "1440k", "-c:a", "copy",
             "-movflags", "+faststart", out_path.name], cwd=WORK)
@@ -3058,7 +3485,8 @@ def main():
                                  "date": date.today().isoformat()})
 
     if script.get("visual_version") != VISUAL_VERSION:
-        print("The pictures of this script are planned again (wide shots, event first, all characters).", flush=True)
+        print("The pictures of this script are planned again (exact people, different looks, place from the sentence).",
+              flush=True)
         script = align_visuals(script, book, src)
         if pending:
             pending["script"] = script
@@ -3093,6 +3521,7 @@ def main():
     done_pics = 0
     last_img = None
     jobs = []
+    has_event = any(str(b.get("kind") or "event") == "event" for s in scenes for b in (s.get("beat_visuals") or []))
     for i, s in enumerate(scenes):
         beats = s.get("beats") or [s["narration_fa"]]
         bvs = s.get("beat_visuals") or []
@@ -3105,10 +3534,22 @@ def main():
                 sc["event_en"] = bvs[j].get("event_en", "")
                 sc["roles"] = bvs[j].get("roles", {})
                 sc["characters_present"] = bvs[j]["characters_present"]
+                sc["kind"] = bvs[j].get("kind", "event")
+                sc["must_show"] = bvs[j].get("must_show", [])
+                sc["people_en"] = bvs[j].get("people_en", "")
+                sc["others"] = bvs[j].get("others", [])
+                if bvs[j].get("time_en"):          # the author's study or a library: not the time of the story
+                    sc["era_en"] = bvs[j]["time_en"]
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
             reused = False
+            if (TITLE_CARDS and has_event and j < len(bvs)
+                    and str(bvs[j].get("kind") or "event") in ("author", "book", "theme")):
+                jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": False, "build": None,
+                             "card": str(bvs[j]["kind"])})
+                done_pics += 1
+                continue
 
             def build(fix="", use_refs=True, limit=None, sc=sc):
                 chars = script.get("characters", [])
@@ -3151,6 +3592,7 @@ def main():
             done_pics += 1
     if IMAGE_CHECK:
         check_and_fix_images(jobs)
+    make_title_cards(jobs, book)          # after the check: the cards use the best version of the story pictures
 
     final = WORK / "azim_final.mp4"
     total = build_video(scenes, durs, final, script.get("names") or {})
