@@ -263,5 +263,15 @@
   "date_pt": "2026-11-02",
   "wiki": "Bag of Bones",
   "date": "2026-11-03"
+ },
+ {
+  "title_en": "Foundation",
+  "title_fa": "بنیاد",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-03",
+  "wiki": "Foundation (Asimov novel)",
+  "date": "2026-11-03"
  }
 ]
