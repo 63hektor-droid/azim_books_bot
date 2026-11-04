@@ -1,7 +1,6 @@
 {
- "date_pt": "2026-11-03",
+ "date_pt": "2026-11-04",
  "used": {
-  "gemini-3.8-flash-tts": 9,
-  "gemini-3.8-flash-lite-tts": 8
+  "gemini-3.8-flash-tts": 3
  }
 }

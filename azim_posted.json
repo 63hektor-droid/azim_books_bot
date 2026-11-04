@@ -293,5 +293,15 @@
   "date_pt": "2026-11-03",
   "wiki": "The Help",
   "date": "2026-11-04"
+ },
+ {
+  "title_en": "The Princess Bride",
+  "title_fa": "عروس شاهزاده",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-04",
+  "wiki": "The Princess Bride (novel)",
+  "date": "2026-11-04"
  }
 ]
