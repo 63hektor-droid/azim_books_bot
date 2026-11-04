@@ -1,0 +1,976 @@
+{
+ "book": {
+  "title_en": "The Princess Bride",
+  "title_fa": "عروس شاهزاده",
+  "author_en": "William Goldman",
+  "author_fa": "ویلیام گولدمن",
+  "wikipedia_title_en": "The Princess Bride (novel)",
+  "wikipedia_title_fa": "",
+  "book_type": "novel"
+ },
+ "src": {
+  "text": "INTRODUCTION (what the novel is, who wrote it, when):\nThe Princess Bride: S. Morgenstern's Classic Tale of True Love and High Adventure, The \"Good Parts\" Version is a 1973 fantasy romance novel by American writer William Goldman. The book combines elements of comedy, adventure, fantasy, drama, romance, and fairy tale. It is metafictionally presented as an abridgment of a longer work by the fictional S. Morgenstern, and Goldman's commentary asides are constant throughout. It was originally published in the United States by Harcourt Brace, then later by Random House, while in the United Kingdom it was later published by Bloomsbury.\nThe book was adapted into a 1987 feature film directed by Rob Reiner, starring Cary Elwes and Robin Wright.\nWilliam Goldman said, \"I've gotten more responses on The Princess Bride than on everything else I've done put together—all kinds of strange outpouring letters. Something in The Princess Bride affects people.\"\n\nPLOT (an editor-reviewed concise summary of the whole story, 747 words; the ONLY source of the events):\nThe novel opens with William Goldman explaining how he came to write the story. He describes discovering that the \"historical tale\" he believed he knew from his father was actually a \"good parts\" abridgement. Upon supposedly finding the original, verbose work by the fictional S. Morgenstern, Goldman decides to create his own \"good parts\" version, which forms the main narrative.\nIn the Renaissance-era country of Florin, a young farm woman named Buttercup often bosses her servant, Westley. His constant reply, \"As you wish,\" eventually reveals his love for her, which she reciprocates. Westley leaves to seek his fortune so they can marry, promising to return. However, Buttercup later receives news that the Dread Pirate Roberts attacked Westley's ship, leading her to believe he is dead. Years pass, and she is betrothed to Prince Humperdinck, heir to Florin's throne.\nBefore the wedding, Buttercup is kidnapped by a trio of outlaws: the Sicilian criminal genius Vizzini, the Spanish fencing master Inigo Montoya, and the enormous Turkish wrestler Fezzik. As they ascend the Cliffs of Insanity, a man in black pursues them. Vizzini cuts their rope, but the man clings to the cliff face.\nThe man in black reaches the top, where Inigo challenges him to a duel. Inigo reveals he seeks revenge on a six-fingered man who killed his father, Domingo Montoya. They engage in a skilled sword fight, which the man in black wins, but he spares Inigo's life out of respect.\nThe man in black continues his pursuit. Vizzini orders Fezzik to stop him, and Fezzik, preferring fair play, challenges the man to a wrestling match. The man outmaneuvers Fezzik, choking him unconscious. The man confronts Vizzini, who has blindfolded Buttercup, and proposes a Battle of Wits involving two goblets and the deadly \"iocane powder.\" After a series of deceptions and elaborate speeches on intellectual prowess and trickery, Vizzini fools the man into drinking the poisoned wine. However, both cups were poisoned, leading to a surprised Vizzini's death. The man in black claims to have built up an immunity to the universally fatal poison.\nLeaving, the man in black taunts Buttercup, claiming she felt nothing for Westley. Angered, she shoves him into a gorge, yelling, \"You can die, too, for all I care!\" The man calls, \"As you wish!\" Buttercup realizes the man is Westley and joins him in the gorge. They embrace passionately but are soon pursued by Prince Humperdinck's men. Westley reveals that the title of Dread Pirate Roberts is secretly passed down, and his love for Buttercup inspired the previous Roberts to spare his life.  They flee through the always-deadly Fire Swamp and face the ferocious ROUSs (Rodents Of Unusual Size).\nWestley and Buttercup escape the Fire Swamp but are captured by Prince Humperdinck and his six-fingered assistant, Count Tyrone Rugen. Buttercup negotiates for Westley's release, returning with Humperdinck to the palace. Rugen, following Humperdinck's secret orders, takes Westley to his underground \"Zoo of Death\" where he tortures him with \"The Machine,\" which drains his life force.\nMeanwhile, Buttercup has nightmares about her impending marriage. Humperdinck, who secretly plans to start a war with the neighboring country of Guilder, had orchestrated Buttercup's kidnapping and murder. He now believes her death on their wedding night will incite his subjects to fight more fiercely.\nOn the wedding day, Fezzik finds a drunken Inigo and reveals that Count Rugen is the six-fingered man. Inspired by the chance for revenge, Inigo regains sobriety. Knowing Vizzini is dead, they seek out the man in black, hoping his wits can help them storm the castle. Buttercup learns Humperdinck never sent ships to find Westley and taunts him with her enduring love. Enraged, Humperdinck tortures Westley to death. Westley's screams lead Inigo and Fezzik to the Zoo of Death.\nThey rescue Westley's body and enlist the help of the magician Miracle Max. Max pronounces Westley \"mostly dead\" and revives him, though Westley remains partially paralyzed and weak.\nWestley devises a plan to invade the castle during the wedding. The commotion prompts Humperdinck to hasten the ceremony. Buttercup, planning suicide in the honeymoon suite, is intercepted by Westley. Inigo chases Rugen through the castle and kills him in a sword fight. Westley, still partially paralyzed, bluffs his way out of a duel with Humperdinck, revealing the prince's cowardice. Westley spares Humperdinck's life, and he, Buttercup, Fezzik, and Inigo escape on the prince's horses. The novel ends with the group facing further mishaps and pursuit, but the author suggests they ultimately get away.",
+  "en_words": 747,
+  "url": "https://en.wikipedia.org/wiki/The_Princess_Bride_%28novel%29",
+  "title": "The Princess Bride (novel)",
+  "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"
+ },
+ "script": {
+  "characters": [
+   {
+    "name": "Westley",
+    "look_en": "Farm hand turned pirate, male, 25 years old; tall and thin build; angular face with a sharp jawline; tanned skin; green eyes with an intense almond shape; dark arched eyebrows; straight narrow nose; medium mouth with firm lips; black hair, medium length, styled in messy waves; clean-shaven; a faint fading scar on his left cheek; wearing a dark green linen shirt and dark green wool trousers.",
+    "tag_en": "Tall thin 25-year-old male farm hand, black wavy hair, scarred cheek, dark green outfit.",
+    "age": 25,
+    "hair_color": "black",
+    "hair_style": "medium wavy",
+    "top_en": "linen shirt",
+    "top_color": "dark green",
+    "bottom_en": "wool trousers",
+    "bottom_color": "dark green",
+    "key_en": "black medium wavy hair, wearing a dark green linen shirt and dark green wool trousers"
+   },
+   {
+    "name": "Buttercup",
+    "look_en": "Farm woman turned princess, female, 20 years old; short and round build; oval soft face with a rounded jawline; fair skin; blue eyes with a wide round shape; thin blonde eyebrows; small button nose; full pink mouth; blond hair, long, styled in loose cascading curls; clean-shaven; a small beauty mark near her right lip; wearing a deep red velvet gown and deep red silk slippers.",
+    "tag_en": "Short round 20-year-old female princess, blond cascading curls, beauty mark, deep red gown.",
+    "age": 20,
+    "hair_color": "blond",
+    "hair_style": "long curly",
+    "top_en": "velvet gown",
+    "top_color": "deep red",
+    "bottom_en": "silk skirt",
+    "bottom_color": "deep red",
+    "key_en": "blond long curly hair, wearing a deep red velvet gown and deep red silk skirt"
+   },
+   {
+    "name": "Inigo Montoya",
+    "look_en": "Spanish fencing master, male, 32 years old; broad-shouldered and muscular build; long square face with a strong prominent jawline; olive skin; dark brown eyes with a sharp piercing shape; thick dark eyebrows; aquiline nose; wide determined mouth; copper red hair, medium length, styled in a messy side part; thin mustache and goatee; a distinct dueling scar across his forehead; wearing a navy blue silk doublet and navy blue leather breeches.",
+    "tag_en": "Muscular broad-shouldered 32-year-old Spanish swordsman, copper red hair, forehead scar, navy blue outfit.",
+    "age": 32,
+    "hair_color": "copper red",
+    "hair_style": "medium parted",
+    "top_en": "silk doublet",
+    "top_color": "navy blue",
+    "bottom_en": "leather breeches",
+    "bottom_color": "navy blue",
+    "key_en": "copper red medium parted hair, wearing a navy blue silk doublet and navy blue leather breeches"
+   },
+   {
+    "name": "Prince Humperdinck",
+    "look_en": "Prince of Florin, male, 35 years old; slim and of medium height build; round fleshy face with a soft double chin; pale skin; grey eyes with a small hooded shape; arched thin eyebrows; prominent royal nose; thin disdainful mouth; gray hair, short, styled in neat slicked-back locks; clean-shaven; a small mole on his left earlobe; wearing a mustard yellow embroidered tunic and mustard yellow wool tights.",
+    "tag_en": "Slim medium-height 35-year-old prince, gray slicked hair, earlobe mole, mustard yellow outfit.",
+    "age": 35,
+    "hair_color": "gray",
+    "hair_style": "short slicked",
+    "top_en": "embroidered tunic",
+    "top_color": "mustard yellow",
+    "bottom_en": "wool tights",
+    "bottom_color": "mustard yellow",
+    "key_en": "gray short slicked hair, wearing a mustard yellow embroidered tunic and mustard yellow wool tights"
+   },
+   {
+    "name": "Vizzini",
+    "look_en": "Sicilian criminal genius, male, 40 years old; small and frail build; heart-shaped face with a pointed chin; olive skin; hazel eyes with a bulging curious shape; bushy high eyebrows; upturned pug nose; thin sarcastic mouth; dark brown hair, short, styled in a receding fringe; clean-shaven; deep frown lines on his forehead; wearing a purple velvet vest and purple cotton trousers.",
+    "tag_en": "Small frail 40-year-old Sicilian criminal, dark brown receding hair, forehead lines, purple outfit.",
+    "age": 40,
+    "hair_color": "dark brown",
+    "hair_style": "short receding",
+    "top_en": "velvet vest",
+    "top_color": "purple",
+    "bottom_en": "cotton trousers",
+    "bottom_color": "purple",
+    "key_en": "dark brown short receding hair, wearing a purple velvet vest and purple cotton trousers"
+   },
+   {
+    "name": "Fezzik",
+    "look_en": "Turkish wrestler, male, 30 years old; heavy and tall build; broad round face with a heavy square jawline; ruddy skin; brown eyes with a gentle wide shape; thick heavy eyebrows; broad flat nose; wide friendly mouth; light brown hair, long, styled in thick shaggy locks; full thick beard; a small faint scar on his right cheek; wearing a light gray leather tunic and light gray canvas trousers.",
+    "tag_en": "Heavy tall 30-year-old Turkish wrestler, light brown shaggy hair, full beard, light gray outfit.",
+    "age": 30,
+    "hair_color": "light brown",
+    "hair_style": "long shaggy",
+    "top_en": "leather tunic",
+    "top_color": "light gray",
+    "bottom_en": "canvas trousers",
+    "bottom_color": "light gray",
+    "key_en": "light brown long shaggy hair, wearing a light gray leather tunic and light gray canvas trousers"
+   }
+  ],
+  "outline": [
+   {
+    "event": "Westley and Buttercup fall in love, but he leaves to seek his fortune and is seemingly killed by the Dread Pirate Roberts.",
+    "because": "This sparks the romance and sets Buttercup on the path to marry Prince Humperdinck."
+   },
+   {
+    "event": "Buttercup is kidnapped by Vizzini, Inigo Montoya, and Fezzik before her wedding, and a mysterious man in black pursues them.",
+    "because": "The outlaws flee up the Cliffs of Insanity with their captive, drawing the masked pursuer."
+   },
+   {
+    "event": "The man in black defeats Inigo and Fezzik, and then outwits Vizzini in a battle of wits with iocane powder.",
+    "because": "His victory leaves him alone with Buttercup on the mountain path."
+   },
+   {
+    "event": "Buttercup pushes the man in black into a gorge, but discovers he is Westley when he answers as you wish.",
+    "because": "They reunite and flee together through the dangerous Fire Swamp."
+   },
+   {
+    "event": "Prince Humperdinck and Count Rugen capture them, releasing Buttercup and taking Westley to the Zoo of Death to torture him.",
+    "because": "Humperdinck secretly plans to start a war and kill Buttercup on their wedding night."
+   },
+   {
+    "event": "Inigo and Fezzik discover that Count Rugen is the six-fingered man and seek the man in black for help.",
+    "because": "They need his clever wits to help them storm the castle and find revenge."
+   },
+   {
+    "event": "Miracle Max revives Westley, and the heroes storm the castle during the royal wedding.",
+    "because": "They successfully disrupt the ceremony and confront the villains."
+   },
+   {
+    "event": "Inigo kills Count Rugen in a duel, while Westley bluffs Humperdinck to spare his life.",
+    "because": "The heroes defeat their enemies and escape together on horses to face their future."
+   }
+  ],
+  "cast": [
+   {
+    "name": "Westley",
+    "sentence_fa": "Westley کارگر جوانی است که عاشق Buttercup می‌شود و پس از سفری پرمخاطره بازمی‌گردد تا عشق خود را نجات دهد."
+   },
+   {
+    "name": "Buttercup",
+    "sentence_fa": "Buttercup بانوی جوانی است که قرار است با شاهزاده ازدواج کند اما سرنوشت دیگری در انتظار اوست."
+   },
+   {
+    "name": "Inigo Montoya",
+    "sentence_fa": "Inigo Montoya شمشیرزن ماهر اسپانیایی است که تمام زندگی‌اش را به دنبال قاتل پدرش می‌گردد."
+   },
+   {
+    "name": "Prince Humperdinck",
+    "sentence_fa": "Prince Humperdinck ولیعهد خودخواهی است که نقشه‌های شومی در سر دارد و می‌خواهد جنگ به پا کند."
+   },
+   {
+    "name": "Vizzini",
+    "sentence_fa": "Vizzini جنایتکار سیسیلی مغروری است که رهبری آدم‌ربایان را بر عهده دارد و به هوش خود می‌نازد."
+   }
+  ],
+  "scenes": [
+   {
+    "narration_fa": "کتاب The Princess Bride اثر William Goldman نویسنده آمریکایی در سال هزار و نهصد و هفتاد و سه منتشر شده است. این رمان جذاب ترکیبی از کمدی، ماجراجویی، فانتزی و عاشقانه است. داستان درباره جوانی به نام Westley است که برای به دست آوردن عشق زندگی‌اش تلاش می‌کند.",
+    "source_en": "The Princess Bride: S. Morgenstern's Classic Tale of True Love and High Adventure, The \"Good Parts\" Version is a 1973 fantasy romance novel by American writer William Goldman.",
+    "characters_present": [
+     "Westley"
+    ],
+    "setting_en": "A quiet room in Renaissance-era Florin with warm afternoon sunlight filtering through a window.",
+    "action_en": "Westley sits by a wooden table holding an old leather-bound book.",
+    "mood_en": "Calm, nostalgic, and inviting with warm gold tones.",
+    "spoken_fa": "کتاب The Princess Bride اثر William Goldman نویسنده آمریکایی در سال هزار و نهصد و هفتاد و سه منتشر شده است. این رمان جذاب ترکیبی از کمدی، ماجراجویی، فانتزی و عاشقانه است. داستان درباره جوانی به نام Westley است که برای به دست آوردن عشق زندگی‌اش تلاش می‌کند.",
+    "beats": [
+     "کتاب The Princess Bride اثر William Goldman نویسنده آمریکایی در سال هزار و نهصد و هفتاد و سه منتشر شده است. این رمان جذاب ترکیبی از کمدی، ماجراجویی، فانتزی و عاشقانه است.",
+     "داستان درباره جوانی به نام Westley است که برای به دست آوردن عشق زندگی‌اش تلاش می‌کند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Side-view medium-wide shot showing an author writing at a wooden desk with an inkwell, quill pen, and scattered manuscript pages. In the foreground, an open leather notebook rests beside a brass candlestick. In the middle ground, the dark oak desk sits beneath a paned window showing a quiet suburban street under a twilight sky, surrounded by built-in wooden bookshelves filled with heavy volumes. In the background, drawn velvet curtains frame the window. The lower fifth of the picture is only floorboards. Warm amber lamplight illuminates the scene, casting soft shadows. No other person anywhere in the picture.",
+      "event_en": "An unseen writer pens the manuscript at a cluttered wooden desk.",
+      "location": "other",
+      "characters_present": [],
+      "kind": "author",
+      "must_show": [
+       "wooden writing desk",
+       "inkwell and quill pen",
+       "manuscript pages",
+       "burning oil lamp",
+       "paned window"
+      ],
+      "people_en": "exactly one person, seen only from behind",
+      "others": [],
+      "time_en": "1973, autumn evening in an American study room",
+      "roles": {}
+     },
+     {
+      "visual_en": "Medium shot from the waist up with the place clearly visible behind, showing Westley looking out with a determined expression. In the foreground, a polished marble floor reflects the light. In the middle ground, carved white limestone walls with tall arched windows and heavy crimson velvet tapestries frame the space, featuring ornate gilded wooden tables. In the background, manicured stone courtyards stretch toward distant rolling green hills under a bright sky. The lower fifth of the picture is only polished marble floor. Warm afternoon sunlight streams through the window from the side. No other person anywhere in the picture.",
+      "event_en": "Westley stands thoughtfully in a sunlit room, dreaming of his love.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Westley"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "carved white limestone wall",
+       "tall arched window",
+       "polished marble floor"
+      ],
+      "people_en": "exactly 1 person: Westley, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the young man standing thoughtfully and dreaming of his love"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در سرزمین Florin جوانی به نام Westley برای Buttercup کار می‌کند تا این‌که ابراز عشق می‌کند. او به سفری دوردست می‌رود تا ثروتی به دست آورد و بازگردد. اما خبر می‌رسد که کشتی او مورد حمله دزدان دریایی قرار گرفته است و او مرده است. سال‌ها بعد Buttercup مجبور می‌شود نامزد Prince Humperdinck شود.",
+    "source_en": "Westley leaves to seek his fortune so they can marry, promising to return. However, Buttercup later receives news that the Dread Pirate Roberts attacked Westley's ship.",
+    "characters_present": [
+     "Westley",
+     "Buttercup"
+    ],
+    "setting_en": "A green hillside farm in Florin under a bright morning sky.",
+    "action_en": "Westley and Buttercup stand together by a wooden fence, talking softly.",
+    "mood_en": "Tender and romantic with soft natural lighting.",
+    "spoken_fa": "در سرزمین Florin جوانی به نام Westley برای Buttercup کار می‌کند تا این‌که ابراز عشق می‌کند. او به سفری دوردست می‌رود تا ثروتی به دست آورد و بازگردد. اما خبر می‌رسد که کشتی او مورد حمله دزدان دریایی قرار گرفته است و او مرده است. سال‌ها بعد Buttercup مجبور می‌شود نامزد Prince Humperdinck شود.",
+    "beats": [
+     "در سرزمین Florin جوانی به نام Westley برای Buttercup کار می‌کند تا این‌که ابراز عشق می‌کند. او به سفری دوردست می‌رود تا ثروتی به دست آورد و بازگردد.",
+     "اما خبر می‌رسد که کشتی او مورد حمله دزدان دریایی قرار گرفته است و او مرده است. سال‌ها بعد Buttercup مجبور می‌شود نامزد Prince Humperdinck شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Full-body shot with the people large in the frame, showing Westley holding Buttercup's hands in a courtyard. In the foreground, scattered fallen green leaves rest on polished marble floor. In the middle ground, carved white limestone pillars, towering arched windows, and wrought-iron candelabras line the palace exterior. In the background, rolling green hills stretch beneath a bright morning sky. The lower fifth of the picture is only stone courtyard floor. Morning sunlight illuminates the figures from the side with a soft golden glow. No other person anywhere in the picture.",
+      "event_en": "Westley speaks to Buttercup before embarking on his distant journey.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Westley",
+       "Buttercup"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "Buttercup",
+       "carved white limestone wall",
+       "arched window",
+       "stone courtyard"
+      ],
+      "people_en": "exactly 2 people: Westley and Buttercup, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the young farm hand speaking to Buttercup before his journey",
+       "Buttercup": "the young farm woman listening to Westley's confession"
+      }
+     },
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Prince Humperdinck standing beside a sorrowful Buttercup. In the foreground, an ornate gilded wooden table holds a silver chalice. In the middle ground, polished marble floors reflect heavy velvet tapestries in deep crimson hanging from carved white limestone walls. In the background, towering arched windows look out over manicured stone courtyards under a grey overcast sky. The lower fifth of the picture is only polished marble floor. Cool, somber indoor light casts gentle shadows across the room. No other person anywhere in the picture.",
+      "event_en": "Prince Humperdinck stands beside a grieving Buttercup in the palace hall.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Buttercup",
+       "Prince Humperdinck"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Buttercup",
+       "Prince Humperdinck",
+       "gilded wooden table",
+       "red velvet tapestries",
+       "marble floor"
+      ],
+      "people_en": "exactly 2 people: Buttercup and Prince Humperdinck, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Buttercup": "the grieving woman standing beside Prince Humperdinck",
+       "Prince Humperdinck": "the prince standing formally beside Buttercup"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "اما سال‌ها بعد از این ماجراها، ناگهان این افراد از راه می‌رسند و دختر جوان را می‌دزدند تا او را برای مراسم آماده کنند.",
+    "spoken_fa": "اما سال‌ها بعد از این ماجراها، ناگهان این افراد از راه می‌رسند و دختر جوان را می‌دزدند تا او را برای مراسم آماده کنند.",
+    "source_en": "",
+    "characters_present": [],
+    "setting_en": "A green hillside farm in Florin under a bright morning sky.",
+    "action_en": "Westley and Buttercup stand together by a wooden fence, talking softly.",
+    "mood_en": "Tender and romantic with soft natural lighting.",
+    "beats": [
+     "اما سال‌ها بعد از این ماجراها، ناگهان این افراد از راه می‌رسند و دختر جوان را می‌دزدند تا او را برای مراسم آماده کنند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Over-the-shoulder medium-wide shot, showing Vizzini, Inigo, and Fezzik leading a distressed Buttercup across a mountain path. In the foreground, dark grey slate stones and a frayed hemp climbing rope lie on the damp ground. In the middle ground, sheer wet stone walls rise high above a turbulent, foam-flecked ocean. In the background, narrow mountain trails wind upward under a perpetual grey overcast sky. The lower fifth of the picture is only wet stone ground. Harsh midday light casts stark shadows over the jagged rocks. No other person anywhere in the picture.",
+      "event_en": "Three outlaws forcibly lead Buttercup across the rocky cliff trail.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Buttercup",
+       "Vizzini"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Buttercup",
+       "Vizzini",
+       "dark grey slate rocks",
+       "frayed hemp rope",
+       "turbulent ocean"
+      ],
+      "people_en": "exactly 4 people: Buttercup, Vizzini, Inigo Montoya, and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Buttercup": "the captured young woman being led by the outlaws",
+       "Vizzini": "the criminal genius leading the outlaws",
+       "Inigo Montoya": "the fencing master assisting in the abduction",
+       "Fezzik": "the enormous wrestler guarding the captive"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "پیش از روز عروسی، سه نفر به نام‌های Vizzini و Inigo Montoya و Fezzik او را می‌دزدند. آن‌ها از صخره‌های مرتفعی بالا می‌روند اما مردی سیاهپوش به تعقیبشان می‌پردازد. در همین میان، Westley پس از سال‌ها دوری راز بزرگی را با Buttercup در میان می‌گذارد و فاش می‌کند که عنوان Dread Pirate Roberts به طور مخفیانه به افراد بعدی منتقل می‌شود و Roberts قبلی به خاطر عشقش به او، جانش را بخشیده است. با این حال، Inigo شمشیرزن ماهر به مبارزه با مرد سیاهپوش می‌رود اما شکست می‌خورد. با این همه مرد مبارز جان او را از روی احترام می‌بخشد.",
+    "source_en": "Before the wedding, Buttercup is kidnapped by a trio of outlaws: Vizzini, Inigo Montoya, and Fezzik. A man in black pursues them.",
+    "characters_present": [
+     "Inigo Montoya",
+     "Vizzini",
+     "Fezzik"
+    ],
+    "setting_en": "Steep and rocky mountain cliffs under a grey overcast sky.",
+    "action_en": "Inigo Montoya duels the man in black with steel swords on a narrow ledge.",
+    "mood_en": "Tنشن‌زا و پرهیجان با سایه‌های عمیق.",
+    "spoken_fa": "پیش از روز عروسی، سه نفر به نام‌های Vizzini و Inigo Montoya و Fezzik او را می‌دزدند. آن‌ها از صخره‌های مرتفعی بالا می‌روند اما مردی سیاهپوش به تعقیبشان می‌پردازد. در همین میان، Westley پس از سال‌ها دوری راز بزرگی را با Buttercup در میان می‌گذارد و فاش می‌کند که عنوان Dread Pirate Roberts به طور مخفیانه به افراد بعدی منتقل می‌شود و Roberts قبلی به خاطر عشقش به او، جانش را بخشیده است. با این حال، Inigo شمشیرزن ماهر به مبارزه با مرد سیاهپوش می‌رود اما شکست می‌خورد. با این همه مرد مبارز جان او را از روی احترام می‌بخشد.",
+    "beats": [
+     "پیش از روز عروسی، سه نفر به نام‌های Vizzini و Inigo Montoya و Fezzik او را می‌دزدند. آن‌ها از صخره‌های مرتفعی بالا می‌روند اما مردی سیاهپوش به تعقیبشان می‌پردازد.",
+     "در همین میان، Westley پس از سال‌ها دوری راز بزرگی را با Buttercup در میان می‌گذارد و فاش می‌کند که عنوان Dread Pirate Roberts به طور مخفیانه به افراد بعدی منتقل می‌شود و Roberts قبلی به خاطر عشقش به او، جانش را بخشیده است.",
+     "با این حال، Inigo شمشیرزن ماهر به مبارزه با مرد سیاهپوش می‌رود اما شکست می‌خورد. با این همه مرد مبارز جان او را از روی احترام می‌بخشد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Low-angle medium-wide shot, showing Vizzini, Inigo, and Fezzik climbing the treacherous mountain precipice. In the foreground, wet slate boulders and a hanging hemp climbing rope rest against the rock face. In the middle ground, vertical jagged sea cliffs of dark grey slate rise above a turbulent, foam-flecked ocean. In the background, narrow mountain trails wind upward under a perpetual grey overcast sky. The lower fifth of the picture is only wet stone ground. Overcast daylight creates flat, dramatic shadows on the cliffside. No other person anywhere in the picture.",
+      "event_en": "Three outlaws climb the steep mountain path while pursued.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Vizzini",
+       "Inigo Montoya"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Vizzini",
+       "Inigo Montoya",
+       "Fezzik",
+       "dark grey slate rocks",
+       "frayed hemp rope"
+      ],
+      "people_en": "exactly 3 people: Vizzini, Inigo Montoya, and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Vizzini": "the criminal directing the climb up the cliffs",
+       "Inigo Montoya": "the fencing master climbing the steep rocky path",
+       "Fezzik": "the wrestler carrying burdens up the cliff"
+      }
+     },
+     {
+      "visual_en": "Side-view medium-wide shot, showing Westley talking quietly with Buttercup on a narrow plateau. In the foreground, sparse alpine weeds cling to dark grey slate rock crevices. In the middle ground, sheer wet stone walls rise above a turbulent, foam-flecked ocean under a desolate sky. In the background, narrow mountain trails wind upward into the distance. The lower fifth of the picture is only dark grey slate ground. Soft afternoon light breaks through the grey overcast sky, illuminating the couple. No other person anywhere in the picture.",
+      "event_en": "Westley and Buttercup converse secretly on a rocky mountain ledge.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Westley",
+       "Buttercup"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "Buttercup",
+       "dark grey slate rocks",
+       "alpine weeds",
+       "turbulent ocean"
+      ],
+      "people_en": "exactly 2 people: Westley and Buttercup, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the man in black revealing his pirate secret to Buttercup",
+       "Buttercup": "the princess listening intently to Westley's revelation"
+      }
+     },
+     {
+      "visual_en": "Medium shot from the waist up with the place clearly visible behind, showing Inigo kneeling with his rapier planted in the ground. In the foreground, dark grey slate stones and sparse alpine weeds rest near a damp rock crevice. In the middle ground, sheer wet stone walls rise high above a turbulent, foam-flecked ocean. In the background, narrow mountain trails wind upward under a perpetual grey overcast sky. The lower fifth of the picture is only dark slate ground. Overcast daylight casts sharp shadows around the defeated swordsman. No other person anywhere in the picture.",
+      "event_en": "Inigo kneels defeated on the rocky plateau after the duel.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Inigo Montoya"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Inigo Montoya",
+       "steel rapier sword",
+       "dark grey slate rock",
+       "alpine weeds"
+      ],
+      "people_en": "exactly 1 person: Inigo Montoya, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Inigo Montoya": "the Spanish fencing master kneeling defeated after the duel"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "مرد سیاهپوش پس از شکست دادن Inigo با Fezzik مبارزه می‌کند و او را بی‌هوش می‌سازد. او سپس به سراغ Vizzini می‌رود و او را به مبارزه جام‌های زهرآگین دعوت می‌کند. با انتخاب جام سم‌آلود، Vizzini فریب می‌خورد و جان خود را از دست می‌دهد.",
+    "source_en": "The man confronts Vizzini, who proposes a Battle of Wits involving two goblets and iocane powder. Both cups were poisoned, leading to Vizzini's death.",
+    "characters_present": [
+     "Vizzini",
+     "Fezzik"
+    ],
+    "setting_en": "A rocky mountain path lit by the harsh midday sun.",
+    "action_en": "Vizzini points at two cups on a stone table while looking intensely at his opponent.",
+    "mood_en": "Suspenseful and dramatic with sharp contrast.",
+    "spoken_fa": "مرد سیاهپوش پس از شکست دادن Inigo با Fezzik مبارزه می‌کند و او را بی‌هوش می‌سازد. او سپس به سراغ Vizzini می‌رود و او را به مبارزه جام‌های زهرآگین دعوت می‌کند. با انتخاب جام سم‌آلود، Vizzini فریب می‌خورد و جان خود را از دست می‌دهد.",
+    "beats": [
+     "مرد سیاهپوش پس از شکست دادن Inigo با Fezzik مبارزه می‌کند و او را بی‌هوش می‌سازد. او سپس به سراغ Vizzini می‌رود و او را به مبارزه جام‌های زهرآگین دعوت می‌کند.",
+     "با انتخاب جام سم‌آلود، Vizzini فریب می‌خورد و جان خود را از دست می‌دهد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Vizzini standing nervously with two silver goblets on a narrow plateau. In the foreground, dark grey slate stones and sparse alpine weeds litter the ground. In the middle ground, vertical jagged sea cliffs rise above a turbulent, foam-flecked ocean. In the background, narrow mountain trails wind upward under a perpetual grey overcast sky. The lower fifth of the picture is only dark slate rock. Overcast daylight creates an intense, suspenseful mood. No other person anywhere in the picture.",
+      "event_en": "Vizzini stands nervously on the rocky plateau holding two goblets.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Vizzini",
+       "Inigo Montoya"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Vizzini",
+       "two silver goblets",
+       "dark grey slate rocks",
+       "narrow rocky plateau"
+      ],
+      "people_en": "exactly 1 person: Vizzini, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Vizzini": "the Sicilian criminal holding the goblets for the battle of wits"
+      }
+     },
+     {
+      "visual_en": "Full-body shot with the people large in the frame, showing Vizzini collapsed lifelessly on the rocky plateau with a fallen silver goblet beside him. In the foreground, dark grey slate stones and a small dark stain on his purple velvet vest mark the scene. In the middle ground, sheer wet stone walls rise high above a turbulent, foam-flecked ocean. In the background, narrow mountain trails wind upward under a perpetual grey overcast sky. The lower fifth of the picture is only dark slate ground. Somber overcast light bathes the tragic scene. No other person anywhere in the picture.",
+      "event_en": "Vizzini collapses lifelessly onto the rocky ground after drinking the poison.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Vizzini"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Vizzini",
+       "fallen silver goblet",
+       "dark grey slate rocks",
+       "narrow rocky plateau"
+      ],
+      "people_en": "exactly 1 person: Vizzini, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Vizzini": "the fallen criminal victim lying lifeless on the rock"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "بعد از مرگ Vizzini، مرد سیاهپوش به Buttercup کنایه می‌زند که او هرگز Westley را دوست نداشته است. دختر عصبانی او را به درون دره هل می‌دهد اما صدایی می‌شنود. او فریاد می‌زند که همان‌طور که می‌خواهی و دختر متوجه می‌شود او همان Westley محبوبش است.",
+    "source_en": "Angered, she shoves him into a gorge. The man calls, 'As you wish!' Buttercup realizes the man is Westley and joins him.",
+    "characters_present": [
+     "Buttercup",
+     "Westley"
+    ],
+    "setting_en": "A deep, rocky gorge with shadows and a winding trail below.",
+    "action_en": "Buttercup embraces Westley passionately on the slope of the gorge.",
+    "mood_en": "Emotional and joyful with warm golden light.",
+    "spoken_fa": "بعد از مرگ Vizzini، مرد سیاهپوش به Buttercup کنایه می‌زند که او هرگز Westley را دوست نداشته است. دختر عصبانی او را به درون دره هل می‌دهد اما صدایی می‌شنود. او فریاد می‌زند که همان‌طور که می‌خواهی و دختر متوجه می‌شود او همان Westley محبوبش است.",
+    "beats": [
+     "بعد از مرگ Vizzini، مرد سیاهپوش به Buttercup کنایه می‌زند که او هرگز Westley را دوست نداشته است. دختر عصبانی او را به درون دره هل می‌دهد اما صدایی می‌شنود.",
+     "او فریاد می‌زند که همان‌طور که می‌خواهی و دختر متوجه می‌شود او همان Westley محبوبش است."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium shot from the waist up with the place clearly visible behind, showing Buttercup with an enraged expression pushing forward near the precipice. In the foreground, dark grey slate rocks and sparse alpine weeds cling to the edge. In the middle ground, vertical jagged sea cliffs drop steeply into a dark rocky gorge path below. In the background, a turbulent, foam-flecked ocean stretches under a perpetual grey overcast sky. The lower fifth of the picture is only dark slate ground. Moody overcast lighting highlights her passionate expression. No other person anywhere in the picture.",
+      "event_en": "Buttercup angrily shoves forward toward the edge of the steep gorge.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Buttercup",
+       "Westley"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Buttercup",
+       "dark grey slate rocks",
+       "hidden gorge path",
+       "sparse alpine weeds"
+      ],
+      "people_en": "exactly 1 person: Buttercup, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Buttercup": "the angry woman shoving toward the gorge edge"
+      }
+     },
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Westley and Buttercup embracing happily on the winding gorge path. In the foreground, dark grey slate stones and green alpine weeds line the rocky trail. In the middle ground, sheer wet stone walls rise up toward the high cliffs above a turbulent ocean. In the background, narrow mountain trails wind upward under a warm breaking sun. The lower fifth of the picture is only dark slate ground. Warm golden sunlight bathes the reunited lovers. No other person anywhere in the picture.",
+      "event_en": "Westley and Buttercup embrace passionately on the rocky gorge path.",
+      "location": "cliffs_of_insanity",
+      "characters_present": [
+       "Westley",
+       "Buttercup"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "Buttercup",
+       "winding gorge trail",
+       "dark grey slate rocks",
+       "alpine weeds"
+      ],
+      "people_en": "exactly 2 people: Westley and Buttercup, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the man embracing Buttercup on the gorge path",
+       "Buttercup": "the woman embracing Westley upon realizing his true identity"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "آن‌ها برای فرار وارد باتلاق خطرناکی می‌شوند و از دست موش‌های بزرگ جان سالم به در می‌برند. اما Prince Humperdinck و دستیار شش‌انگشتی‌اش Count Rugen سر می‌رسند و آن‌ها را دستگیر می‌کنند. شاهزاده دختر را به کاخ بازمی‌گرداند تا برای عروسی آماده شود.",
+    "source_en": "They flee through the Fire Swamp and face the ferocious ROUSs, but are captured by Prince Humperdinck and Count Rugen.",
+    "characters_present": [
+     "Buttercup",
+     "Prince Humperdinck"
+    ],
+    "setting_en": "A dark and misty swamp with gnarled trees and strange roots.",
+    "action_en": "Prince Humperdinck and Count Rugen corner Buttercup and Westley among the swamp trees.",
+    "mood_en": "Dark, eerie, and menacing with cool blue and green hues.",
+    "spoken_fa": "آن‌ها برای فرار وارد باتلاق خطرناکی می‌شوند و از دست موش‌های بزرگ جان سالم به در می‌برند. اما Prince Humperdinck و دستیار شش‌انگشتی‌اش Count Rugen سر می‌رسند و آن‌ها را دستگیر می‌کنند. شاهزاده دختر را به کاخ بازمی‌گرداند تا برای عروسی آماده شود.",
+    "beats": [
+     "آن‌ها برای فرار وارد باتلاق خطرناکی می‌شوند و از دست موش‌های بزرگ جان سالم به در می‌برند. اما Prince Humperdinck و دستیار شش‌انگشتی‌اش Count Rugen سر می‌رسند و آن‌ها را دستگیر می‌کنند. شاهزاده دختر را به کاخ بازمی‌گرداند تا برای عروسی آماده شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Side-view medium-wide shot, showing Westley and Buttercup rushing through the gloomy Fire Swamp. In the foreground, bubbling mud pits and stagnant black water reflect an eerie amber light. In the middle ground, twisted skeletal trees draped in hanging gray moss loom over quicksand patches under a perpetual mist. In the background, jagged stone ruins rise in the distance. The lower fifth of the picture is only damp swamp mud. Intermittent gouts of natural flame erupt from the damp earth, casting warm amber highlights against cool blue shadows. No other person anywhere in the picture.",
+      "event_en": "Westley and Buttercup flee through the gloomy, mist-filled Fire Swamp.",
+      "location": "fire_swamp",
+      "characters_present": [
+       "Westley",
+       "Buttercup"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "Buttercup",
+       "twisted skeletal trees",
+       "hanging gray moss",
+       "stagnant black water"
+      ],
+      "people_en": "exactly 2 people: Westley and Buttercup, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the man leading Buttercup through the treacherous swamp",
+       "Buttercup": "the woman following Westley through the misty swamp"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "اما دیری نمی‌پاید که Prince Humperdinck و دستیار شش‌انگشتی‌اش به لطف ردپای آن‌ها از مخفیگاهشان باخبر می‌شوند و سر می‌رسند.",
+    "spoken_fa": "اما دیری نمی‌پاید که Prince Humperdinck و دستیار شش‌انگشتی‌اش به لطف ردپای آن‌ها از مخفیگاهشان باخبر می‌شوند و سر می‌رسند.",
+    "source_en": "",
+    "characters_present": [],
+    "setting_en": "A dark and misty swamp with gnarled trees and strange roots.",
+    "action_en": "Prince Humperdinck and Count Rugen corner Buttercup and Westley among the swamp trees.",
+    "mood_en": "Dark, eerie, and menacing with cool blue and green hues.",
+    "beats": [
+     "اما دیری نمی‌پاید که Prince Humperdinck و دستیار شش‌انگشتی‌اش به لطف ردپای آن‌ها از مخفیگاهشان باخبر می‌شوند و سر می‌رسند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Prince Humperdinck walking cautiously through the misty swamp. In the foreground, stagnant black water and bubbling mud pits show fresh footprints. In the middle ground, twisted skeletal trees draped in hanging gray moss surround the damp path. In the background, jagged stone ruins loom through the perpetual mist. The lower fifth of the picture is only damp swamp mud. Eerie amber light from natural flame gouts casts long shadows across the scene. No other person anywhere in the picture.",
+      "event_en": "Prince Humperdinck tracks footsteps through the gloomy Fire Swamp.",
+      "location": "fire_swamp",
+      "characters_present": [
+       "Prince Humperdinck"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Prince Humperdinck",
+       "stagnant black water",
+       "twisted skeletal trees",
+       "hanging gray moss"
+      ],
+      "people_en": "exactly 1 person: Prince Humperdinck, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Prince Humperdinck": "the prince searching for the fugitives in the swamp"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در همین حال شاهزاده خبیث Westley را به زندان زیرزمینی خود می‌برد تا او را با دستگاه شکنجه از بین ببرد. او در این میان نقشه‌ای کشیده است تا با کشتن عروس در شب ازدواج، بهانه‌ای برای شروع جنگ با کشور همسایه یعنی Guilder پیدا کند و برای همین ربودن Buttercup را خودش برنامه‌ریزی کرده است. از آن سو Inigo و Fezzik متوجه می‌شوند که Count Rugen همان مرد شش‌انگشتی است.",
+    "source_en": "Rugen takes Westley to his underground Zoo of Death where he tortures him. Humperdinck secretly plans to start a war with Guilder.",
+    "characters_present": [
+     "Prince Humperdinck",
+     "Inigo Montoya",
+     "Fezzik"
+    ],
+    "setting_en": "A stone dungeon corridor lit by flickering torches on the walls.",
+    "action_en": "Prince Humperdinck walks down the gloomy stone hallway past heavy iron doors.",
+    "mood_en": "Gloomy, tense, and ominous with orange torchlight.",
+    "spoken_fa": "در همین حال شاهزاده خبیث Westley را به زندان زیرزمینی خود می‌برد تا او را با دستگاه شکنجه از بین ببرد. او در این میان نقشه‌ای کشیده است تا با کشتن عروس در شب ازدواج، بهانه‌ای برای شروع جنگ با کشور همسایه یعنی Guilder پیدا کند و برای همین ربودن Buttercup را خودش برنامه‌ریزی کرده است. از آن سو Inigo و Fezzik متوجه می‌شوند که Count Rugen همان مرد شش‌انگشتی است.",
+    "beats": [
+     "در همین حال شاهزاده خبیث Westley را به زندان زیرزمینی خود می‌برد تا او را با دستگاه شکنجه از بین ببرد. او در این میان نقشه‌ای کشیده است تا با کشتن عروس در شب ازدواج، بهانه‌ای برای شروع جنگ با کشور همسایه یعنی Guilder پیدا کند و برای همین ربودن Buttercup را خودش برنامه‌ریزی کرده است.",
+     "از آن سو Inigo و Fezzik متوجه می‌شوند که Count Rugen همان مرد شش‌انگشتی است."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Low-angle medium-wide shot, showing Prince Humperdinck standing over a bound Westley in a dark stone chamber. In the foreground, rough stone floor blocks and discarded iron manacles rest near the torture apparatus. In the middle ground, damp limestone walls feature iron sconces with flickering torches casting orange light. In the background, a hidden stone staircase ascends into darkness. The lower fifth of the picture is only stone floor blocks. Gloomy, ominous torchlight creates deep shadows. No other person anywhere in the picture.",
+      "event_en": "Prince Humperdinck confronts a bound Westley in the underground Zoo of Death.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Prince Humperdinck",
+       "Westley"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Prince Humperdinck",
+       "Westley",
+       "hidden stone staircase",
+       "metallic torture device",
+       "flickering torches"
+      ],
+      "people_en": "exactly 2 people: Prince Humperdinck and Westley, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Prince Humperdinck": "the prince overseeing the imprisonment of Westley",
+       "Westley": "the captive farm hand bound in the underground dungeon"
+      }
+     },
+     {
+      "visual_en": "Medium shot from the waist up with the place clearly visible behind, showing Inigo and Fezzik conferring earnestly in a corridor. In the foreground, a wrought-iron candelabra stands on an ornate gilded wooden table. In the middle ground, carved white limestone walls and deep crimson velvet tapestries line the polished marble floor. In the background, towering arched windows look out into the night. The lower fifth of the picture is only polished marble floor. Warm torchlight illuminates their faces with dramatic contrast. No other person anywhere in the picture.",
+      "event_en": "Inigo and Fezzik discuss the six-fingered man in a palace hallway.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Inigo Montoya",
+       "Fezzik"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Inigo Montoya",
+       "Fezzik",
+       "carved white limestone walls",
+       "wrought-iron candelabras",
+       "velvet tapestries"
+      ],
+      "people_en": "exactly 2 people: Inigo Montoya and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Inigo Montoya": "the swordsman discussing the identity of the six-fingered man",
+       "Fezzik": "the wrestler sharing information with Inigo"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "وقتی Buttercup به شاهزاده می‌گوید که هرگز او را دوست نداشته است، شاهزاده خشمگین Westley را تا سر حد مرگ شکنجه می‌دهد. فریادهای دردناک Westley دوستانش را به زندان زیرزمینی می‌کشد. آن‌ها پیکر بی‌جان او را نزد جادوگری به نام Miracle Max می‌برند.",
+    "source_en": "Enraged, Humperdinck tortures Westley to death. Westley's screams lead Inigo and Fezzik to the Zoo of Death to rescue him.",
+    "characters_present": [
+     "Inigo Montoya",
+     "Fezzik",
+     "Westley"
+    ],
+    "setting_en": "A dark underground stone chamber with metallic torture devices.",
+    "action_en": "Inigo and Fezzik carry Westley's limp body out of the dark stone room.",
+    "mood_en": "Somber, desperate, and cold with dark shadows.",
+    "spoken_fa": "وقتی Buttercup به شاهزاده می‌گوید که هرگز او را دوست نداشته است، شاهزاده خشمگین Westley را تا سر حد مرگ شکنجه می‌دهد. فریادهای دردناک Westley دوستانش را به زندان زیرزمینی می‌کشد. آن‌ها پیکر بی‌جان او را نزد جادوگری به نام Miracle Max می‌برند.",
+    "beats": [
+     "وقتی Buttercup به شاهزاده می‌گوید که هرگز او را دوست نداشته است، شاهزاده خشمگین Westley را تا سر حد مرگ شکنجه می‌دهد. فریادهای دردناک Westley دوستانش را به زندان زیرزمینی می‌کشد.",
+     "آن‌ها پیکر بی‌جان او را نزد جادوگری به نام Miracle Max می‌برند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Prince Humperdinck at the torture machine while Westley suffers. In the foreground, rough stone floor blocks and a dropped iron lever rest near the equipment. In the middle ground, damp stone walls hold iron sconces with flickering torches casting harsh orange light. In the background, a hidden stone staircase descends into the dark chamber. The lower fifth of the picture is only stone floor blocks. Somber and cold dungeon light creates deep shadows. No other person anywhere in the picture.",
+      "event_en": "Prince Humperdinck operates the torture machine against Westley in the dungeon.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Prince Humperdinck",
+       "Westley"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Prince Humperdinck",
+       "Westley",
+       "torture machine",
+       "damp stone walls",
+       "flickering torches"
+      ],
+      "people_en": "exactly 2 people: Prince Humperdinck and Westley, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Prince Humperdinck": "the prince operating the torture machine on Westley",
+       "Westley": "the suffering captive strapped to the torture device"
+      }
+     },
+     {
+      "visual_en": "Full-body shot with the people large in the frame, showing Inigo and Fezzik carrying Westley through the doorway of the rustic cottage. In the foreground, rough wooden floorboards and a mortar and pestle rest near the heavy timber entrance door. In the middle ground, log walls are lined with wooden shelves crowded with clay apothecary jars, dried herbs, and glass vials. In the background, a roaring stone hearth heats a large iron cauldron. The lower fifth of the picture is only wooden floorboards. Warm, flickering hearth firelight illuminates the rustic interior. No other person anywhere in the picture.",
+      "event_en": "Inigo and Fezzik carry Westley's lifeless body into Miracle Max's hut.",
+      "location": "miracle_max_hut",
+      "characters_present": [
+       "Inigo Montoya",
+       "Fezzik"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Inigo Montoya",
+       "Fezzik",
+       "heavy timber entrance door",
+       "rough-hewn log walls",
+       "clay apothecary jars"
+      ],
+      "people_en": "exactly 2 people: Inigo Montoya and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Inigo Montoya": "the swordsman carrying Westley's body into the hut",
+       "Fezzik": "the wrestler helping carry Westley inside"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "جادوگر اعلام می‌کند که Westley فقط نیمه‌مرده است و با معجونی او را به زندگی بازمی‌گرداند. با کمک دوستانش، Westley نقشه‌ای می‌کشد تا در روز عروسی به کاخ حمله کنند. Inigo هم برای گرفتن انتقام خون پدرش به دنبال Count Rugen در تالارهای کاخ می‌گردد.",
+    "source_en": "Max pronounces Westley mostly dead and revives him. Westley devises a plan to invade the castle during the wedding.",
+    "characters_present": [
+     "Westley",
+     "Inigo Montoya",
+     "Fezzik"
+    ],
+    "setting_en": "A cluttered, rustic wizard's cottage filled with glass jars and strange ingredients.",
+    "action_en": "Miracle Max pours a bubbling potion into a cup while Westley sits up slowly.",
+    "mood_en": "Mystical, hopeful, and warm with flickering candlelight.",
+    "spoken_fa": "جادوگر اعلام می‌کند که Westley فقط نیمه‌مرده است و با معجونی او را به زندگی بازمی‌گرداند. با کمک دوستانش، Westley نقشه‌ای می‌کشد تا در روز عروسی به کاخ حمله کنند. Inigo هم برای گرفتن انتقام خون پدرش به دنبال Count Rugen در تالارهای کاخ می‌گردد.",
+    "beats": [
+     "جادوگر اعلام می‌کند که Westley فقط نیمه‌مرده است و با معجونی او را به زندگی بازمی‌گرداند. با کمک دوستانش، Westley نقشه‌ای می‌کشد تا در روز عروسی به کاخ حمله کنند.",
+     "Inigo هم برای گرفتن انتقام خون پدرش به دنبال Count Rugen در تالارهای کاخ می‌گردد."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium-wide shot from head to knees, showing Westley sitting up on a wooden examination table while Inigo and Fezzik listen. In the foreground, a heavy oak workbench holds glass vials and an apothecary jar. In the middle ground, rough-hewn log walls are lined with wooden shelves crowded with dried herbs. In the background, a roaring stone hearth heats a large iron cauldron. The lower fifth of the picture is only wooden floorboards. Warm candlelight and hearth firelight create a mystical, hopeful atmosphere. No other person anywhere in the picture.",
+      "event_en": "A revived Westley plans the castle invasion with Inigo and Fezzik.",
+      "location": "miracle_max_hut",
+      "characters_present": [
+       "Westley",
+       "Inigo Montoya"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Westley",
+       "Inigo Montoya",
+       "Fezzik",
+       "wooden examination table",
+       "heavy oak workbench"
+      ],
+      "people_en": "exactly 3 people: Westley, Inigo Montoya, and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the revived man planning the invasion with his friends",
+       "Inigo Montoya": "the swordsman listening to Westley's plan",
+       "Fezzik": "the wrestler attending the strategy discussion"
+      }
+     },
+     {
+      "visual_en": "Side-view medium-wide shot, showing Inigo walking alertly through a grand castle hall with his rapier drawn. In the foreground, a polished marble floor reflects the dim light. In the middle ground, carved white limestone pillars and heavy crimson velvet tapestries line the corridor. In the background, towering arched windows look out into the dark night. The lower fifth of the picture is only polished marble floor. Dramatic torchlight casts long shadows across the stone floor. No other person anywhere in the picture.",
+      "event_en": "Inigo searches the castle halls with his sword drawn for Count Rugen.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Inigo Montoya"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Inigo Montoya",
+       "steel rapier sword",
+       "carved white limestone pillars",
+       "velvet tapestries"
+      ],
+      "people_en": "exactly 1 person: Inigo Montoya, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Inigo Montoya": "the swordsman searching the castle halls for revenge"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در جریان عروسی، Inigo پس از یک نبرد تن‌به‌تن سخت، قاتل پدرش را شکست می‌دهد و انتقام می‌گیرد. Westley هم با وجود ناتوانی جسمی، شاهزاده ترسو را تهدید می‌کند و تسلیم می‌سازد. آن‌ها پس از شکست دادن نقشه‌های شوم شاهزاده، پیروزمندانه از کاخ فرار می‌کنند.",
+    "source_en": "Inigo chases Rugen through the castle and kills him in a sword fight. Westley bluffs his way out of a duel with Humperdinck.",
+    "characters_present": [
+     "Inigo Montoya",
+     "Westley",
+     "Prince Humperdinck"
+    ],
+    "setting_en": "A grand castle hall decorated with stone pillars and tapestries during the wedding.",
+    "action_en": "Inigo Montoya fights with a sword while Westley stands tall facing Prince Humperdinck.",
+    "mood_en": "Triumphant, dramatic, and bright with festive lighting.",
+    "spoken_fa": "در جریان عروسی، Inigo پس از یک نبرد تن‌به‌تن سخت، قاتل پدرش را شکست می‌دهد و انتقام می‌گیرد. Westley هم با وجود ناتوانی جسمی، شاهزاده ترسو را تهدید می‌کند و تسلیم می‌سازد. آن‌ها پس از شکست دادن نقشه‌های شوم شاهزاده، پیروزمندانه از کاخ فرار می‌کنند.",
+    "beats": [
+     "در جریان عروسی، Inigo پس از یک نبرد تن‌به‌تن سخت، قاتل پدرش را شکست می‌دهد و انتقام می‌گیرد. Westley هم با وجود ناتوانی جسمی، شاهزاده ترسو را تهدید می‌کند و تسلیم می‌سازد.",
+     "آن‌ها پس از شکست دادن نقشه‌های شوم شاهزاده، پیروزمندانه از کاخ فرار می‌کنند."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Full-body shot with the people large in the frame, showing Inigo victorious with his sword raised near a cornered Prince Humperdinck. In the foreground, polished marble floor reflects the festive chandelier light. In the middle ground, carved white limestone pillars and deep crimson velvet tapestries adorn the grand hall. In the background, towering arched windows look out over the palace courtyard. The lower fifth of the picture is only polished marble floor. Bright festive lighting highlights the dramatic confrontation. No other person anywhere in the picture.",
+      "event_en": "Inigo triumphs in his sword duel while Westley confronts the cowardly prince.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Inigo Montoya",
+       "Westley"
+      ],
+      "kind": "event",
+      "must_show": [
+       "Inigo Montoya",
+       "Prince Humperdinck",
+       "steel rapier sword",
+       "carved white limestone pillars",
+       "marble floor"
+      ],
+      "people_en": "exactly 3 people: Inigo Montoya, Westley, and Prince Humperdinck, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Inigo Montoya": "the swordsman victorious in his duel",
+       "Westley": "the man confronting the cowardly prince",
+       "Prince Humperdinck": "the cornered prince surrendering to the victors"
+      }
+     },
+     {
+      "visual_en": "Wide action shot, showing Westley, Buttercup, Inigo, and Fezzik riding horses away from the grand limestone courtyard. In the foreground, manicured stone pavement shows fresh hoofprints leading toward the open gates. In the middle ground, carved white limestone walls, towering arched windows, and polished marble columns frame the exit. In the background, distant rolling green hills stretch beneath a bright afternoon sky. The lower fifth of the picture is only stone courtyard pavement. Bright daylight illuminates the majestic palace exterior. No other person anywhere in the picture.",
+      "event_en": "Four heroes escape triumphantly on horseback from the palace courtyard.",
+      "location": "florin_palace",
+      "characters_present": [
+       "Westley",
+       "Buttercup"
+      ],
+      "kind": "event",
+      "must_show": [
+       "carved white limestone archway",
+       "polished stone courtyard",
+       "towering arched windows",
+       "rolling green hills"
+      ],
+      "people_en": "exactly 4 people: Westley, Buttercup, Inigo Montoya, and Fezzik, nobody else",
+      "others": [],
+      "time_en": "",
+      "roles": {
+       "Westley": "the hero leading the escape on horseback",
+       "Buttercup": "the woman escaping with her beloved",
+       "Inigo Montoya": "the swordsman escaping victoriously",
+       "Fezzik": "the wrestler escaping with his companions"
+      }
+     }
+    ]
+   },
+   {
+    "narration_fa": "در جمع‌بندی، این داستان روایتگر عشقی جاودانه است که از دل خطرات بزرگ و توطئه‌های مرگبار عبور می‌کند. کتاب William Goldman با لحنی کمدی و افسانه‌ای، مرز میان واقعیت و داستان را در هم می‌آمیزد و مخاطبان زیادی را در سراسر جهان تحت تأثیر قرار داده است. این اثر جاودانه نشان می‌دهد که قدرت عشق حقیقی بر تمام سختی‌ها پیروز می‌شود.",
+    "source_en": "The book combines elements of comedy, adventure, fantasy, drama, romance, and fairy tale. Something in The Princess Bride affects people.",
+    "characters_present": [
+     "Westley",
+     "Buttercup",
+     "Inigo Montoya",
+     "Fezzik"
+    ],
+    "setting_en": "An open sunny meadow with green grass stretching toward distant rolling hills.",
+    "action_en": "Westley, Buttercup, Inigo, and Fezzik ride horses together across the sunny landscape.",
+    "mood_en": "Happy, peaceful, and inspiring with bright daylight.",
+    "spoken_fa": "در جمع‌بندی، این داستان روایتگر عشقی جاودانه است که از دل خطرات بزرگ و توطئه‌های مرگبار عبور می‌کند. کتاب William Goldman با لحنی کمدی و افسانه‌ای، مرز میان واقعیت و داستان را در هم می‌آمیزد و مخاطبان زیادی را در سراسر جهان تحت تأثیر قرار داده است. این اثر جاودانه نشان می‌دهد که قدرت عشق حقیقی بر تمام سختی‌ها پیروز می‌شود.",
+    "beats": [
+     "در جمع‌بندی، این داستان روایتگر عشقی جاودانه است که از دل خطرات بزرگ و توطئه‌های مرگبار عبور می‌کند. کتاب William Goldman با لحنی کمدی و افسانه‌ای، مرز میان واقعیت و داستان را در هم می‌آمیزد و مخاطبان زیادی را در سراسر جهان تحت تأثیر قرار داده است.",
+     "این اثر جاودانه نشان می‌دهد که قدرت عشق حقیقی بر تمام سختی‌ها پیروز می‌شود."
+    ],
+    "beat_visuals": [
+     {
+      "visual_en": "Medium shot from the waist up with the place clearly visible behind, showing an open old leather-bound book resting on a dark wooden reading table. In the foreground, a brass reading lamp casts a warm glow across the blank pages. In the middle ground, a stone window frame opens up to reveal a miniature view of Florin Palace against rolling green hills. In the background, dark wooden bookshelves filled with leather-bound volumes line the study wall. The lower fifth of the picture is only wooden tabletop. Warm amber lighting highlights the book. No other person anywhere in the picture.",
+      "event_en": "An old book rests open on a reading table with a window showing Florin Palace.",
+      "location": "other",
+      "characters_present": [],
+      "kind": "book",
+      "must_show": [
+       "old leather-bound book",
+       "wooden reading table",
+       "brass reading lamp",
+       "stone window frame"
+      ],
+      "people_en": "no people",
+      "others": [],
+      "time_en": "1973, a quiet study room",
+      "roles": {}
+     },
+     {
+      "visual_en": "Wide establishing shot with a detailed place, showing the magnificent exterior of Florin Palace. In the foreground, manicured stone courtyards gleam in the sun. In the middle ground, carved white limestone walls, towering arched windows, and crimson velvet tapestries draped inside the grand hall are visible through the glass. In the background, distant rolling green hills stretch under a bright, cloudless sky. The lower fifth of the picture is only stone courtyard floor. Warm, inspiring daylight fills the entire scene with a peaceful, golden glow. No other person anywhere in the picture.",
+      "event_en": "A symbolic view of Florin Palace bathed in warm sunlight symbolizing triumphant love.",
+      "location": "florin_palace",
+      "characters_present": [],
+      "kind": "theme",
+      "must_show": [
+       "carved white limestone palace",
+       "towering arched windows",
+       "manicured stone courtyard",
+       "rolling green hills"
+      ],
+      "people_en": "no people",
+      "others": [],
+      "time_en": "",
+      "roles": {}
+     }
+    ]
+   }
+  ],
+  "style_key": "storybook",
+  "art_style_en": "hand-drawn storybook illustration in the style of a gentle animated film, fine dark ink outlines, soft painterly colors, warm cozy lamplight and atmospheric weather, richly detailed backgrounds, natural proportions, expressive realistic faces, whole picture in this one style",
+  "era_en": "Renaissance-era Florin. Clothing of that time: Renaissance garments made from wool, linen, and velvet. Working classes wear simple tunics, trousers, and leather boots. Nobles wear tailored doublets, embroidered waistcoats, long gowns, and soft leather shoes.",
+  "locations": [
+   {
+    "id": "florin_palace",
+    "name_en": "Florin Palace",
+    "detail_en": "A grand Renaissance-era royal palace built from carved white limestone with towering arched windows, polished marble floors, and heavy velvet tapestries in deep crimson. The furnished interior features ornate gilded wooden tables, wrought-iron candelabras, and painted ceilings. Outside, manicured stone courtyards stretch toward distant rolling green hills. Essential features include the royal wedding altar, the bridal suite with its concealed balcony door, and the hidden stone staircase descending into the underground Zoo of Death."
+   },
+   {
+    "id": "cliffs_of_insanity",
+    "name_en": "Cliffs of Insanity",
+    "detail_en": "Vertical jagged sea cliffs made of dark grey slate and sheer wet stone rising high above a turbulent, foam-flecked ocean. The landscape is desolate and windswept, featuring sparse alpine weeds clinging to rock crevices under a perpetual grey overcast sky. In the far distance, narrow mountain trails wind upward. Key story features include the frayed hemp climbing rope hanging over the precipice, the narrow rocky plateau used for duels, and the hidden gorge path where lovers reunite."
+   },
+   {
+    "id": "fire_swamp",
+    "name_en": "Fire Swamp",
+    "detail_en": "A treacherous, gloomy swamp filled with stagnant black water, bubbling mud pits, and twisted skeletal trees draped in hanging gray moss. The air glows with intermittent, sudden gouts of natural flame erupting from the damp earth, casting an eerie amber light against the perpetual mist. Far away, jagged stone ruins loom. Essential features include the quicksand patches, the hidden lightning sand traps, and the dark rocky caves that serve as lavens for rodents of unusual size."
+   },
+   {
+    "id": "miracle_max_hut",
+    "name_en": "Miracle Max's Hut",
+    "detail_en": "A cramped, rustic stone cottage nestled deep in a shadowy forest, constructed from rough-hewn logs and a thatched roof dripping with moss. Inside, the walls are lined with wooden shelves crowded with clay apothecary jars, dried herbs, and glass vials. The center is dominated by a heavy oak workbench and a roaring stone hearth heating a large iron cauldron. Essential features include the wooden examination table for reviving the mostly dead, a heavy timber entrance door, and a mortar and pestle."
+   }
+  ],
+  "names": {
+   "The Princess Bride": "دِ پرینسس براید",
+   "William Goldman": "ویلیام گلدمن",
+   "Westley": "وِستلی",
+   "Florin": "فلورین",
+   "Buttercup": "باترکاپ",
+   "Prince Humperdinck": "پرینس هامپردینک",
+   "Vizzini": "ویزینی",
+   "Inigo Montoya": "اینیگو مونتویا",
+   "Fezzik": "فزیک",
+   "Domingo Montoya": "دومینگو مونتویا",
+   "Count Rugen": "کاونت روگن",
+   "Miracle Max": "میراکل مکس"
+  },
+  "visual_version": 8
+ },
+ "attempts": 0,
+ "version": 9,
+ "date": "2026-11-04"
+}
