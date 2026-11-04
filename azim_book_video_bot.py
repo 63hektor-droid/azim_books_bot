@@ -63,7 +63,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 6        # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 7        # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -635,8 +635,10 @@ def char_tag(c):
 
 
 PLACES_SPEC = """- "locations": the 3 to 7 places where the story really happens, most important first, each {{"id": "short_snake_case",
-  "name_en": "...", "detail_en": "35 to 50 English words: the concrete look of this place in that era: kind of building
-  or landscape, materials, colors, furniture and objects, plants, typical light and weather, what is seen far away.
+  "name_en": "...", "detail_en": "55 to 75 English words: the concrete look of this place in that era: kind of building
+  or landscape, materials, colors, furniture and objects, plants, typical light and weather, what is seen far away,
+  and the 3 or 4 objects or features of this place that the EVENTS of the story need (the bed of a death, the door of a
+  flight, the table of a quarrel, the bench of a trial...).
   Geographically and historically correct for THIS story; take it from the SOURCE TEXT, and where the source is silent
   choose what surely fits the place and the era (never modern things in an old story)."}}"""
 
@@ -1254,7 +1256,7 @@ def diversify_visuals(vis, items, book):
 below. Each one must still show exactly what its narration says, but with a DIFFERENT shot (choose from
 {json.dumps(SHOTS)}), a different part of the place or a different background detail, different light or time of day
 where the story allows, and different foreground objects than "previous_picture" and "next_picture".
-Keep the same characters, the SAME PLACE (its concrete details stay, only the viewpoint and the part of the place change) and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 60 to 85 English words, start with the shot type. Medium-wide pictures with large people: nobody cropped by the border, no extreme close-ups.
+Keep the same characters, the SAME PLACE (its concrete details stay, only the viewpoint and the part of the place change) and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 75 to 100 English words, start with the shot type, no person that is not already in the picture. Medium-wide pictures with large people: nobody cropped by the border, no extreme close-ups.
 Return JSON {{"visuals": [{{"i": 0, "shot": "...", "visual_en": "..."}}]}}
 Pictures: {json.dumps(jobs, ensure_ascii=False)}"""
     try:
@@ -1388,7 +1390,8 @@ Main characters (name: how they look): {json.dumps(names, ensure_ascii=False)}
 Check EVERY plan:
 1. PEOPLE COUNT: "people_en", "characters_present" and "others" together name exactly the people that the narration (and
    the source) says, no more, no fewer. "a mother and her child" is ONE adult and ONE child; when the source says she has
-   one child, a second child never appears; no crowd, helper or family member that the part does not mention.
+   one child, a second child never appears; no crowd, helper or family member that the part does not mention. \"visual_en\" must not contain ANY person that is
+   not counted in \"people_en\" (no passers-by, servants, onlookers, figures far away, faces at windows).
 2. PLACE AND EVENT: "event_en" and "visual_en" show exactly what HAPPENS in the narration, in the place where it happens
    (inside/outside, kind of place, time, weather); never a calm unrelated scene when something happens.
 3. MUST_SHOW: every item of "must_show" is written in "visual_en".
@@ -1397,9 +1400,13 @@ Check EVERY plan:
 5. TWO FACES AT MOST: at most 2 people have a large clear face; every other person is a small figure far away or seen
    from behind, and "visual_en" says it.
 6. Nothing modern in an old story; no names, no text, no logos in "visual_en".
+7. PLACE DETAILS: "visual_en" names at least 6 concrete details of the place (objects, furniture, architecture, weather,
+   light) that belong to THIS event and its mood, taken from the sentence, the source and the place; a vague or
+   generic place is rewritten with them.
+8. BODIES: every person has one head, two arms, two hands; nothing is planned that could show a missing head or an extra hand.
 For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
 "problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
-(English, 60 to 85 words, starts with the shot type, written again completely whenever the people or the event change),
+(English, 75 to 100 words, starts with the shot type, written again completely whenever the people or the event change),
 "people_en", "must_show", "characters_present" (names exactly as in the characters), "others" (one short English
 description per unnamed person), "roles".
 Return JSON {{"checks": [...]}} with one item per plan, in the same order.
@@ -1532,12 +1539,19 @@ Rules:
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
   (caregiver and patient, parent and child, killer and victim, speaker and listener).
-- "visual_en": English, 60 to 85 words. It STARTS with the shot type, then the event of "event_en" with the people doing it,
-  then the PLACE in three layers: (1) the foreground: 2 concrete objects of THIS moment; (2) the middle ground: the
-  architecture or landscape around the people with its materials, colors and 3 or 4 characteristic details copied from the
+- "visual_en": English, 75 to 100 words. It STARTS with the shot type, then the event of "event_en" with the people doing it,
+  then the PLACE in three layers: (1) the foreground: 3 concrete objects of THIS moment; (2) the middle ground: the
+  architecture or landscape around the people with its materials, colors and 4 to 6 characteristic details copied from the
   place description of the chosen location (furniture, windows, doors, trees, walls, floor, tools...); (3) the background:
-  what is far away, the sky, the weather. Then the time of day and the direction and color of the light. Unnamed people in
-  the background: what they wear and do. Everything belongs to the era of the story; nothing modern in an old story.
+  what is far away, the sky, the weather. Then the time of day and the direction and color of the light. NO unnamed people in
+  the background unless the part itself names them (a crowd, soldiers, villagers...); then they are counted in
+  \"people_en\". Otherwise \"visual_en\" ends with: no other person anywhere in the picture. Everything belongs to the era of the story; nothing modern in an old story.
+- PLACE FITS THE EVENT (very important): the place is never a neutral backdrop; its details tell the same story as the
+  event and its mood. Take them from the sentence, from the SOURCE TEXT and from the place description: the objects,
+  furniture, tools, architecture, weather, season, time of day and light that THIS exact event needs (a deathbed: a bed
+  with rumpled sheets, a candle, a medicine bottle, drawn curtains, grey morning light; a flight: an open door, a
+  dropped bag, a dark road, the moon). Write them concretely (material, color, state: worn, broken, open, lit, wet), never
+  as general words like "a sad room". Details never add a person. At least 2 items of "must_show" are such details.
 - "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
 - {FRAMING}
 - {POSE}
@@ -1548,6 +1562,9 @@ Rules:
   others in "others" as small figures far away or seen from behind, or as a small crowd. Write only what
   the characters DO ("the boy sits alone on a bench"): their fixed look is added automatically, so never write their
   faces, ages, bodies or clothes, and never write names or book titles in the picture description.
+- BODIES: every person in the picture is a complete human: one head, two arms, two hands, two legs. When hands matter
+  (writing, holding, pulling), say which hand holds what. Never plan a picture in which a body is hidden so that a head or
+  a hand could look missing or doubled.
 - TWO FACES AT MOST: in one picture at most 2 people have a large, clear face. Every other person (named or not) is a
   small figure far in the background or seen from behind, and "visual_en" says so. Only the people that the part really
   names or implies are drawn: never add a child, a crowd or a helper that the part does not mention.
@@ -1916,7 +1933,8 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"))
+_FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+                ("فرافکن", "فَرافْکَن"))      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
 def force_marks(t):
@@ -2358,9 +2376,13 @@ def _wc(t):
     return len(str(t).split())
 
 
-KLEIN_WORDS = 270         # FLUX.2 klein reads a longer text than the old square model
+KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
+ANATOMY = "Every person has exactly one head, two arms, two hands, two legs, no extra or missing limbs"
+NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no figures far away, no faces in windows or doorways"
+CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
+               "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
 
 
@@ -2410,6 +2432,11 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
         count = ""
     if total >= 2:
         count += "Every person has a different face, different hair and clothes of different colors. "
+    has_people = bool(present or others) or bool(people_en and not people_en.lower().startswith("no people"))
+    if has_people:
+        count += ANATOMY + ". "
+        if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
+            count += NO_EXTRA + ". "
     if total > MAX_PEOPLE:
         count += f"Only {MAX_PEOPLE} people show a large clear face; the others are small, far away or seen from behind. "
 
@@ -2451,6 +2478,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
 
     def compose(main_t, full, era, tail):
         era_part = f"Setting: {era}. " if era else ""
+        if scene.get("cover"):      # writer at the desk below, empty wall above (the big book is laid there later)
+            return (f"{head}{art_s}. {count}{main_t} {era_part}Vertical 9:16 composition: the writer and the desk large in the "
+                    f"lower half, fully inside the picture, the whole upper part an empty plain wall; {tail}")
         if non_event:       # the writer's desk, a book and its readers, a symbolic scene: objects and place first
             return (f"{head}{art_s}. {count}{main_t} {people(full)}{era_part}"
                     f"Vertical 9:16 medium-wide shot: the main subject large and fully inside the picture, nothing cut by "
@@ -2855,17 +2885,20 @@ For EACH picture return:
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
-  * a picture that is physically absurd (a head lying on a car, extra or missing limbs, merged or floating bodies,
-    melted faces) gets at most 3;
+  * LOOK AT EVERY BODY: one head, two arms, two hands (five fingers each), two legs. A person with a third arm or hand,
+    extra fingers or legs, a missing head or a headless body, a head on the wrong place, merged or floating bodies, melted
+    faces, or a head lying on an object: at most 2. Hands that hold nothing but look doubled: at most 4;
   * COUNT THE PEOPLE: their number and kind must equal "exact_people" (for example one mother and ONE child: two girls
-    next to the mother is wrong); one person too many or too few: at most 4;
+    next to the mother is wrong); one person too many or too few: at most 4. Any extra figure that is not in "exact_people" (a small person far away,
+    a crowd, a face in a window, a figure in a painting or a statue that looks like a person): at most 3;
   * every item of "must_show" must be visible; two or more of them missing: at most 5;
   * two different people who look like twins or clones (the same face, the same hair, the same clothes): at most 3, and
     the person who rescues, helps, attacks or talks to another person must not look like that other person;
   * with 3 or more people, any two with the same hair color or the same color of shirt or trousers: at most 4;
-  * kind "author": no face of a writer and no portrait, a desk of the writer's time; kind "book": a book and readers of its
-    time with one sign of THIS story; kind "theme": a symbolic scene made of things of THIS story; an unrelated landscape
-    or a random scene for these kinds: at most 3.
+  * kinds "author", "book", "theme" are all the same picture: ONE writer at a writing desk in the LOWER half, seen from the
+    side or behind (no portrait), writing with a pen in an open book, in clothes and furniture of the writer's time; the
+    UPPER 40 percent of the picture must be an EMPTY plain wall (a big book is placed there later): any object, window,
+    shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
   from the reference: at most 4; a face that is blurred, distorted or too small to see: at most 5; several people are
@@ -2919,47 +2952,114 @@ def _judge_groups(todo, jobs):
     return out
 
 
+WRITER_VISUAL = ("Vertical storybook scene in two parts. LOWER half: a writer sits at a wooden writing desk, seen from the "
+                 "side and slightly from behind, the face turned away from the viewer, writing in a thick open book with a "
+                 "feather pen held in the right hand while the left hand rests on the page; exactly one head, two arms and two "
+                 "hands. On the desk: an inkwell, a burning oil lamp and a stack of manuscript pages. UPPER 45 percent of the "
+                 "picture: a completely empty plain warm-toned wall with a faint soft shadow, no objects, no window, no shelves, "
+                 "no people, no text.")
+
+
+def writer_desk_plan(era):
+    """Parts about the author, the book or its message: ONE picture plan for all three. The writer sits at a writing
+    desk in the lower half; the upper part stays an empty wall, where the big book with the English names is laid later
+    (make_title_cards), because the image model cannot write letters."""
+    return {"kind": "author", "visual_en": WRITER_VISUAL, "event_en": "a writer sits at a desk and writes a book", "cover": True,
+            "characters_present": [], "others": [], "roles": {},
+            "people_en": "exactly one person: the writer, seen from the side and behind, nobody else",
+            "must_show": ["a writer at a wooden desk writing with a pen", "an inkwell and a lamp on the desk",
+                          "an empty plain wall in the upper part of the picture"]}
+
+
+def _ass_rect(x1, y1, x2, y2):
+    return f"m {x1} {y1} l {x2} {y1} {x2} {y2} {x1} {y2}"
+
+
+def _wrap_latin(text, size, width_px):
+    import textwrap
+    maxch = max(int(width_px / (0.62 * size)), 4)
+    return textwrap.wrap(text, maxch, break_long_words=False) or [text]
+
+
+def cover_ass(title, author, font, bold):
+    """An ASS file (drawn by ffmpeg/libass, no extra library) with a BIG book standing in the background: leather cover,
+    spine, page edges, gold frame, and the English title and author name on its cover."""
+    X1, Y1, X2, Y2 = 80, 70, 640, 590                  # the cover (the upper part of the 720x1280 picture)
+    fx1, fy1, fx2, fy2 = X1 + 70, Y1 + 30, X2 - 30, Y2 - 30
+    cx = (fx1 + fx2) // 2
+    width = fx2 - fx1 - 36
+
+    def shape(layer, color, rects, alpha="00", blur=0):
+        path = " ".join(_ass_rect(*r) for r in rects)
+        tag = f"{{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H{color}&\\1a&H{alpha}&" + (f"\\blur{blur}" if blur else "") + "\\p1}"
+        return f"Dialogue: {layer},0:00:00.00,0:00:10.00,Card,,0,0,0,,{tag}{path}{{\\p0}}"
+
+    ev = [shape(0, "000000", [(X1 + 14, Y1 + 18, X2 + 24, Y2 + 28)], alpha="80", blur=10),          # shadow
+          shape(1, "C8E6F1", [(X1 + 8, Y1 + 8, X2 + 16, Y2 + 16)]),                              # page block
+          shape(2, "9FB8C4", [(X2 + 4, Y1 + 14, X2 + 5, Y2 + 14), (X2 + 9, Y1 + 14, X2 + 10, Y2 + 14),
+                              (X1 + 14, Y2 + 4, X2 + 14, Y2 + 5), (X1 + 14, Y2 + 9, X2 + 14, Y2 + 10)]),   # page lines
+          shape(3, "1A1A6B", [(X1, Y1, X2, Y2)]),                                                # leather cover
+          shape(4, "0E0E40", [(X1, Y1, X1 + 38, Y2)]),                                           # spine
+          shape(5, "37AFD4", [(X1 + 38, Y1, X1 + 42, Y2), (fx1, fy1, fx2, fy1 + 4), (fx1, fy2 - 4, fx2, fy2),
+                              (fx1, fy1, fx1 + 4, fy2), (fx2 - 4, fy1, fx2, fy2),
+                              (fx1 + 12, fy1 + 12, fx2 - 12, fy1 + 14), (fx1 + 12, fy2 - 14, fx2 - 12, fy2 - 12),
+                              (fx1 + 12, fy1 + 12, fx1 + 14, fy2 - 12), (fx2 - 14, fy1 + 12, fx2 - 12, fy2 - 12),
+                              (cx - 70, 426, cx + 70, 429)])]                                   # gold lines and frame
+    for size in (68, 60, 52, 46, 40, 34):             # the biggest title size that fits in 4 lines inside the frame
+        tl = _wrap_latin(title, size, width)
+        if len(tl) <= 4 and all(len(x) * 0.62 * size <= width for x in tl):
+            break
+    ty = 272
+    ev.append(f"Dialogue: 6,0:00:00.00,0:00:10.00,Card,,0,0,0,,{{\\an5\\pos({cx},{ty})\\fs{size}\\1c&H37AFD4&\\3c&H000000&"
+              f"\\bord2\\shad0\\fsp1}}" + "\\N".join(tl))
+    if author:
+        al, asz = [author], 34
+        for size_try in (42, 36, 30):                  # one line if it fits, else two lines of a smaller size
+            one = _wrap_latin(author, size_try, width)
+            if len(one) == 1 and len(author) * 0.62 * size_try <= width:
+                al, asz = one, size_try
+                break
+        else:
+            al, asz = _wrap_latin(author, 32, width)[:2], 32
+        ev.append(f"Dialogue: 6,0:00:00.00,0:00:10.00,Card,,0,0,0,,{{\\an5\\pos({cx},{490 if len(al) == 1 else 480})\\fs{asz}\\1c&HE6F0F5&\\3c&H000000&"
+                  f"\\bord2\\shad0\\fsp3}}" + "\\N".join(al))
+    return ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
+            "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+            "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+            "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Style: Card,%s,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,%d,0,0,0,100,100,0,0,1,2,0,5,10,10,0,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n") % (
+        W, H, font, 1 if bold else 0) + "\n".join(ev) + "\n"
+
+
 def make_title_cards(jobs, book):
-    """Parts about the author, the book or its message are NOT drawn by the AI (its symbolic scenes were unrelated):
-    a card with the Persian name of the author / the book is laid over a dimmed picture of the story itself."""
+    """Parts about the author, the book or its message: the picture (a writer at a desk) is drawn and checked like every
+    other picture; here a BIG book with the ENGLISH title and author name is laid over its empty upper wall."""
     cards = [k for k, j in enumerate(jobs) if j.get("card")]
     if not cards:
         return
-    pool = [k for k, j in enumerate(jobs) if not j.get("card") and not j.get("reused")] \
-        or [k for k, j in enumerate(jobs) if not j.get("card")]
-    tail = pool[len(pool) * 2 // 3:] or pool
-    font = setup_sub_font()
 
     def esc(t):
         return re.sub(r"[{}\\]", "", str(t or "")).replace("\n", " ").strip()
 
-    for n, k in enumerate(cards):
-        kind = jobs[k]["card"]
-        title, author = esc(book.get("title_fa")), esc(book.get("author_fa"))
-        if kind == "author":
-            text = author or title
-        elif kind == "book" and title and author:
-            text = "{\\fs74}" + title + "\\N{\\fs46}" + author
-        else:
-            text = title or author
-        base = jobs[tail[min(int((n + 0.5) * len(tail) / len(cards)), len(tail) - 1)]]["img"]
-        ass = ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
-               "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-               "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-               "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-               "Style: Card,%s,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,%d,0,0,0,100,100,0,0,1,4,2,5,70,70,0,1\n\n"
-               "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-               "Dialogue: 0,0:00:00.00,0:00:10.00,Card,,0,0,0,,%s\n") % (W, H, font, 1 if _sub_bold else 0, text)
-        (WORK / f"card_{n}.ass").write_text(ass, encoding="utf-8")
+    title, author = esc(book.get("title_en")), esc(book.get("author_en"))
+    if not title:
+        return
+    font = setup_sub_font()
+    (WORK / "azim_cover.ass").write_text(cover_ass(title, author, font, _sub_bold), encoding="utf-8")
+    done = 0
+    for k in cards:
+        img = jobs[k]["img"]
+        tmp = f"cover_tmp_{k}.jpg"
         try:
-            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", base.name, "-vf",
-                f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=6:2,"
-                f"eq=brightness=-0.32:saturation=0.9,subtitles=card_{n}.ass:fontsdir=azim_fonts",
-                "-frames:v", "1", "-q:v", "2", jobs[k]["img"].name], cwd=WORK)
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-vf",
+                f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                f"subtitles=azim_cover.ass:fontsdir=azim_fonts", "-frames:v", "1", "-q:v", "2", tmp], cwd=WORK)
+            shutil.move(str(WORK / tmp), str(img))
+            done += 1
         except Exception as e:  # noqa: BLE001
-            print(f"Title card {n} failed ({e}): the dimmed story picture alone is used.", flush=True)
-            shutil.copy(base, jobs[k]["img"])
-    print(f"Title cards: {len(cards)} parts about the author / book / message got a card instead of an AI picture.",
+            print(f"Book cover {k} failed ({e}): the plain picture is used.", flush=True)
+    print(f"Book covers: {done} of {len(cards)} author / book / message parts got the big book with the English names.",
           flush=True)
 
 
@@ -2968,7 +3068,7 @@ def check_and_fix_images(jobs):
     thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
     redraw is not available, the pictures that already exist are kept: the video never fails because of this step."""
     best = {}                                              # picture number -> (score, bytes)
-    todo = [k for k, j in enumerate(jobs) if not j.get("card")]     # a copied (failed) picture is checked too
+    todo = list(range(len(jobs)))     # every picture is checked (the writer pictures too); a copied (failed) one as well
     for rnd in range(3):
         results = {}
         for grp, models in _judge_groups(todo, jobs):
@@ -3540,17 +3640,14 @@ def main():
                 sc["others"] = bvs[j].get("others", [])
                 if bvs[j].get("time_en"):          # the author's study or a library: not the time of the story
                     sc["era_en"] = bvs[j]["time_en"]
+            card_kind = None
+            if TITLE_CARDS and has_event and j < len(bvs) and str(bvs[j].get("kind") or "event") in ("author", "book", "theme"):
+                card_kind = str(bvs[j]["kind"])
+                sc.update(writer_desk_plan(sc.get("era_en", "")))
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
             reused = False
-            if (TITLE_CARDS and has_event and j < len(bvs)
-                    and str(bvs[j].get("kind") or "event") in ("author", "book", "theme")):
-                jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": False, "build": None,
-                             "card": str(bvs[j]["kind"])})
-                done_pics += 1
-                continue
-
             def build(fix="", use_refs=True, limit=None, sc=sc):
                 chars = script.get("characters", [])
                 names = [n for n in (sc.get("characters_present") or [])][:MAX_PEOPLE]
@@ -3587,7 +3684,7 @@ def main():
                 shutil.copy(last_img, img)
                 reused = True
             jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": reused,
-                         "build": build})
+                         "build": build, "card": card_kind})
             last_img = img
             done_pics += 1
     if IMAGE_CHECK:
