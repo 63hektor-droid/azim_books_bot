@@ -63,7 +63,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 7        # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 8        # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 9        # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -720,6 +720,9 @@ Rules:
   "bottom_en") differ in cut too (one in a long coat, one in a waistcoat, one in a shawl and a long skirt...). Choose
   colors that are far apart (red / navy blue / green / yellow / purple / white / black), never two shades of one color.
   A mother and her daughter, or two brothers, also differ in hair style and in clothes colors.
+- CLOTHES FIT THE JOB: the outfit shows the real job and class of the person (a merchant in a merchant's coat or
+  waistcoat, a farmer in work clothes, a priest in a cassock, a nurse in a nurse's dress); uniforms and armor ONLY for
+  soldiers, officers or guards. Say the job at the start of "look_en".
 - Never contradict the source (gender, age, hair, body, job, family relations).
 """ + diversity_text() + "\n"
     try:
@@ -1403,6 +1406,10 @@ Check EVERY plan:
 7. PLACE DETAILS: "visual_en" names at least 6 concrete details of the place (objects, furniture, architecture, weather,
    light) that belong to THIS event and its mood, taken from the sentence, the source and the place; a vague or
    generic place is rewritten with them.
+9. CLOTHES FIT THE JOB: the clothes of every person in "visual_en" and "others" match his or her job and class (a uniform
+   only on a soldier or guard); fix a mismatch.
+10. KILLING AND GHOSTS: a death by a knife shows the knife and a small red stain at the wound (not gory), never a person who
+   just sleeps; a ghost or spirit is a translucent glowing figure shaped like the person, not a halo or a light.
 8. BODIES: every person has one head, two arms, two hands; nothing is planned that could show a missing head or an extra hand.
 For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
 "problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
@@ -1510,8 +1517,13 @@ Rules:
   suffers what (for example "a woman is pulled out of the river by two fishermen"). This is the first thing a viewer must
   see. Take it from the sentence itself: what HAPPENS in the sentence (a death, a fight, a meeting, a departure, a
   discovery, a betrayal, a wedding, a trial...) is drawn as that very event, never replaced by a calm unrelated scene or
-  a symbol. A death or a killing is shown in a non-graphic storybook way that is still unmistakable: the still body on the
-  ground or on the bed, the dropped weapon, the shocked or grieving people around, a dark mood; never blood or gore.
+  a symbol. A death or a killing is shown in a storybook way that is unmistakable: the body collapsed on the ground or on the bed,
+  the WEAPON of the story visible (a knife in the hand of the killer, in the body or fallen beside it), a small dark red
+  stain on the clothes at the wound, the shocked or grieving people around, a dark mood; the wound is clear but never
+  gory (no open flesh, no pools of blood). A person killed by a knife is never drawn as someone who just sleeps.
+  GHOSTS AND SPIRITS: a ghost, soul or apparition is drawn as a pale, translucent, softly glowing FULL FIGURE with the
+  shape, face and clothes of that person (he or she is counted in "people_en"), floating or standing; never only a halo,
+  a light or a mist.
 - "must_show": 3 to 5 short English phrases: the concrete things that the sentences of THIS part name or clearly imply
   (people with their NUMBER, objects, features of the place, the action). Every one of them must be visible in the picture,
   so "visual_en" contains all of them. Never add anything that the part does not say.
@@ -1523,7 +1535,7 @@ Rules:
   part names).
 - "others": a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
   (a rescuer, a doctor, a neighbour, a soldier, a child of the crowd...): gender, age, hair color, build and clothes (color
-  and kind). Each of them must look completely different from every named character and from each other: another hair
+  and kind) that fit his or her JOB (a soldier in uniform, a doctor in a dark coat; never a uniform on a non-soldier). Each of them must look completely different from every named character and from each other: another hair
   color, other clothes colors and another age or build (the rescuer never looks like the person who is rescued, a stranger
   never looks like the hero). Empty list when there is nobody else.
 - PICTURE BY KIND. "event": as described above. "author": the world of the WRITER in the time when the book was written
@@ -1934,7 +1946,8 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
 _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
-                ("فرافکن", "فَرافْکَن"))      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
+                ("فرافکن", "فَرافْکَن"),
+                ("ثروت", "سَروَت"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
 def force_marks(t):
@@ -2368,8 +2381,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, pure illustration"
-CLEAN_SHORT = "sharp focus, crisp clean details, high clarity"
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, hand-painted storybook illustration, not a photo, not 3D, not anime"
+CLEAN_SHORT = "sharp focus, crisp clean details, hand-painted storybook illustration, not a photo, not 3D"
 
 
 def _wc(t):
@@ -2841,7 +2854,7 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
-REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 2)   # a bad picture is drawn again this many times (each costs free neurons)
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 3)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
@@ -2879,11 +2892,18 @@ For EACH picture return:
   said just by looking; 0 = unrelated). Strict limits:
   * the EVENT of the narration (a death, a fight, a meeting, a departure, a discovery...) must be recognisable; a calm
     or unrelated picture of a place or a person gets at most 3;
+  * a killing or death by a weapon: the weapon and a small red wound stain must be visible; a person who only seems to
+    sleep: at most 3. A ghost or spirit must be a translucent glowing figure with the person's shape and clothes; only a
+    halo, light or mist: at most 3;
   * the place and situation must fit the narration (inside/outside, kind of place, time, weather), else at most 5;
   * every character of the sheets must be visible in the picture; one missing: at most 5;
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
+  * STYLE: every picture must be the same hand-painted storybook illustration (fine dark ink outlines, soft painterly
+    colors). A photo-like, 3D, anime, comic, flat vector or sketch style: at most 3;
+  * CLOTHES FIT THE JOB: every person wears what his or her job, class and the era say (a merchant in a merchant's coat,
+    a servant in plain work clothes, a soldier in uniform ONLY if he is a soldier); a wrong costume: at most 4;
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * LOOK AT EVERY BODY: one head, two arms, two hands (five fingers each), two legs. A person with a third arm or hand,
     extra fingers or legs, a missing head or a headless body, a head on the wrong place, merged or floating bodies, melted
@@ -2895,13 +2915,14 @@ For EACH picture return:
   * two different people who look like twins or clones (the same face, the same hair, the same clothes): at most 3, and
     the person who rescues, helps, attacks or talks to another person must not look like that other person;
   * with 3 or more people, any two with the same hair color or the same color of shirt or trousers: at most 4;
-  * kinds "author", "book", "theme" are all the same picture: ONE writer at a writing desk in the LOWER half, seen from the
-    side or behind (no portrait), writing with a pen in an open book, in clothes and furniture of the writer's time; the
+  * kinds "author", "book", "theme" are all the same kind of picture: ONE writer (the gender and age in "exact_people"; a
+    wrong gender: at most 3) INDOORS in the LOWER half, doing something with writing (desk, typewriter, library table,
+    reading), seen from the side or behind (no portrait), in clothes and furniture of the writer's time; outdoors: at most 3; the
     UPPER 40 percent of the picture must be an EMPTY plain wall (a big book is placed there later): any object, window,
     shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
-  from the reference: at most 4; a face that is blurred, distorted or too small to see: at most 5; several people are
+  from the reference: at most 3; a face that is blurred, distorted or too small to see: at most 5; several people are
   clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
   color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
@@ -2952,22 +2973,57 @@ def _judge_groups(todo, jobs):
     return out
 
 
-WRITER_VISUAL = ("Vertical storybook scene in two parts. LOWER half: a writer sits at a wooden writing desk, seen from the "
-                 "side and slightly from behind, the face turned away from the viewer, writing in a thick open book with a "
-                 "feather pen held in the right hand while the left hand rests on the page; exactly one head, two arms and two "
-                 "hands. On the desk: an inkwell, a burning oil lamp and a stack of manuscript pages. UPPER 45 percent of the "
-                 "picture: a completely empty plain warm-toned wall with a faint soft shadow, no objects, no window, no shelves, "
-                 "no people, no text.")
+WRITER_SCENES = ("the writer sits at a wooden writing desk and writes in a thick open book with a pen, an inkwell, a lamp and "
+                 "manuscript pages on the desk",
+                 "the writer sits at a long reading table in a quiet library, a notebook and a pen in front, tall stacks of books "
+                 "and a reading lamp on the table",
+                 "the writer sits in an armchair beside a small table and reads a handwritten manuscript, a cup of tea and a "
+                 "pile of pages on the table")
 
 
-def writer_desk_plan(era):
-    """Parts about the author, the book or its message: ONE picture plan for all three. The writer sits at a writing
-    desk in the lower half; the upper part stays an empty wall, where the big book with the English names is laid later
-    (make_title_cards), because the image model cannot write letters."""
-    return {"kind": "author", "visual_en": WRITER_VISUAL, "event_en": "a writer sits at a desk and writes a book", "cover": True,
+def design_author(book, src):
+    """ONE small Gemini call: who the writer is (gender, age, outfit of the writer's time) and 4 indoor writing places
+    of the writer's time. The look is pasted into every writer picture, so it never changes."""
+    prompt = f"""The novel "{book['title_en']}" was written by {book['author_en']}. Return JSON with exactly these keys:
+- "gender": "woman" or "man" (the real gender of this writer).
+- "age": the age of the writer when the book was written (a number).
+- "look_en": 25 to 35 English words: gender, age, hair, build and the clothes (colors) of that writer in the time when the
+  book was written. No face details.
+- "scenes_en": 4 English texts of 25 to 40 words, each ONE different INDOOR place and activity that has to do with
+  writing, fitting the writer's own time (a writing desk with pen and ink; a typewriter only if typewriters already existed;
+  a library reading table with stacks of books; an armchair with a manuscript...). Each starts with "the writer sits" and
+  names 4 concrete objects. Everything stands in the LOWER part of the picture; nothing is outdoors."""
+    try:
+        d = gemini_json(prompt, minutes=4, models=WRITE_MODELS)
+        sc = [" ".join(str(x).split()) for x in (d.get("scenes_en") or []) if str(x).strip()][:4]
+        look = " ".join(str(d.get("look_en") or "").split())
+        gender = "woman" if str(d.get("gender") or "").lower().startswith("w") else "man"
+        if look and sc:
+            print(f"Writer designed: {gender}, {look[:80]}", flush=True)
+            return {"gender": gender, "look_en": look, "scenes_en": sc}
+    except GeminiQuotaExhausted:
+        raise
+    except Exception as e:  # noqa: BLE001
+        print("Writer design skipped:", e, flush=True)
+    return {}
+
+
+def writer_desk_plan(era, author=None, n=0):
+    """Parts about the author, the book or its message: ONE picture plan for all three. The writer (always the same
+    person, always indoors) works in a writing-related place in the lower half; the upper part stays an empty wall,
+    where the big book with the English names is laid later (make_title_cards)."""
+    a = author or {}
+    scenes = a.get("scenes_en") or list(WRITER_SCENES)
+    who = a.get("look_en") or "a writer"
+    gender = a.get("gender") or "person"
+    visual = (f"Vertical storybook scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
+              f"The writer is {who}; seen from the side and slightly from behind, the face turned away from the viewer; exactly "
+              f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
+              f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
+    return {"kind": "author", "visual_en": visual, "event_en": "the writer works on a book", "cover": True,
             "characters_present": [], "others": [], "roles": {},
-            "people_en": "exactly one person: the writer, seen from the side and behind, nobody else",
-            "must_show": ["a writer at a wooden desk writing with a pen", "an inkwell and a lamp on the desk",
+            "people_en": f"exactly one person: the writer, a {gender}, seen from the side and behind, nobody else",
+            "must_show": [f"one {gender} writer indoors", "a writing-related place (desk, typewriter or library table)",
                           "an empty plain wall in the upper part of the picture"]}
 
 
@@ -3621,6 +3677,13 @@ def main():
     done_pics = 0
     last_img = None
     jobs = []
+    cover_n = 0
+    if any(str(b.get("kind") or "event") in ("author", "book", "theme") for s_ in scenes for b in (s_.get("beat_visuals") or [])) \
+            and not script.get("author"):
+        script["author"] = design_author(book, src)
+        if pending:
+            pending["script"] = script
+            save_json(PENDING_FILE, pending)
     has_event = any(str(b.get("kind") or "event") == "event" for s in scenes for b in (s.get("beat_visuals") or []))
     for i, s in enumerate(scenes):
         beats = s.get("beats") or [s["narration_fa"]]
@@ -3643,7 +3706,8 @@ def main():
             card_kind = None
             if TITLE_CARDS and has_event and j < len(bvs) and str(bvs[j].get("kind") or "event") in ("author", "book", "theme"):
                 card_kind = str(bvs[j]["kind"])
-                sc.update(writer_desk_plan(sc.get("era_en", "")))
+                sc.update(writer_desk_plan(sc.get("era_en", ""), script.get("author"), cover_n))
+                cover_n += 1
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
