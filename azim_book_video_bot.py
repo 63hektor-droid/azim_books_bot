@@ -2854,7 +2854,7 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
-REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 3)   # a bad picture is drawn again this many times (each costs free neurons)
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 2)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
@@ -3577,7 +3577,23 @@ def get_book_and_source(posted, rejected):
     raise RuntimeError("Could not find a novel with a usable Plot section on Wikipedia")
 
 
+CF_STATE_FILE = SAVE_DIR / "azim_cf_state.json"      # committed with azim_saved_pics: no code needed in the workflow
+
+
+def cf_quota_finished_today():
+    """Cloudflare's free quota resets at 00:00 UTC. When a run found it finished, the next runs of the SAME UTC day stop
+    at once: they cannot draw anything, and they would only burn Gemini quota (script, voice) for nothing."""
+    if os.environ.get("AZIM_IGNORE_CF_STATE"):
+        return False
+    st = load_json(CF_STATE_FILE, {})
+    return isinstance(st, dict) and st.get("exhausted_utc_date") == datetime.now(timezone.utc).date().isoformat()
+
+
 def main():
+    if cf_quota_finished_today():
+        print("The free Cloudflare picture quota was already finished earlier today (it resets at 00:00 UTC, "
+              "03:30 Iran time). Nothing is started now, so no Gemini quota is wasted. The next run continues.", flush=True)
+        return
     posted = load_json(POSTED_FILE, [])
     rejected = load_json(REJECTED_FILE, [])
     if len(posted) >= TOTAL_BOOKS:
@@ -3783,6 +3799,9 @@ if __name__ == "__main__":
     except ImageServiceUnavailable as exc:
         print(f"STOP: no good picture can be made now ({exc}). No video is posted with bad pictures; "
               "the finished script is saved and the next run continues with it.", flush=True)
+        if "daily free quota" in str(exc):
+            SAVE_DIR.mkdir(parents=True, exist_ok=True)
+            save_json(CF_STATE_FILE, {"exhausted_utc_date": datetime.now(timezone.utc).date().isoformat()})
         pend = load_json(PENDING_FILE, None)
         if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
             pend["attempts"] = int(pend["attempts"]) - 1
