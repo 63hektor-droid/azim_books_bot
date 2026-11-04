@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 8        # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 9        # a saved script of another version is not resumed
+VISUAL_VERSION = 10       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 10       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -594,9 +594,66 @@ def _swap_color(c, old, new, what):
         c[key] = txt2
 
 
+FACE_TYPES = (
+    "a round face with full cheeks and a small snub nose",
+    "a long narrow face with a high forehead and a long straight nose",
+    "a square face with a strong jaw and a broad nose",
+    "an oval face with high cheekbones and large almond-shaped eyes",
+    "a heart-shaped face with a pointed chin and a small pointed nose",
+    "an angular face with deep-set eyes, thick eyebrows and a hooked nose",
+    "a soft wide face with a full chin and small close-set eyes",
+    "a thin face with sharp cheekbones and hollow cheeks",
+)
+FACE_LIST_TXT = "; ".join(f"{k + 1} = {v}" for k, v in enumerate(FACE_TYPES))
+
+
+def enforce_distinct_faces(chars, picks):
+    """Every character gets a DIFFERENT face type (the program decides, not the robot): the type is written into the look
+    sheet, from which the reference portrait is drawn, so no two reference faces start from the same description."""
+    used = set()
+    for k, c in enumerate(chars):
+        want = picks.get(k)
+        if want is None or not (0 <= want < len(FACE_TYPES)) or want in used:
+            want = next((x for x in range(len(FACE_TYPES)) if x not in used), k % len(FACE_TYPES))
+        used.add(want)
+        c["face_en"] = FACE_TYPES[want]
+        c["look_en"] = str(c.get("look_en") or "").rstrip(". ") + f". Face: {FACE_TYPES[want]}."
+    return chars
+
+
+_LAYERS_M = ("a sleeveless vest over the shirt", "a long open coat over the shirt", "suspenders over the rolled-sleeve shirt",
+             "a short jacket over the shirt", "a knitted sweater")
+_LAYERS_F = ("a shawl over the blouse", "a long cardigan over the blouse", "an apron over the dress",
+             "a short jacket over the blouse", "a knitted sweater")
+
+
+def enforce_distinct_garments(chars):
+    """Two characters never wear the same kind of upper garment: the later one gets another layer (vest, coat, shawl...)."""
+    seen = set()
+    for k, c in enumerate(chars):
+        key = re.sub(r"[^a-z ]", "", str(c.get("top_en") or "").lower()).strip()
+        if key and key in seen:
+            text = (str(c.get("look_en") or "") + " " + str(c.get("tag_en") or "")).lower()
+            female = bool(re.search(r"\b(woman|girl|female|lady|mother|daughter|wife|she)\b", text))
+            pool = _LAYERS_F if female else _LAYERS_M
+            for off in range(len(pool)):
+                layer = pool[(k + off) % len(pool)]
+                lk = re.sub(r"[^a-z ]", "", layer.lower())
+                if lk not in seen:
+                    print(f"Cast: {c.get('name')} wore the same kind of garment as another character: now '{layer}'.",
+                          flush=True)
+                    c["top_en"] = f"{c['top_en']} and {layer}"
+                    c["look_en"] = str(c.get("look_en") or "").rstrip(". ") + f". Also wears {layer}."
+                    key = re.sub(r"[^a-z ]", "", c["top_en"].lower()).strip()
+                    break
+        seen.add(key)
+    return chars
+
+
 def enforce_distinct_cast(chars):
     """No two characters share a hair color, a shirt color or a trousers/skirt color (two old people may both have gray
     hair). Fills "key_en": the short who-wears-what line that is pasted into every picture of the person."""
+    enforce_distinct_garments(chars)
     used = {"hair_color": set(), "top_color": set(), "bottom_color": set()}
     for c in chars:
         try:
@@ -625,6 +682,34 @@ def enforce_distinct_cast(chars):
         c["key_en"] = (f"{hair} hair, " if hair else "") + (f"wearing a {top}" if top else "") + \
                       (f" and {bottom}" if (top and bottom) else (f"wearing {bottom}" if bottom else ""))
         c["key_en"] = c["key_en"].strip(" ,")
+    return chars
+
+
+_ACCESSORIES_M = ("a flat cap", "round glasses", "a thick mustache", "a long scarf", "a brimmed hat", "a bushy beard")
+_ACCESSORIES_F = ("a headscarf", "a shawl over the shoulders", "a hair ribbon", "a white apron", "a bonnet",
+                  "a necklace with a pendant")
+
+
+def add_signatures(chars):
+    """Every person gets ONE different accessory (hat, glasses, shawl...) that is pasted into all of his or her pictures,
+    so even small figures differ at first sight. Not for children; not when the sheet already has the same kind of item."""
+    for k, c in enumerate(chars):
+        try:
+            age = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
+        except (IndexError, ValueError):
+            age = 30
+        if age < 12 or c.get("signature_en"):
+            continue
+        text = (str(c.get("look_en") or "") + " " + str(c.get("tag_en") or "")).lower()
+        female = bool(re.search(r"\b(woman|girl|female|lady|mother|daughter|wife|she)\b", text))
+        pool = _ACCESSORIES_F if female else _ACCESSORIES_M
+        for off in range(len(pool)):
+            acc = pool[(k + off) % len(pool)]
+            key = acc.split()[-1]
+            if key not in text:
+                c["signature_en"] = acc
+                c["key_en"] = (str(c.get("key_en") or "") + f", with {acc}").strip(" ,")
+                break
     return chars
 
 
@@ -690,15 +775,18 @@ Return JSON with exactly these keys:
 - "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
   (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
 - "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "...",
-  "age": 30, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "..."}}.
+  "age": 30, "face_type": 3, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "..."}}.
   "name" is the name in English letters exactly as in the source. "look_en" is ONE look sheet of 55 to 75 English words in
-  this fixed order: gender and exact age in years; body build; face shape and jawline; skin tone; eyes (color and shape);
-  eyebrows; nose; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
+  this fixed order: gender and exact age in years; body build; skin tone; eyes (color and shape);
+  eyebrows; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
   freckles, glasses...); the usual outfit with colors. It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
   main outfit color). It never contradicts "look_en".
+  FACE: "face_type" is the NUMBER of the face from this list that fits the character's age and gender: {FACE_LIST_TXT}.
+  Every character gets a DIFFERENT number. Do NOT write the face shape, cheeks, jaw or nose in "look_en" or "tag_en": the
+  program adds the face from your number.
   The extra keys say the same thing in one word or two: "age" is a number of years; "hair_color" (one plain color word:
   black, blond, copper red, brown, gray or white), "hair_style" (for example "short curly", "long braided"), "top_en" (the
   upper garment, for example "linen shirt"), "top_color", "bottom_en" (trousers, skirt or long dress) and "bottom_color"
@@ -730,15 +818,19 @@ Rules:
         locations = clean_locations(d.get("locations"))
         era = " ".join(str(d.get("era_en") or "").split())
         costume = " ".join(str(d.get("costume_en") or "").split())
-        chars = []
+        chars, picks = [], {}
         for c in d.get("characters") or []:
             if isinstance(c, dict) and str(c.get("name") or "").strip() and str(c.get("look_en") or "").strip():
+                try:
+                    picks[len(chars)] = int(str(c.get("face_type")).strip()) - 1
+                except (TypeError, ValueError):
+                    pass
                 chars.append({"name": str(c["name"]).strip(), "look_en": " ".join(str(c["look_en"]).split()),
                               "tag_en": " ".join(str(c.get("tag_en") or "").split()),
                               **{k: (c.get(k) if k == "age" else " ".join(str(c.get(k) or "").split()))
                                  for k in ("age", "hair_color", "hair_style", "top_en", "top_color", "bottom_en",
                                            "bottom_color")}})
-        chars = enforce_distinct_cast(chars[:6])
+        chars = add_signatures(enforce_distinct_cast(enforce_distinct_faces(chars[:6], picks)))
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -763,70 +855,230 @@ def cast_prompt(cast):
             "their relation to each other and what each of them wants.\n")
 
 
+# ---------------------------------------------------------------- story spine
+def plan_events(src):
+    """How many key events the story spine may have: about one per 70 words of the Plot, 6 to 12."""
+    return max(6, min(12, round(src["en_words"] / 70)))
+
+
+def clean_spine(d, lo):
+    """A usable story spine or None. Events are numbered 1..n again, in the order they were given."""
+    if not isinstance(d, dict):
+        return None
+    events = []
+    for x in d.get("events") or []:
+        if isinstance(x, dict) and str(x.get("what_en") or "").strip():
+            events.append({"id": len(events) + 1,
+                           "who_en": " ".join(str(x.get("who_en") or "").split()),
+                           "what_en": " ".join(str(x["what_en"]).split()),
+                           "where_en": " ".join(str(x.get("where_en") or "").split()),
+                           "because_en": " ".join(str(x.get("because_en") or "").split())})
+    if len(events) < max(5, lo - 1):
+        return None
+    heroes = []
+    for h in d.get("heroes") or []:
+        if isinstance(h, dict) and str(h.get("name") or "").strip():
+            heroes.append({"name": str(h["name"]).strip(), "role_en": " ".join(str(h.get("role_en") or "").split())})
+    return {"logline": " ".join(str(d.get("logline") or "").split()), "heroes": heroes[:4], "events": events[:14],
+            "ending_en": " ".join(str(d.get("ending_en") or "").split()),
+            "idea_en": " ".join(str(d.get("idea_en") or "").split()),
+            "author_en": " ".join(str(d.get("author_en") or "").split())}
+
+
+def build_spine(book, src, cast):
+    """Step B1 (ONE Gemini call, English): BEFORE any Persian is written, decide WHAT the viewer must be told: the
+    heroes and the few main events in order, each joined to the one before by its cause. The narration is then written
+    event by event, so a sentence that serves no event cannot enter the video."""
+    n = plan_events(src)
+    lo, hi = max(6, n - 1), n + 1
+    names = [c["name"] for c in (cast or {}).get("characters", [])]
+    names_txt = (f"\nCHARACTER NAMES to use (exactly as written): {json.dumps(names, ensure_ascii=False)}\n"
+                 if names else "")
+    prompt = f"""You are a story editor. Prepare the SUMMARY SPINE of the novel "{book['title_en']}" by {book['author_en']}:
+the few things that a viewer who NEVER read the book must be told, in order, to understand the WHOLE story.
+
+SOURCE TEXT (the only truth; use nothing else):
+{src['text']}
+{names_txt}
+Return JSON with exactly these keys:
+- "logline": ONE English sentence: who the hero is, what he or she wants, and what stands in the way.
+- "heroes": 2 to 4 objects {{"name": "...", "role_en": "..."}}: only the people without whom the story cannot be told.
+  "name" exactly as in the source; "role_en" 6 to 14 English words that introduce this person to a viewer (age or job,
+  relation to the other heroes, what he or she wants), only from the source.
+- "events": {lo} to {hi} objects, in the order of the story, each {{"id": 1, "who_en": "...", "what_en": "...",
+  "where_en": "...", "because_en": "..."}}:
+    "who_en": the people who act (with a few words of role for anyone who is not a hero);
+    "what_en": ONE English sentence: what happens (a concrete event, not a description);
+    "where_en": the place (and the time if it changes);
+    "because_en": what in the PREVIOUS event caused this one ("" for event 1).
+  Rules for the events:
+  * Event 1 is the situation at the start. The last event is the ending (how the story ends for the hero).
+  * REMOVAL TEST: an event is listed only if removing it would break the chain of cause and effect, or would hide a turning
+    point, the climax or the change of the hero. Episodes, side characters, trips, descriptions and details are NOT events.
+  * Every event follows from the one before it (a real cause, not just \"then\"). Together they tell the whole story from
+    the beginning to the end, with nothing important missing.
+  * Only facts of the PLOT in the source text.
+- "ending_en": ONE sentence: how the story ends and what has changed.
+- "idea_en": the central idea of the novel in ONE English sentence, taken ONLY from the INTRODUCTION or the SIGNIFICANCE part
+  of the source (\"\" if the source has none).
+- "author_en": ONE English sentence: who wrote the novel and when it was published, ONLY from the INTRODUCTION (\"\" if the
+  source does not say)."""
+    d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
+    sp = clean_spine(d, lo)
+    if sp:
+        print(f"Story spine: {len(sp['events'])} main events, {len(sp['heroes'])} heroes. Logline: {sp['logline'][:110]}",
+              flush=True)
+    return sp
+
+
+PARTS = ("open", "heroes", "story", "wrap")
+
+
+def _norm_wrap(t):
+    return t.replace("\u200c", "").replace(" ", "")
+
+
+def tagged_to_scenes(raw, n_ev, strict=True):
+    """The writer tags EVERY sentence with the story event it tells (or with its part). The program joins the
+    sentences of a scene into the narration and DROPS every sentence whose tag is not allowed for its part, so that a
+    sentence that serves no event never reaches the video. Returns (scenes, problems)."""
+    problems, scenes, covered, last_ev, dropped = [], [], set(), 0, 0
+    for s in raw or []:
+        if not isinstance(s, dict):
+            continue
+        part = str(s.get("part") or "").strip().lower()
+        if part not in PARTS:
+            problems.append(f"unknown part '{part}'")
+            continue
+        keep, ev_ids = [], []
+        for x in s.get("sentences") or []:
+            if not isinstance(x, dict):
+                dropped += 1
+                continue
+            fa = " ".join(str(x.get("fa") or "").replace("ي", "ی").replace("ك", "ک").split())
+            tag = str(x.get("ev") if x.get("ev") is not None else "").strip().lower()
+            if not fa:
+                continue
+            num = int(tag) if tag.isdigit() and 1 <= int(tag) <= n_ev else None
+            if part in ("open", "heroes"):
+                ok = tag == "intro"
+            elif part == "wrap":
+                ok = tag == "wrap" or num is not None
+            else:
+                ok = num is not None
+                if ok and num < last_ev:
+                    problems.append(f"event {num} is told after event {last_ev}")
+            if not ok:
+                dropped += 1
+                continue
+            if part == "story":
+                last_ev = max(last_ev, num)
+                covered.add(num)
+            if num is not None:
+                ev_ids.append(num)
+            keep.append(fa)
+        if not keep:
+            continue
+        scenes.append({"part": part, "narration_fa": " ".join(keep), "ev_ids": sorted(set(ev_ids)),
+                       "source_en": str(s.get("source_en") or ""),
+                       "characters_present": [str(n) for n in (s.get("characters_present") or [])],
+                       "setting_en": str(s.get("setting_en") or ""), "action_en": str(s.get("action_en") or ""),
+                       "mood_en": str(s.get("mood_en") or "")})
+    seq = "".join({"open": "o", "heroes": "h", "story": "s", "wrap": "w"}[x["part"]] for x in scenes)
+    if not re.fullmatch(r"oh?s{3,}w{1,3}", seq):
+        problems.append(f"the order of the parts is '{seq}' (needed: open, heroes, story..., wrap...)")
+    missing = [k for k in range(1, n_ev + 1) if k not in covered]
+    if missing:
+        problems.append(f"events never told: {missing}")
+    wraps = [x for x in scenes if x["part"] == "wrap"]
+    if wraps and "جمعبندی" not in _norm_wrap(wraps[0]["narration_fa"]):
+        problems.append("the first wrap-up scene does not contain «جمع‌بندی»")
+    if dropped:
+        print(f"Script check: {dropped} sentence(s) without a valid event tag were removed.", flush=True)
+    if not strict:                    # last attempt: only a broken structure is refused, the rest is repaired by the gate
+        problems = [p for p in problems if "order of the parts" in p]
+    return scenes, problems
+
+
 def write_scenes(book, src, plan):
-    """Step B: write the Persian narration from the source text only (no outside facts)."""
+    """Step B: first the SPINE (what must be told), then the narration written sentence by sentence from the spine."""
     min_sc, max_sc, words = plan
     cast = design_cast(book, src)
     cast_block = cast_prompt(cast)
-    for _ in range(4):
+    spine = None
+    for _ in range(3):
+        spine = build_spine(book, src, cast)
+        if spine:
+            break
+        time.sleep(5)
+    if not spine:
+        raise RuntimeError("Could not build the story spine from Gemini")
+    n_ev = len(spine["events"])
+    author_src = spine["author_en"] or f"(the source does not say when it was published: only say that {book['author_en']} wrote it)"
+    spine_json = json.dumps({"logline": spine["logline"], "heroes": spine["heroes"], "events": spine["events"],
+                             "ending_en": spine["ending_en"]}, ensure_ascii=False)
+    for attempt in range(4):
         prompt = f"""You are a gifted Iranian storyteller and radio host. Write the script of a video that summarizes the
 novel "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience.
 
-Use ONLY the facts in the SOURCE TEXT below (taken from Wikipedia). Never add a fact, name, date, number,
-quote or opinion that is not in the source. If the source says nothing about something, say nothing about it.
-The PLOT part of the source is a summary of the whole story. Your job is to DISTILL it: a viewer who never read the
-book must understand the whole story from this video alone. So tell only what matters: the central conflict, the turning
-points, how the heroes change and the ending. Leave out every episode, side character, place and detail whose removal
-would NOT break the chain of cause and effect (the "removal test"). Add nothing that is not in the source.
+Use ONLY the facts in the SOURCE TEXT below (taken from Wikipedia). Never add a fact, name, date, number, quote or
+opinion that is not in the source. The STORY SPINE below was already decided: it lists the main events, in order, each
+with its cause. The viewer never read the book and cannot go back: after this video he must know who the heroes are,
+what they want, what happens in order and why, and how it ends. You tell the spine event by event and NOTHING else.
 
 SOURCE TEXT:
 {src['text']}
+
+STORY SPINE (the events to tell, in this order; "id" is the event number used for the tags):
+{spine_json}
+AUTHOR SENTENCE SOURCE (for the opening scene only): {author_src}
+CENTRAL IDEA (for the wrap-up only): {spine['idea_en'] or '(none)'}
 {cast_block}
 Return JSON with exactly these keys:
-- "characters": a list of ALL the important characters of the story (at most 6), each {{"name": "...", "look_en":
-  "..."}}. "name" is the name in English letters exactly as in the source. "look_en" is ONE fixed look sheet in English
-  of 35 to 55 words that will be pasted into EVERY picture of this character, so the face is always the same: gender,
-  exact age, face shape, skin tone, eye color, hair (color, length, style), facial hair, ONE distinctive feature (scar,
-  glasses, freckles, hat...) and the usual clothes with colors. Empty list if there are no characters.
-  Base the look on what the source says; if it says nothing, choose a fitting look for the era and keep it fixed.
-- "outline": the key events of the PLOT in order, as few as the story needs (usually 7 to 12), each {{"event": "short
-  English sentence", "because": "what caused it or what it leads to"}}. Include ONLY events that change the direction of
-  the story (removal test). The scenes must tell ALL of them, in this order, and no other event of the plot.
-- "cast": the same important characters in order of importance (at most 5), each {{"name": "...", "sentence_fa": "..."}}:
-  ONE Persian sentence of 8 to 18 words that introduces the character to the viewer (who he or she is and his or her
-  role in the story, only from the source). The sentence STARTS with the name in English letters. Empty list if none.
-- "scenes": a list of {min_sc} to {max_sc} objects, each with:
-    "narration_fa": 3 to 5 flowing sentences of Persian narration (45-75 words) about ONE single idea or event,
-    "source_en": the English sentence or two from the SOURCE TEXT that this paragraph is based on (copy it, at most 45 words),
-    "characters_present": list of character names (from "characters") that this paragraph is about or that are visible in the picture (the character's fixed look is then drawn automatically), may be empty,
-    "setting_en": where the picture takes place (concrete place, time, light),
-    "action_en": exactly what is happening in the picture: who is doing what,
-    "mood_en": the mood and color atmosphere.
+- "characters": a list of the important characters of the story (at most 6), each {{"name": "...", "look_en": "..."}}.
+  "name" in English letters exactly as in the source; "look_en" one fixed look sheet of 35 to 55 English words (gender,
+  exact age, face, skin tone, eyes, hair, one distinctive feature, usual clothes with colors). If CHARACTERS are given
+  above, copy them unchanged. Empty list if there are no characters.
+- "scenes": a list of scene objects in EXACTLY this order of "part" ({min_sc} to {max_sc + 2} scenes in all):
+    1. ONE scene with part "open": the introduction, 2 or 3 sentences (35 to 60 words): the name of the novel and of its author
+       in English letters, when it was published (only if the AUTHOR SENTENCE SOURCE says so), and in one sentence who the
+       hero is and what the story is about (from the logline). Nothing else about the author (no biography), no praise.
+    2. ONE scene with part "heroes" (only if the spine has 2 or more heroes): 2 to 4 sentences (35 to 65 words) that say who is
+       who: for each hero of the spine his or her name and a few words of role and relation to the others (from "role_en").
+       Flowing text, not a list.
+    3. The scenes with part "story": together they tell EVERY event of the spine, in order. Each scene tells ONE event or two
+       closely linked events, 3 to 5 flowing sentences (45 to 75 words), every event with its cause.
+    4. TWO scenes (three at most) with part "wrap" = the closing wrap-up. The first one starts with the Persian words
+       «در جمع‌بندی». (a) In 2 or 3 flowing sentences tell the WHOLE arc of the story from the beginning to the end (only
+       events of the spine); (b) then ONE sentence with the central idea (only from CENTRAL IDEA; skip if none); (c) the very
+       last sentence is short and memorable. No new events, no empty praise.
+  Every scene is {{"part": "...", "sentences": [{{"fa": "ONE Persian sentence", "ev": TAG}}, ...], "source_en": "the English
+  sentence of the SOURCE TEXT this scene is based on (copy it, at most 45 words)", "characters_present": [names from
+  "characters" that this scene is about or that are visible], "setting_en": "where the picture takes place (place, time,
+  light)", "action_en": "exactly what is happening in the picture: who does what", "mood_en": "..."}}.
+  The TAG "ev" of EVERY sentence:
+    * "open" and "heroes" scenes: the word "intro";
+    * "story" scenes: the NUMBER of the spine event that this sentence tells (or the cause that leads into it). Every sentence
+      of a story scene carries an event number. A sentence that tells no event of the spine is NOT part of this video: the
+      program deletes it. The numbers never go backwards and every event number is used;
+    * "wrap" scenes: the word "wrap".
 
 Rules for the narration:
-- Total narration: {words} Persian words. The source is already short: stay close to it, never pad.
-- NO FILLER. Every sentence must carry a new concrete fact, event or idea from the source. No generic praise, no
-  rhetorical questions, no empty transitions, no repeating the same point, no moral or lesson that is not in the source.
-- Structure: (1) the first paragraph: what the novel is, who wrote it and when (only if the INTRODUCTION says so) and in
-  one sentence what the story is about; (2) the next paragraph or two: introduce the main heroes by name, who each one is,
-  how they are related to each other and what each one wants or fears at the start (only from the source); (3) the story in
-  the SAME ORDER as the PLOT: only its turning points, each one linked to its cause, including the ending; (4) the closing
-  wrap-up (next rule).
-- MANDATORY, USEFUL wrap-up in the LAST 2 or 3 scenes. The first of them starts with the Persian words «در جمع‌بندی».
-  It must give the listener something to keep, not repeat sentences: (a) in 2 or 3 flowing sentences tell the whole arc
-  of the story from beginning to end; (b) then what the novel is really about and why it matters, ONLY from the
-  INTRODUCTION and SIGNIFICANCE parts of the source (its themes, its reception, its influence); (c) the very last
-  sentence is short and memorable. No new plot events, no empty praise.
-- Every scene covers exactly ONE idea or event, so one picture can illustrate it fully.
-- COVERAGE AND IMPORTANCE: follow your "outline": every one of its events must be told, in order, with its cause (the
-  "because"), so a viewer who never read the book understands the WHOLE story, the cause of each event, how the main
-  character changes, and the ending. Tell NOTHING else: for every sentence ask "if I delete it, does the story still make
-  sense and does the chain of causes stay unbroken?" If yes, delete it. Never tell side episodes, minor characters, travel
-  or description details, or any place or person that does not change what happens next.
-- CONTINUITY: the first sentence of every paragraph picks up exactly where the last sentence of the previous paragraph
-  stopped (same person, time or problem) through a connector that shows cause or time («برای همین»، «چند روز بعد»،
-  «در نتیجه»، «اما»، «تا این‌که»); never start a paragraph from nowhere and never jump to a new subject without a bridge.
-  Whenever a person appears for the first time after a gap, remind the viewer who he or she is in a few words.
+- Total narration: {words} Persian words. Stay close to the source and the spine; never pad.
+- NO FILLER, NO IRRELEVANT SENTENCE: every sentence of the story part is an event of the spine or the cause that links two
+  events. Forbidden there: opinions, praise, the author's life, reception, comparisons with other works, background facts,
+  descriptions and details that the following events do not need, a person or a place that no event needs.
+- NO AMBIGUITY (the listener never read the book and cannot go back): (1) every person is introduced with a few words of role
+  («فلانی، دختر ...») at the FIRST mention, and a name that was not introduced is never used; the heroes are introduced in
+  the "heroes" scene, everybody else at his or her first appearance; (2) a pronoun («او»، «آن‌ها»، «این») always points to the
+  ONE person or group named in the sentence before it; if two people of the same gender are in that sentence, repeat the
+  name; (3) say where and when a new situation takes place whenever it changes; (4) explain every special term, title or
+  custom in a few words the first time it appears; (5) write the cause with the effect («چون»، «برای همین»، «در نتیجه»)
+  instead of only listing events; (6) one scene = one event and all its facts belong to that event.
+- CONTINUITY: the first sentence of every scene picks up exactly where the last sentence of the previous scene stopped (same
+  person, time or problem) through a connector that shows cause or time («برای همین»، «چند روز بعد»، «در نتیجه»، «اما»،
+  «تا این‌که»); never start a scene from nowhere and never jump to a new subject without a bridge. Whenever a person appears
+  again after a gap, remind the viewer who he or she is in a few words.
 - Translate the MEANING faithfully into natural Persian, never word by word.
 {TONE_RULES}
 {NAMES_RULE}
@@ -849,33 +1101,34 @@ Rules for the visuals:
             data["characters"] = cast["characters"]
             data["era_en"] = cast["era_en"]
             data["locations"] = cast.get("locations") or []
-            okn = {c["name"] for c in cast["characters"]}
-            for s in data.get("scenes") or []:
-                if isinstance(s, dict):
-                    s["characters_present"] = [n for n in (s.get("characters_present") or []) if n in okn]
         try:
-            scenes = data["scenes"]
-            ok = (
-                len(scenes) >= max(5, min_sc - 2)
-                and all(s.get("narration_fa") and s.get("action_en") and s.get("setting_en") for s in scenes)
-                and data.get("art_style_en")
-                and has_wrapup(scenes)
-            )
-        except Exception:  # noqa: BLE001
-            ok = False
+            scenes, problems = tagged_to_scenes(data.get("scenes"), n_ev, strict=attempt < 3)
+        except Exception as e:  # noqa: BLE001
+            scenes, problems = [], [f"unreadable script: {e}"]
+        if cast:
+            okn = {c["name"] for c in cast["characters"]}
+            for s in scenes:
+                s["characters_present"] = [n for n in s["characters_present"] if n in okn]
+        for s in scenes:                                   # fields that the picture planner needs
+            first = next((e for e in spine["events"] if e["id"] in (s.get("ev_ids") or [])), None)
+            s["setting_en"] = s["setting_en"] or (first["where_en"] if first else "") or "the main place of the story"
+            s["action_en"] = s["action_en"] or (first["what_en"] if first else "") or "the main hero in the key situation"
+        ok = (len(scenes) >= 6 and not problems and len(scenes) <= max_sc + 4 and has_wrapup(scenes)
+              and data.get("art_style_en"))
         if ok:
-            data["scenes"] = scenes[:max_sc + 2]
+            data["scenes"] = scenes
             data.setdefault("characters", [])
-            if not has_wrapup(data["scenes"]):
-                continue
-            data = review_script(data, book, src)
-            data = story_gate(data, book, src)       # ONE call: facts + wording/tone + voice text
+            data["outline"] = spine["events"]
+            data["spine"] = spine
+            data = story_gate(data, book, src)       # blind test with sentence-level repair
+            data = review_script(data, book, src)    # facts + wording + voice text (last: the voice text must fit the final text)
             if CAST_SCENE:
                 data = add_cast_scene(data)
             data = sanitize_narration(data, book)
             return align_visuals(data, book, src)
+        print(f"Script attempt {attempt + 1} rejected: {problems or 'too few or too many scenes / no wrap-up'}", flush=True)
         time.sleep(5)
-    raise RuntimeError("Could not get a valid script (with closing wrap-up) from Gemini")
+    raise RuntimeError("Could not get a valid script (spine and closing wrap-up) from Gemini")
 
 
 def letters_only(s):
@@ -892,98 +1145,140 @@ def valid_spoken(txt, plain):
     return letters_only(txt) == letters_only(plain)
 
 
-def story_gate(data, book, src):
-    """Step C2 (1 or 2 Gemini calls): a viewer who NEVER read the book hears the final narration and must be able to
-    say who the hero is, what he or she wants, the conflict, the turning points and the ending. Missing key events,
-    logic jumps and unneeded minor paragraphs are repaired in ONE rewrite. Any trouble keeps the narration as it is."""
+def sentence_table(scenes):
+    """Every sentence of the narration with an id «scene.sentence» (for example 3.1)."""
+    rows = []
+    for i, s in enumerate(scenes):
+        for k, t in enumerate(split_sentences(s["narration_fa"])):
+            rows.append({"id": f"{i}.{k}", "i": i, "k": k, "fa": t})
+    return rows
+
+
+def story_gate(data, book, src, round_=1):
+    """Step C (1 to 4 Gemini calls): a viewer who NEVER read the book hears ONLY the narration, retells the story and says
+    after which sentence he got lost, which sentences do not belong to the story and which key event he did not hear.
+    The repair works on single sentences (replace / delete / insert after), so everything that was fine stays exactly as
+    it is. Any trouble keeps the narration as it is."""
     scenes = data["scenes"]
-    paras = [{"i": i, "narration_fa": s["narration_fa"]} for i, s in enumerate(scenes)]
-    outline = data.get("outline") or []
+    rows = sentence_table(scenes)
+    spine = data.get("spine") or {}
+    ev_list = [{"id": e["id"], "event": e["what_en"]} for e in (spine.get("events") or [])]
+    shown = [{"id": r["id"], "fa": r["fa"]} for r in rows]
     prompt = f"""You are a viewer who has NEVER read the novel "{book['title_en']}". You only heard this narration of a video
-(paragraphs in order). Answer ONLY from the narration, never from your own knowledge of the book.
+(numbered sentences, in order). Answer ONLY from the narration, never from your own knowledge of the book.
 
-Narration: {json.dumps(paras, ensure_ascii=False)}
+Narration: {json.dumps(shown, ensure_ascii=False)}
 
-Key events that the video must tell (outline): {json.dumps(outline, ensure_ascii=False)}
-SOURCE TEXT (the only truth): {src['text']}
-
-Return JSON with exactly these keys:
-- "unclear": the list of those words that the narration does NOT make clear to you, from: "hero", "wants", "conflict",
-  "turning_points", "ending" (empty if you understood all five).
-- "missing_events": outline events that the narration never tells (short English sentences; empty if none).
-- "logic_gaps": places where you cannot follow why the next thing happens: [{{"after": paragraph number, "problem":
-  "what link is missing, in short English"}}] (empty if none).
-- "minor": numbers of paragraphs that tell only a minor detail, so that deleting them would not break the chain of cause
-  and effect (empty if none)."""
+Return JSON with exactly these keys, in this order:
+- "retelling": 6 to 14 short English sentences: the whole story as YOU understood it from the narration alone (who the hero
+  is, what he or she wants, what happens one after the other and why, how it ends). Write it first, from the narration only.
+  Where you could not follow, write "UNCLEAR: ..." instead of guessing.
+- "confusing": the sentences after which you were lost: [{{"id": "3.1", "problem": "short English"}}]. Typical problems: a person
+  who is used without being introduced (who is this?), a pronoun that could mean two people, an unexplained term, title or
+  custom, a new place or time that was not announced, a sentence that does not follow from the one before it, a result
+  without its cause. Empty list if none.
+- "irrelevant": ids of sentences that tell nothing the story needs (the removal test: without them the chain of cause and
+  effect stays complete): praise, trivia, background, the author's life, a detail that no later event needs, a repeated
+  point. Empty list if none.
+- "missing_events": ids (numbers) of those key events of this list that you did NOT clearly hear in the narration:
+  {json.dumps(ev_list, ensure_ascii=False)}. Empty list if you heard all of them."""
     try:
         t = gemini_json(prompt, minutes=6, models=WRITE_MODELS)
-        unclear = [str(x) for x in (t.get("unclear") or [])]
-        missing = [str(x) for x in (t.get("missing_events") or [])]
-        gaps = [g for g in (t.get("logic_gaps") or []) if isinstance(g, dict)]
-        n = len(scenes)
-        minor = [int(i) for i in (t.get("minor") or []) if str(i).lstrip("-").isdigit()
-                 and 0 < int(i) < n - 2 and "جمعبندی" not in scenes[int(i)]["narration_fa"].replace("\u200c", "").replace(" ", "")][:2]
-        if n <= 6:
-            minor = []
-        print(f"Story gate: unclear={unclear} missing_events={len(missing)} logic_gaps={len(gaps)} minor={minor}", flush=True)
-        if not (unclear or missing or gaps or minor):
+        retell = [str(x) for x in (t.get("retelling") or [])][:14]
+        valid = {r["id"]: r for r in rows}
+        protect = set()
+        for r in rows:
+            part = scenes[r["i"]].get("part")
+            if part in ("author",) or "جمعبندی" in _norm_wrap(r["fa"]):
+                protect.add(r["id"])
+        confusing = [{"id": str(g.get("id")), "problem": str(g.get("problem") or "")} for g in (t.get("confusing") or [])
+                     if isinstance(g, dict) and str(g.get("id")) in valid][:8]
+        irrelevant = []
+        for g in (t.get("irrelevant") or []):
+            gid = str(g.get("id") if isinstance(g, dict) else g)
+            if gid in valid and gid not in protect and gid not in irrelevant:
+                irrelevant.append(gid)
+        irrelevant = irrelevant[:6]
+        ev_ids = {e["id"] for e in (spine.get("events") or [])}
+        missing = [int(x) for x in (t.get("missing_events") or []) if str(x).lstrip("-").isdigit() and int(x) in ev_ids][:4]
+        print(f"Story gate (round {round_}): confusing={len(confusing)} irrelevant={len(irrelevant)} "
+              f"missing_events={missing}", flush=True)
+        for line in retell[:14]:
+            print("  viewer understood:", line[:150], flush=True)
+        if not (confusing or irrelevant or missing):
             return data
+        miss_txt = [{"id": e["id"], "event": e["what_en"], "because": e["because_en"], "where": e["where_en"]}
+                    for e in (spine.get("events") or []) if e["id"] in missing]
         fix = f"""Fix the Persian narration of a video about the novel "{book['title_en']}" by {book['author_en']}.
-A viewer who never read the book found these problems:
-- not clear: {json.dumps(unclear)}
-- key events never told: {json.dumps(missing, ensure_ascii=False)}
-- links missing (after paragraph number): {json.dumps(gaps, ensure_ascii=False)}
-- minor paragraphs that may be deleted: {json.dumps(minor)}
+A viewer who never read the book heard only the narration and found these problems (ids refer to the numbered sentences
+below):
+- sentences after which he was lost: {json.dumps(confusing, ensure_ascii=False)}
+- sentences that do not belong to the main story: {json.dumps(irrelevant)}
+- key events that he did not clearly hear: {json.dumps(miss_txt, ensure_ascii=False)}
+- parts he could not follow in his retelling: {json.dumps([x for x in retell if x.upper().startswith('UNCLEAR')], ensure_ascii=False)}
 
 SOURCE TEXT (the only truth; use nothing else):
 {src['text']}
 
-Narration: {json.dumps(paras, ensure_ascii=False)}
+Narration (numbered sentences): {json.dumps(shown, ensure_ascii=False)}
 
-Rules:
-- Change as little as possible. Fix a problem by adding ONE or TWO sentences inside the paragraph where it belongs, or (at
-  most 2 times) as a new paragraph right after paragraph "after". Make clear in the first paragraphs who the hero is, what
-  he or she wants and the main conflict, if they are listed as not clear.
-- A minor paragraph is deleted by returning "" for it. Delete nothing else.
-- Every new sentence only from the SOURCE TEXT, linked to the sentence before it by a connector.
+Return JSON {{"ops": [{{"op": "replace", "id": "3.1", "fa": "..."}}]}} where "op" is one of:
+- "replace": rewrite that ONE sentence so that the problem disappears: give the person a few words of role at the first
+  mention, name the ONE person a pronoun means, explain the term in a few words, announce the new place or time, add the
+  cause («چون»، «برای همین»، «در نتیجه»).
+- "delete": remove a sentence that does not belong to the main story (only those listed above; never the only sentence that
+  tells a key event). "fa" is "".
+- "insert_after": add ONE new sentence after the sentence with this id: the missing link or the missing key event, only
+  facts of the SOURCE TEXT, joined to the sentence before it by a connector and leading into the sentence after it.
+Rules: at most 10 operations; change as little as possible; every other sentence stays untouched. Every new "fa" is ONE
+Persian sentence of 8 to 24 words that continues the story smoothly.
 {TONE_RULES}
-{NAMES_RULE}
-Return JSON {{"results": [{{"i": 0, "narration_fa": "..."}}], "new": [{{"after": 3, "narration_fa": "..."}}]}} where
-"results" has ONLY the paragraphs you changed or deleted."""
+{NAMES_RULE}"""
         out = gemini_json(fix, minutes=8, models=WRITE_MODELS)
-        edited = {}
-        for r in out.get("results") or []:
-            if isinstance(r, dict) and str(r.get("i", "")).isdigit() and 0 <= int(r["i"]) < n \
-                    and isinstance(r.get("narration_fa"), str):
-                edited[int(r["i"])] = " ".join(r["narration_fa"].replace("ي", "ی").replace("ك", "ک").split())
-        added = {}
-        for r in (out.get("new") or [])[:2]:
-            if isinstance(r, dict) and str(r.get("after", "")).isdigit() and 0 <= int(r["after"]) < n \
-                    and str(r.get("narration_fa", "")).strip():
-                added[int(r["after"])] = " ".join(str(r["narration_fa"]).replace("ي", "ی").replace("ك", "ک").split())
-        new_scenes = []
+        ops = [o for o in (out.get("ops") or []) if isinstance(o, dict)][:10]
+        sents = {i: [{"id": r["id"], "fa": r["fa"]} for r in rows if r["i"] == i] for i in range(len(scenes))}
+        inserts, replaced, deleted = {}, 0, 0
+        for o in ops:
+            op, oid = str(o.get("op") or ""), str(o.get("id") or "")
+            fa = " ".join(str(o.get("fa") or "").replace("ي", "ی").replace("ك", "ک").split())
+            if oid not in valid:
+                continue
+            i = valid[oid]["i"]
+            slot = next((x for x in sents[i] if x["id"] == oid), None)
+            if slot is None:
+                continue
+            if op == "replace" and fa and oid not in protect:
+                slot["fa"] = fa
+                replaced += 1
+            elif op == "delete" and oid in irrelevant:
+                live = [x for x in sents[i] if x.get("fa")]
+                if len(live) > 2 and scenes[i].get("part") == "story":
+                    slot["fa"] = ""
+                    deleted += 1
+            elif op == "insert_after" and fa and scenes[i].get("part") != "author" and oid not in inserts:
+                inserts[oid] = fa
+        new_scenes, added = [], 0
         for i, s in enumerate(scenes):
-            if i in edited:
-                if not edited[i]:
-                    if i not in minor:                    # only the paragraphs named as minor may disappear
-                        new_scenes.append(s)
-                        continue
-                    continue
-                s = dict(s)
-                s["narration_fa"] = edited[i]
-                s["spoken_fa"] = edited[i]
+            parts = []
+            for x in sents[i]:
+                if x["fa"]:
+                    parts.append(x["fa"])
+                if x["id"] in inserts:
+                    parts.append(inserts[x["id"]])
+                    added += 1
+            s = dict(s)
+            s["narration_fa"] = " ".join(parts)
             new_scenes.append(s)
-            if i in added:
-                new_scenes.append({"narration_fa": added[i], "spoken_fa": added[i], "source_en": "",
-                                   "characters_present": [], "setting_en": s.get("setting_en", ""),
-                                   "action_en": s.get("action_en", ""), "mood_en": s.get("mood_en", "")})
         words = sum(len(s["narration_fa"].split()) for s in new_scenes)
         before = sum(len(s["narration_fa"].split()) for s in scenes)
-        if (len(new_scenes) >= 5 and has_wrapup(new_scenes) and words <= max(MAX_WORDS, before) * 1.15
+        if (all(s["narration_fa"].strip() for s in new_scenes) and has_wrapup(new_scenes)
+                and words <= max(MAX_WORDS, before) * 1.15
                 and all(len(s["narration_fa"].split()) <= 120 for s in new_scenes)):
             data["scenes"] = new_scenes
-            print(f"Story gate repaired the narration: {len(edited)} edited, {len(added)} added, "
-                  f"{n - len(new_scenes) + len(added)} deleted ({before} -> {words} words).", flush=True)
+            print(f"Story gate repaired the narration: {replaced} replaced, {added} added, {deleted} deleted "
+                  f"({before} -> {words} words).", flush=True)
+            if round_ < 2 and (replaced or added or deleted):         # a second look: did the repair fix everything?
+                return story_gate(data, book, src, round_ + 1)
         else:
             print("Story gate: the repair was not safe (length or wrap-up): kept the original narration.", flush=True)
     except (GeminiBlocked, GeminiQuotaExhausted):
@@ -1012,14 +1307,13 @@ A) "narration_fa" (also shown as the subtitle)
 1. FACTS: keep only what the SOURCE TEXT supports. Remove or fix every fact, name, date, number, quote or interpretation
    that is not in the source, every wrong fact, and every sentence that is filler without information. If nothing
    supported remains, return "" for both texts of that paragraph.
-   IMPORTANCE: also remove every sentence that tells a minor episode or detail whose removal does not break the chain of
-   cause and effect of the story. Never remove a turning point, the introduction of a hero, the ending or the wrap-up.
-2. FLOW AND WORDING: make the paragraph read as ONE connected story, not as separate short statements: join short
-   sentences with connectors, make each sentence grow out of the previous one, and let the last sentence lead into the
-   next paragraph. Also fix grammar, word choice, spelling and half-spaces. Do NOT add new facts. Keep the order and the
-   number of paragraphs. Keep names in English (Latin) letters exactly as they are.
-{TONE_RULES}
-   Each paragraph 3-5 sentences, 45-75 words, at most TWO consecutive ezafe links in a noun phrase; numbers as words, no
+   NEVER remove a sentence that the SOURCE supports, even a small one: the story was already shortened to its main events.
+   Never remove a turning point, the introduction of a hero, the author sentence, the ending or the wrap-up.
+2. WORDING: keep exactly the same sentences in the same order (do not merge, split, add or delete a sentence); only fix
+   grammar, word choice, spelling and half-spaces, and make the connectors between the sentences natural. Do NOT add new
+   facts. Keep the order and the number of paragraphs. Keep names in English (Latin) letters exactly as they are.
+   {TONE_RULES}
+   Keep the length and the number of sentences of every paragraph; at most TWO consecutive ezafe links in a noun phrase; numbers as words, no
    digits, no emojis, no brackets, no abbreviations, no English word except names; simple everyday words. A paragraph that
    contains «جمع‌بندی» must keep that word and stay a clear, useful conclusion.
 
@@ -1219,7 +1513,7 @@ def make_beats(text):
     return beats or [text]
 
 
-SHOTS = ("medium-wide shot from head to knees", "full-body shot with the people large in the frame",
+SHOTS = ("medium-wide shot from head to knees", "medium shot from the head to the hips with the people large in the frame and the place behind them",
          "medium shot from the waist up with the place clearly visible behind", "over-the-shoulder medium-wide shot",
          "low-angle medium-wide shot", "high-angle medium-wide shot", "eye-level shot through a doorway or window",
          "side-view medium-wide shot", "wide establishing shot with a detailed place (only when no named person is in it)")
@@ -1479,10 +1773,10 @@ def align_visuals(data, book, src=None):
                 continue
             s.pop("cast_names")                       # sentences were changed: treat as an ordinary paragraph
         s["beats"] = make_beats(s["narration_fa"])
-        ctx.append({"scene": i, "full_paragraph_fa": s["narration_fa"], "place_hint_en": s.get("setting_en", ""),
+        ctx.append({"scene": i, "part": s.get("part", "story"), "full_paragraph_fa": s["narration_fa"], "place_hint_en": s.get("setting_en", ""),
                     "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", "")})
         for j, b in enumerate(s["beats"]):
-            items.append({"i": len(items), "scene": i, "narration_fa": b})
+            items.append({"i": len(items), "scene": i, "part": s.get("part", "story"), "narration_fa": b})
     for k, it in enumerate(items):                     # neighbours: pronouns ("he", "she") and the place continue from them
         it["previous_part_fa"] = items[k - 1]["narration_fa"] if k else ""
         it["next_part_fa"] = items[k + 1]["narration_fa"] if k + 1 < len(items) else ""
@@ -1502,10 +1796,10 @@ with exactly {len(items)} items, in the same order.
 Rules:
 - "text_en": a faithful English translation of THIS part, only what the Persian says (nothing added, nothing left out).
   Write it FIRST: the picture is drawn from this text, not from your idea of the book.
-- "kind": "event" when the part tells something that happens in the story (people who do things, the places of the
-  story); "author" when it speaks about the writer, his or her life or how the book was written; "book" when it speaks
-  about the book itself (its fame, translations, readers, influence, awards, films); "theme" when it explains the meaning,
-  the message or the moral of the story. A closing part that only retells what happened in the story is "event".
+- "kind": ALWAYS "event", whatever the part talks about: the opening (also when it names the novel and its author: draw the
+  first place of the story with the main hero), the heroes, the story AND the closing wrap-up (a wrap-up sentence about the
+  whole story or its central idea is drawn as an event: the main hero in the key situation of the story, in its main place).
+  Never draw a writer, a writing desk or a book.
 - "location": the id of the place (from PLACES OF THE STORY: {json.dumps(place_ids)}) where THIS part really happens.
   FIRST read the sentence: when it names or clearly implies a place (a kitchen, a river, a ship's deck, a courtroom, a road,
   a field, a bedroom...), that is the place and "visual_en" draws exactly that place; the fixed list only lends its
@@ -1531,22 +1825,17 @@ Rules:
   sentence and from the SOURCE TEXT, ending with "nobody else" (for example "exactly 2 people: the young mother and her only
   child, a small boy, nobody else"). «a mother and her child» is ONE adult and ONE child; when the source says that she has
   one child, a second child is NEVER drawn; a crowd, a family or any other person appears only when the part says so.
-  Kind "author": "exactly one person, seen only from behind". Kinds "book" and "theme": "no people" (or only those that the
-  part names).
+  Kind "author": "exactly one person, seen only from behind".
 - "others": a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
   (a rescuer, a doctor, a neighbour, a soldier, a child of the crowd...): gender, age, hair color, build and clothes (color
   and kind) that fit his or her JOB (a soldier in uniform, a doctor in a dark coat; never a uniform on a non-soldier). Each of them must look completely different from every named character and from each other: another hair
   color, other clothes colors and another age or build (the rescuer never looks like the person who is rescued, a stranger
   never looks like the hero). Empty list when there is nobody else.
-- PICTURE BY KIND. "event": as described above. "author": the world of the WRITER in the time when the book was written
-  (not the time of the story): a writing desk with an inkwell, a pen and manuscript pages, a lamp, a window that shows the
-  writer's town and country, the writer seen ONLY from behind or as a silhouette (never a face, never a portrait of a real
-  person); write that time and place in "time_en". "book": the book as an object and its readers: an old book (nothing
-  written on its cover), a hand turning a page, a library, a bookshop or a reading room of its time, and in it ONE concrete
-  sign of THIS story (a window that shows the main place of the story, the key object of the story), so it is clearly THIS
-  book; "time_en" only when the time differs from the story. "theme": ONE symbolic scene made ONLY of concrete things of
-  THIS story (its main place and its key object or key situation) that shows exactly the idea named in the part, never an
-  unrelated landscape. "time_en" is empty for "event".
+- PICTURE BY KIND. "event": as described above (also for the opening, the heroes part and the wrap-up). "author": the world of
+  the WRITER in the time when the book was written (not the time of the story): a writing desk with an inkwell, a pen and
+  manuscript pages, a lamp, a window that shows the writer's town and country, the writer seen ONLY from behind or as a
+  silhouette (never a face, never a portrait of a real person); write that time and place in "time_en". "time_en" is empty
+  for "event".
 - "roles": an object that maps EVERY name in "characters_present" to 4 to 12 English words: his or her role in THIS picture and
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
@@ -1574,6 +1863,9 @@ Rules:
   others in "others" as small figures far away or seen from behind, or as a small crowd. Write only what
   the characters DO ("the boy sits alone on a bench"): their fixed look is added automatically, so never write their
   faces, ages, bodies or clothes, and never write names or book titles in the picture description.
+- LEGS: when 2 or more people stand or walk close together, use a medium shot from the waist up or hide the legs behind
+  furniture, a table, a wall or a cart; full-body shots only for ONE person (crossed or overlapping legs of several people
+  are drawn wrongly: a third leg appears).
 - BODIES: every person in the picture is a complete human: one head, two arms, two hands, two legs. When hands matter
   (writing, holding, pulling), say which hand holds what. Never plan a picture in which a body is hidden so that a head or
   a hand could look missing or doubled.
@@ -1582,8 +1874,7 @@ Rules:
   names or implies are drawn: never add a child, a crowd or a helper that the part does not mention.
 - VARIETY: when several parts are about the SAME place, the place stays the same (same walls, same objects, same
   landscape) but every picture shows another part of it, another angle, other light and other foreground objects; the event
-  of its own sentence always stays the main thing. The kind of a part (author / book / theme) decides its picture as
-  described in PICTURE BY KIND: the closing parts never get a random symbolic scene.
+  of its own sentence always stays the main thing.
 - No text, letters, numbers, charts or logos. No real celebrities. No scenes copied from films.
 - Do not write an art style (it is added separately).
 
@@ -1604,6 +1895,8 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                     "others": _str_list(v.get("others"), 3),
                     "time_en": " ".join(str(v.get("time_en") or "").split()),
                     "roles": v.get("roles") if isinstance(v.get("roles"), dict) else {}} for v in vis]
+            for v, it in zip(vis, items):      # ONLY the author part is a writer picture: every other part is a story picture
+                v["kind"] = "event"
             vis = diversify_visuals(vis, items, book)
             for v, it in zip(vis, items):      # a character NAMED in the sentence is always in the picture
                 v["characters_present"] = force_named_characters(v["characters_present"], it["narration_fa"], chars)
@@ -2392,7 +2685,7 @@ def _wc(t):
 KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
-ANATOMY = "Every person has exactly one head, two arms, two hands, two legs, no extra or missing limbs"
+ANATOMY = "Every person has exactly one head, two arms, two hands and exactly two legs with two feet, no extra or missing limbs, no third leg"
 NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no figures far away, no faces in windows or doorways"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
@@ -2755,7 +3048,7 @@ def keep_saved(src_file, name):
 
 
 def _ref_prompt(c, era_short, extra=""):
-    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 75)}. From the head down to the "
+    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 95)}. From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
             f"background, nothing else. {extra}Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. "
@@ -2786,7 +3079,8 @@ natural proportions, nothing melted, doubled or cut off), (b) gender, age, hair,
 (c) the whole head is inside the picture, (d) this person looks clearly DIFFERENT from every other image (face shape, hair,
 age, clothes), (e) no text or letters. Otherwise "ok": false and "fix_en": what the new portrait must clearly show, in
 positive words, at most 25 words.
-Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}]}} with one item per image."""
+Also list in "similar_pairs" EVERY pair of images whose faces, hair or clothes look alike, even a little: [n, m].
+Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}], "similar_pairs": [[1, 3]]}} with one check per image."""
     try:
         out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS, images=[refs[n].read_bytes() for n in names])
         time.sleep(3)
@@ -2801,6 +3095,15 @@ Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}]}} with one item p
             continue
         if 1 <= k <= len(names) and c.get("ok") is False:
             bad.append((names[k - 1], " ".join(str(c.get("fix_en") or "").split())))
+    for pr in out.get("similar_pairs") or []:
+        try:
+            a_, b_ = sorted(int(x) for x in pr[:2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if 1 <= a_ < b_ <= len(names) and names[b_ - 1] not in [x for x, _ in bad]:
+            face = by_name.get(names[b_ - 1], {}).get("face_en", "")
+            bad.append((names[b_ - 1], "a clearly different face shape, hair style, hair color and clothes than every other "
+                        "character" + (f"; {face}" if face else "")))
     print(f"Reference face check: {len(names)} checked, {len(bad)} to draw again.", flush=True)
     for n, fix in bad:
         c = by_name.get(n)
@@ -2859,6 +3162,23 @@ CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
 
+def expected_people(sc):
+    """How many people the picture must show (None = a crowd or unknown: the count is not enforced)."""
+    people = str(sc.get("people_en") or "").lower()
+    if any(w in people + " " + " ".join(sc.get("others") or []).lower() for w in CROWD_WORDS):
+        return None
+    if sc.get("cover") or sc.get("kind") == "author":
+        return 1
+    if people.startswith("no people"):
+        return 0
+    m = re.search(r"exactly\s+(\d+|one|two|three|four|five)\b", people)
+    if m:
+        w = m.group(1)
+        return int(w) if w.isdigit() else {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}[w]
+    n = len(sc.get("characters_present") or []) + len(sc.get("others") or [])
+    return n if n else None
+
+
 def check_images(jobs, models=None):
     """ONE Gemini call looks at up to CHECK_BATCH pictures. Returns a list with (score, what is missing) or None for
     each picture; returns None if the check is not available (the pictures are then kept as they are)."""
@@ -2869,7 +3189,8 @@ def check_images(jobs, models=None):
         blocks.append({"n": k, "narration_fa": sc["narration_fa"],
                        "intended_picture": sc.get("visual_en", sc.get("action_en", "")),
                        "exact_people": sc.get("people_en") or "", "must_show": sc.get("must_show") or [],
-                       "kind": sc.get("kind") or "event",
+                       "kind": sc.get("kind") or "event", "cover": bool(sc.get("cover")),
+                       "expected_people": expected_people(sc),
                        "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
     ref_names = []
     for j in jobs:
@@ -2915,20 +3236,29 @@ For EACH picture return:
   * two different people who look like twins or clones (the same face, the same hair, the same clothes): at most 3, and
     the person who rescues, helps, attacks or talks to another person must not look like that other person;
   * with 3 or more people, any two with the same hair color or the same color of shirt or trousers: at most 4;
-  * kinds "author", "book", "theme" are all the same kind of picture: ONE writer (the gender and age in "exact_people"; a
-    wrong gender: at most 3) INDOORS in the LOWER half, doing something with writing (desk, typewriter, library table,
-    reading), seen from the side or behind (no portrait), in clothes and furniture of the writer's time; outdoors: at most 3; the
-    UPPER 40 percent of the picture must be an EMPTY plain wall (a big book is placed there later): any object, window,
-    shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4.
+  * when "cover" is true: ONE writer (the gender and age in "exact_people"; a wrong gender: at most 3) INDOORS in the LOWER
+    half, doing something with writing (desk, typewriter, library table, reading), seen from the side or behind (no
+    portrait); outdoors: at most 3; the UPPER 40 percent must be an EMPTY plain wall (a big book is placed there later): any
+    object, window, shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4;
+  * kind "author" (and "cover" false): the writer's world seen from behind (a desk with pen and pages, never a face); kind
+    "book": the book as an object with readers and ONE sign of THIS story; kind "theme": a symbolic scene made of things of
+    THIS story; an unrelated landscape or a random scene for these kinds: at most 3.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
   from the reference: at most 3; a face that is blurred, distorted or too small to see: at most 5; several people are
   clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
   color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
+- "people_count": the NUMBER of people you can see in the picture. Count EVERY person: also small ones, far away, in a
+  window or doorway, in a painting or a statue, half hidden or cut by the border. Count first, then compare with
+  "expected_people" (null = a crowd, do not compare).
+- "limbs_ok": false if ANY person has a wrong body. Look at EVERY person from the head down to the feet, one by one: more or
+  fewer than two legs, two arms, two hands or two feet (a third leg or a doubled leg between two standing people is
+  common: check it), a doubled, missing or misplaced head, merged bodies. Otherwise true.
+- "twins": true if two people in the picture look alike (the same face, the same hair or the same clothes).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "twins": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names])
@@ -2946,7 +3276,20 @@ Return JSON {{"checks": [{{"n": 1, "score": 7, "look_score": 7, "missing": "..."
             score = int(c.get("score", 10))
             if j["sc"].get("look_sheets"):
                 score = min(score, int(c.get("look_score", 10)))
-            res.append((score, str(c.get("fix_en") or c.get("missing", "")).strip()))
+            fix = str(c.get("fix_en") or c.get("missing", "")).strip()
+            exp, pc = expected_people(j["sc"]), c.get("people_count")
+            if isinstance(exp, int) and isinstance(pc, (int, float)) and not isinstance(pc, bool) and int(pc) != exp:
+                score = min(score, 3 if int(pc) > exp else 4)         # counted by the judge, enforced by the program
+                fix = (f"exactly {exp} {'person' if exp == 1 else 'people'} in the whole picture, nobody else anywhere; "
+                       + fix)[:200]
+            if c.get("limbs_ok") is False:
+                score = min(score, 2)
+                fix = ("every person with exactly one head, two arms and exactly two legs, no third leg, legs clearly "
+                       "separate; " + fix)[:200]
+            if c.get("twins") is True and isinstance(exp, int) and exp >= 2:
+                score = min(score, 3)
+                fix = ("the people with clearly different faces, hair colors and clothes colors; " + fix)[:200]
+            res.append((score, fix))
         return res
     except (GeminiBlocked, GeminiQuotaExhausted):
         raise
@@ -3694,8 +4037,11 @@ def main():
     last_img = None
     jobs = []
     cover_n = 0
-    if any(str(b.get("kind") or "event") in ("author", "book", "theme") for s_ in scenes for b in (s_.get("beat_visuals") or [])) \
-            and not script.get("author"):
+    cover_pos = None                          # the ONE picture with the big book: at the end of the story
+    if TITLE_CARDS and scenes:
+        last_beats = scenes[-1].get("beats") or [scenes[-1]["narration_fa"]]
+        cover_pos = (len(scenes) - 1, len(last_beats) - 1)      # the ONE book picture: the last picture of the video
+    if TITLE_CARDS and not script.get("author"):
         script["author"] = design_author(book, src)
         if pending:
             pending["script"] = script
@@ -3720,10 +4066,14 @@ def main():
                 if bvs[j].get("time_en"):          # the author's study or a library: not the time of the story
                     sc["era_en"] = bvs[j]["time_en"]
             card_kind = None
-            if TITLE_CARDS and has_event and j < len(bvs) and str(bvs[j].get("kind") or "event") in ("author", "book", "theme"):
-                card_kind = str(bvs[j]["kind"])
+            if TITLE_CARDS and has_event and (i, j) == cover_pos:
+                card_kind = "cover"
                 sc.update(writer_desk_plan(sc.get("era_en", ""), script.get("author"), cover_n))
                 cover_n += 1
+            elif sc.get("kind") == "author" and script.get("author"):        # same writer, same gender in every picture
+                a_ = script["author"]
+                sc["visual_en"] = f"{sc.get('visual_en', '')} The writer (seen from behind) is {a_.get('look_en', 'a writer')}."
+                sc["people_en"] = f"exactly one person: the writer, a {a_.get('gender', 'person')}, seen from behind, nobody else"
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
             img = WORK / f"img_{i:02d}_{j}.jpg"
