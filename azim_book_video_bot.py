@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 10       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 10       # a saved script of another version is not resumed
+VISUAL_VERSION = 11       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 11       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -482,7 +482,7 @@ def fetch_source(book):
 
 def plan_length(src):
     """The narration is about as long as the Plot summary itself: short, dense, nothing added."""
-    target = int(max(300, min(MAX_WORDS, src["en_words"] * 0.9)))
+    target = int(max(300, min(MAX_WORDS, src["en_words"] * 0.75)))
     if not USE_CF:                    # slow free images: fewer scenes
         target = min(target, 360)
     n = max(5, round(target / 58))
@@ -872,7 +872,10 @@ def clean_spine(d, lo):
                            "who_en": " ".join(str(x.get("who_en") or "").split()),
                            "what_en": " ".join(str(x["what_en"]).split()),
                            "where_en": " ".join(str(x.get("where_en") or "").split()),
-                           "because_en": " ".join(str(x.get("because_en") or "").split())})
+                           "because_en": " ".join(str(x.get("because_en") or "").split()),
+                           "role_en": " ".join(str(x.get("role_en") or "").split()),
+                           "quote_en": " ".join(str(x.get("quote_en") or "").split())[:240],
+                           "flashback": bool(x.get("flashback"))})
     if len(events) < max(5, lo - 1):
         return None
     heroes = []
@@ -883,6 +886,40 @@ def clean_spine(d, lo):
             "ending_en": " ".join(str(d.get("ending_en") or "").split()),
             "idea_en": " ".join(str(d.get("idea_en") or "").split()),
             "author_en": " ".join(str(d.get("author_en") or "").split())}
+
+
+def _norm_en(t):
+    return re.sub(r"[^a-z0-9 ]+", "", str(t).lower().replace("-", " "))
+
+
+def order_events_by_source(events, text):
+    """Free check in code (no Gemini call): the position of every event's source quote inside the source text. When the
+    story is told in the order of the source (no flashback) and an event stands before an earlier one, the events are
+    sorted back into the order of the source. Events whose quote is not found keep their place."""
+    src_n = _norm_en(text)
+    pos = []
+    for e in events:
+        q = _norm_en(e.get("quote_en") or "")
+        words = q.split()
+        at = -1
+        for n in (len(words), 8, 5):          # the whole quote, then its first 8 / 5 words
+            if n and len(words) >= n and at < 0:
+                at = src_n.find(" ".join(words[:n]))
+        pos.append(at)
+    if any(e.get("flashback") for e in events) or sum(1 for x in pos if x >= 0) < max(4, len(events) - 2):
+        return events, 0
+    known = [(x, k) for k, x in enumerate(pos) if x >= 0]
+    order = [k for _, k in sorted(known)]
+    moved = sum(1 for a, b in zip(order, sorted(order)) if a != b)
+    if not moved:
+        return events, 0
+    slots = sorted(k for _, k in known)
+    out = list(events)
+    for slot, k in zip(slots, order):
+        out[slot] = events[k]
+    for n, e in enumerate(out, 1):
+        e["id"] = n
+    return out, moved
 
 
 def build_spine(book, src, cast):
@@ -911,7 +948,18 @@ Return JSON with exactly these keys:
     "what_en": ONE English sentence: what happens (a concrete event, not a description);
     "where_en": the place (and the time if it changes);
     "because_en": what in the PREVIOUS event caused this one ("" for event 1).
+  Every event object also has: "role_en" (exactly one of: "setup", "inciting incident", "turning point", "complication",
+  "crisis", "climax", "resolution": the job of this event in the story), "quote_en" (the English sentence of the SOURCE TEXT
+  that this event comes from, copied word for word, at most 30 words) and "flashback" (true only if the event happened BEFORE
+  the previous event in time; otherwise false).
   Rules for the events:
+  * ORDER: the events are in the order in which they HAPPEN in time, which is also the order of the source unless the source
+    tells a flashback. A flashback event is marked "flashback": true and its "what_en" starts with the time («years earlier»,
+    «as a child»...). Never move an event before the event that causes it.
+  * IMPORTANCE: choose ONLY the events that carry the story: the situation, the event that starts the conflict, every turning
+    point, the climax and the ending. If the source has more events than {hi}, drop the least important ones (a side
+    character, a journey, a repeated episode, a detail) and fold their cause into the next event's "because_en". A viewer must
+    understand the whole story from these events alone, with no gap in the chain of cause and effect.
   * Event 1 is the situation at the start. The last event is the ending (how the story ends for the hero).
   * REMOVAL TEST: an event is listed only if removing it would break the chain of cause and effect, or would hide a turning
     point, the climax or the change of the hero. Episodes, side characters, trips, descriptions and details are NOT events.
@@ -926,6 +974,9 @@ Return JSON with exactly these keys:
     d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
     sp = clean_spine(d, lo)
     if sp:
+        sp["events"], moved = order_events_by_source(sp["events"], src["text"])
+        if moved:
+            print(f"Story spine: {moved} event(s) were put back into the order of the source.", flush=True)
         print(f"Story spine: {len(sp['events'])} main events, {len(sp['heroes'])} heroes. Logline: {sp['logline'][:110]}",
               flush=True)
     return sp
@@ -1047,7 +1098,7 @@ Return JSON with exactly these keys:
        who: for each hero of the spine his or her name and a few words of role and relation to the others (from "role_en").
        Flowing text, not a list.
     3. The scenes with part "story": together they tell EVERY event of the spine, in order. Each scene tells ONE event or two
-       closely linked events, 3 to 5 flowing sentences (45 to 75 words), every event with its cause.
+       closely linked events, 2 to 5 flowing sentences (as many as the event needs, 35 to 75 words), every event with its cause.
     4. TWO scenes (three at most) with part "wrap" = the closing wrap-up. The first one starts with the Persian words
        «در جمع‌بندی». (a) In 2 or 3 flowing sentences tell the WHOLE arc of the story from the beginning to the end (only
        events of the spine); (b) then ONE sentence with the central idea (only from CENTRAL IDEA; skip if none); (c) the very
@@ -1065,6 +1116,11 @@ Return JSON with exactly these keys:
 
 Rules for the narration:
 - Total narration: {words} Persian words. Stay close to the source and the spine; never pad.
+- ONLY WHAT MATTERS: tell the important events of the spine completely and clearly (who, what, why, what follows) and leave
+  out everything else, even if the source mentions it: minor characters, side episodes, small details, names that no later
+  event needs. A listener must never be confused by a person or a place that does not matter to the story.
+- ORDER: tell the events exactly in the order of the spine; never mention a later event before its turn, and say «قبل از آن»
+  or «سال‌ها پیش» when the spine marks a flashback.
 - NO FILLER, NO IRRELEVANT SENTENCE: every sentence of the story part is an event of the spine or the cause that links two
   events. Forbidden there: opinions, praise, the author's life, reception, comparisons with other works, background facts,
   descriptions and details that the following events do not need, a person or a place that no event needs.
@@ -1180,6 +1236,8 @@ Return JSON with exactly these keys, in this order:
 - "irrelevant": ids of sentences that tell nothing the story needs (the removal test: without them the chain of cause and
   effect stays complete): praise, trivia, background, the author's life, a detail that no later event needs, a repeated
   point. Empty list if none.
+- "order_problems": ids of sentences that tell something BEFORE the thing that causes it, or whose time order contradicts the
+  rest (a later event told too early, an earlier one told after it). Empty list if the order is right.
 - "missing_events": ids (numbers) of those key events of this list that you did NOT clearly hear in the narration:
   {json.dumps(ev_list, ensure_ascii=False)}. Empty list if you heard all of them."""
     try:
@@ -1198,7 +1256,11 @@ Return JSON with exactly these keys, in this order:
             gid = str(g.get("id") if isinstance(g, dict) else g)
             if gid in valid and gid not in protect and gid not in irrelevant:
                 irrelevant.append(gid)
-        irrelevant = irrelevant[:6]
+        irrelevant = irrelevant[:8]
+        for g in (t.get("order_problems") or []):
+            gid = str(g.get("id") if isinstance(g, dict) else g)
+            if gid in valid and gid not in protect and gid not in [c["id"] for c in confusing]:
+                confusing.append({"id": gid, "problem": "told in the wrong order: fix the order or the bridge"})
         ev_ids = {e["id"] for e in (spine.get("events") or [])}
         missing = [int(x) for x in (t.get("missing_events") or []) if str(x).lstrip("-").isdigit() and int(x) in ev_ids][:4]
         print(f"Story gate (round {round_}): confusing={len(confusing)} irrelevant={len(irrelevant)} "
@@ -1252,7 +1314,7 @@ Persian sentence of 8 to 24 words that continues the story smoothly.
                 replaced += 1
             elif op == "delete" and oid in irrelevant:
                 live = [x for x in sents[i] if x.get("fa")]
-                if len(live) > 2 and scenes[i].get("part") == "story":
+                if len(live) > 1 and scenes[i].get("part") == "story":
                     slot["fa"] = ""
                     deleted += 1
             elif op == "insert_after" and fa and scenes[i].get("part") != "author" and oid not in inserts:
@@ -1307,8 +1369,9 @@ A) "narration_fa" (also shown as the subtitle)
 1. FACTS: keep only what the SOURCE TEXT supports. Remove or fix every fact, name, date, number, quote or interpretation
    that is not in the source, every wrong fact, and every sentence that is filler without information. If nothing
    supported remains, return "" for both texts of that paragraph.
-   NEVER remove a sentence that the SOURCE supports, even a small one: the story was already shortened to its main events.
-   Never remove a turning point, the introduction of a hero, the author sentence, the ending or the wrap-up.
+   Do not remove a sentence that tells a main event, a turning point, the introduction of a hero, the author sentence, the
+   ending or the wrap-up. A sentence about a minor detail or a side person that no main event needs may be removed (never
+   leave a hole in the chain of cause and effect).
 2. WORDING: keep exactly the same sentences in the same order (do not merge, split, add or delete a sentence); only fix
    grammar, word choice, spelling and half-spaces, and make the connectors between the sentences natural. Do NOT add new
    facts. Keep the order and the number of paragraphs. Keep names in English (Latin) letters exactly as they are.
@@ -1790,7 +1853,7 @@ where it happens at that moment.
 {source_block}
 PLACES OF THE STORY (fixed, always drawn the same way): {json.dumps(places, ensure_ascii=False)}
 
-Return JSON: {{"visuals": [{{"i": 0, "text_en": "...", "kind": "event", "location": "...", "characters_present": ["..."], "shot": "...", "event_en": "...", "must_show": ["..."], "people_en": "...", "others": ["..."], "roles": {{"Name": "..."}}, "time_en": "", "visual_en": "..."}}, ...]}}
+Return JSON: {{"visuals": [{{"i": 0, "text_en": "...", "kind": "event", "location": "...", "characters_present": ["..."], "shot": "...", "event_en": "...", "must_show": ["..."], "people_en": "...", "others": ["..."], "roles": {{"Name": "..."}}, "time_en": "", "emotion_en": "...", "visual_en": "..."}}, ...]}}
 with exactly {len(items)} items, in the same order.
 
 Rules:
@@ -1836,6 +1899,13 @@ Rules:
   manuscript pages, a lamp, a window that shows the writer's town and country, the writer seen ONLY from behind or as a
   silhouette (never a face, never a portrait of a real person); write that time and place in "time_en". "time_en" is empty
   for "event".
+- "emotion_en": the FEELING of the people in THIS moment, from the situation and the place, as what the FACE shows: for each
+  person with a visible face 6 to 14 English words, e.g. "the mother: wide frightened eyes, raised eyebrows, trembling
+  mouth; the boy: tears on his cheeks, lowered eyebrows". Use the right face for the feeling: worry (eyebrows drawn together
+  and up, tense lips), fear (wide eyes, open mouth, pale face), joy (a real smile, raised cheeks, bright eyes), sadness (lowered
+  eyebrow corners, wet eyes, downturned mouth), anger, shock, relief, calm. The feeling comes from the sentence and from the
+  mood of the place (a happy meeting is a bright place with smiles; a loss is a dim place with sad faces); never a neutral
+  face unless the moment is neutral.
 - "roles": an object that maps EVERY name in "characters_present" to 4 to 12 English words: his or her role in THIS picture and
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
@@ -1866,6 +1936,11 @@ Rules:
 - LEGS: when 2 or more people stand or walk close together, use a medium shot from the waist up or hide the legs behind
   furniture, a table, a wall or a cart; full-body shots only for ONE person (crossed or overlapping legs of several people
   are drawn wrongly: a third leg appears).
+- HANDS (very important, the picture model often draws a third hand): plan every person with hands that are EASY to draw:
+  either both hands clearly separate and doing ONE simple action (holding one object, resting on a table or a knee, covering
+  the face), or hands hidden (behind the back, in pockets or sleeves, under a shawl or a table, folded in the lap). Never plan
+  two people holding or touching the same object or each other with their hands, never crossed, overlapping or interlocked
+  arms, never more than one object in a person's hands, never a hand in front of the face of another person.
 - BODIES: every person in the picture is a complete human: one head, two arms, two hands, two legs. When hands matter
   (writing, holding, pulling), say which hand holds what. Never plan a picture in which a body is hidden so that a head or
   a hand could look missing or doubled.
@@ -1894,6 +1969,7 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                     "people_en": " ".join(str(v.get("people_en") or "").split()),
                     "others": _str_list(v.get("others"), 3),
                     "time_en": " ".join(str(v.get("time_en") or "").split()),
+                    "emotion_en": " ".join(str(v.get("emotion_en") or "").split()),
                     "roles": v.get("roles") if isinstance(v.get("roles"), dict) else {}} for v in vis]
             for v, it in zip(vis, items):      # ONLY the author part is a writer picture: every other part is a story picture
                 v["kind"] = "event"
@@ -1915,6 +1991,7 @@ Parts: {json.dumps(items, ensure_ascii=False)}"""
                                       "kind": v.get("kind", "event"), "must_show": v.get("must_show", []),
                                       "people_en": v.get("people_en", ""), "others": v.get("others", []),
                                       "time_en": v.get("time_en", ""),
+                                      "emotion_en": v.get("emotion_en", ""),
                                       "roles": v.get("roles", {})} for v in vis[k:k + n]]
                 k += n
             data["visual_version"] = VISUAL_VERSION
@@ -2685,7 +2762,9 @@ def _wc(t):
 KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
-ANATOMY = "Every person has exactly one head, two arms, two hands and exactly two legs with two feet, no extra or missing limbs, no third leg"
+ANATOMY = ("Every person has exactly one head, exactly two arms, exactly two hands with five fingers each and exactly two "
+           "legs with two feet; each hand clearly belongs to its own person; arms and legs of different people never overlap; "
+           "no third hand, no third leg")
 NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no figures far away, no faces in windows or doorways"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
@@ -2780,6 +2859,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
                 "a stranger never copies a reference face. " if (ref_idx and present) else "")
         return lead + ("Clearly different people: " if len(parts) > 1 else "The person: ") + "; ".join(parts) + ". "
 
+    emo = " ".join(str(scene.get("emotion_en") or "").split())
+    if emo and has_people:
+        count += f"Facial expressions that show the feeling: {_trim_words(emo, 28)}. "
     non_event = (str(scene.get("kind") or "event") != "event") or people_en.lower().startswith("no people")
 
     def compose(main_t, full, era, tail):
@@ -3232,6 +3314,9 @@ For EACH picture return:
   * COUNT THE PEOPLE: their number and kind must equal "exact_people" (for example one mother and ONE child: two girls
     next to the mother is wrong); one person too many or too few: at most 4. Any extra figure that is not in "exact_people" (a small person far away,
     a crowd, a face in a window, a figure in a painting or a statue that looks like a person): at most 3;
+  * FACE FEELING: the faces must show the feeling of the moment (worry, fear, joy, sadness, anger, shock...) that fits the
+    narration and the place; blank, smiling-by-default or wrong-feeling faces (a smile at a death, a calm face in danger):
+    at most 5;
   * every item of "must_show" must be visible; two or more of them missing: at most 5;
   * two different people who look like twins or clones (the same face, the same hair, the same clothes): at most 3, and
     the person who rescues, helps, attacks or talks to another person must not look like that other person;
@@ -3251,8 +3336,9 @@ For EACH picture return:
 - "people_count": the NUMBER of people you can see in the picture. Count EVERY person: also small ones, far away, in a
   window or doorway, in a painting or a statue, half hidden or cut by the border. Count first, then compare with
   "expected_people" (null = a crowd, do not compare).
-- "limbs_ok": false if ANY person has a wrong body. Look at EVERY person from the head down to the feet, one by one: more or
-  fewer than two legs, two arms, two hands or two feet (a third leg or a doubled leg between two standing people is
+- "limbs_ok": false if ANY person has a wrong body. Look at EVERY person from the head down to the feet, one by one and COUNT
+  the hands of each person (exactly two, never three: look at hands that hold something, at hands near the face and at hands
+  between two people, they are often doubled): more or fewer than two legs, two arms, two hands or two feet (a third leg or a doubled leg between two standing people is
   common: check it), a doubled, missing or misplaced head, merged bodies. Otherwise true.
 - "twins": true if two people in the picture look alike (the same face, the same hair or the same clothes).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
@@ -3284,8 +3370,8 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "twins":
                        + fix)[:200]
             if c.get("limbs_ok") is False:
                 score = min(score, 2)
-                fix = ("every person with exactly one head, two arms and exactly two legs, no third leg, legs clearly "
-                       "separate; " + fix)[:200]
+                fix = ("every person with exactly one head, two arms, two hands and exactly two legs, hands hidden behind "
+                       "the back or in pockets, no third hand, no third leg; " + fix)[:200]
             if c.get("twins") is True and isinstance(exp, int) and exp >= 2:
                 score = min(score, 3)
                 fix = ("the people with clearly different faces, hair colors and clothes colors; " + fix)[:200]
@@ -4062,6 +4148,7 @@ def main():
                 sc["kind"] = bvs[j].get("kind", "event")
                 sc["must_show"] = bvs[j].get("must_show", [])
                 sc["people_en"] = bvs[j].get("people_en", "")
+                sc["emotion_en"] = bvs[j].get("emotion_en", "")
                 sc["others"] = bvs[j].get("others", [])
                 if bvs[j].get("time_en"):          # the author's study or a library: not the time of the story
                     sc["era_en"] = bvs[j]["time_en"]
