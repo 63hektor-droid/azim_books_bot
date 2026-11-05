@@ -313,5 +313,15 @@
   "date_pt": "2026-11-04",
   "wiki": "The Poisonwood Bible",
   "date": "2026-11-04"
+ },
+ {
+  "title_en": "Song of Solomon",
+  "title_fa": "سرود سلیمان",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-05",
+  "wiki": "Song of Solomon (novel)",
+  "date": "2026-11-05"
  }
 ]

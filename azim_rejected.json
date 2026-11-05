@@ -18,5 +18,10 @@
   "title_en": "The Perks of Being a Wallflower",
   "reason": "Gemini blocked the prompt: gemini-3.6-flash: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
   "date": "2026-10-31"
+ },
+ {
+  "title_en": "Shatter Me",
+  "reason": "Gemini blocked the prompt: gemini-3.6-flash: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-11-05"
  }
 ]
