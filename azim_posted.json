@@ -323,5 +323,15 @@
   "date_pt": "2026-11-05",
   "wiki": "Song of Solomon (novel)",
   "date": "2026-11-05"
+ },
+ {
+  "title_en": "The Hitchhiker's Guide to the Galaxy",
+  "title_fa": "راهنمای مسافران مجانی کهکشان",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-06",
+  "wiki": "The Hitchhiker's Guide to the Galaxy (novel)",
+  "date": "2026-11-06"
  }
 ]
