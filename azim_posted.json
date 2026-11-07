@@ -343,5 +343,15 @@
   "date_pt": "2026-11-07",
   "wiki": "Angel Beats!",
   "date": "2026-11-07"
+ },
+ {
+  "title_en": "A Scanner Darkly",
+  "title_fa": "پویشگر تاریک",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-07",
+  "wiki": "A Scanner Darkly",
+  "date": "2026-11-07"
  }
 ]
