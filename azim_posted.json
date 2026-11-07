@@ -333,5 +333,15 @@
   "date_pt": "2026-11-06",
   "wiki": "The Hitchhiker's Guide to the Galaxy (novel)",
   "date": "2026-11-06"
+ },
+ {
+  "title_en": "Angel Beats!",
+  "title_fa": "انجل بیتز!",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-07",
+  "wiki": "Angel Beats!",
+  "date": "2026-11-07"
  }
 ]
