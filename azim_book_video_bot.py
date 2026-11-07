@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 13       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 13       # a saved script of another version is not resumed
+VISUAL_VERSION = 14       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 14       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -482,7 +482,7 @@ def fetch_source(book):
 
 def plan_length(src):
     """The narration is about as long as the Plot summary itself: short, dense, nothing added."""
-    target = int(max(300, min(MAX_WORDS, src["en_words"] * 0.75)))
+    target = int(max(300, min(MAX_WORDS, src["en_words"] * 0.62)))
     if not USE_CF:                    # slow free images: fewer scenes
         target = min(target, 360)
     n = max(5, round(target / 58))
@@ -552,12 +552,27 @@ DIVERSITY_SLOTS = (
 )
 
 
+EYE_COLORS = ("dark brown eyes", "blue eyes", "green eyes", "hazel eyes", "gray eyes", "light brown eyes")
+_VARIETY = {"offset": 0}        # set per book: the main character of one video never gets the same slot as in the next one
+
+
+def set_variety(book):
+    """The starting slots, the accessories and the face numbers are rotated by the title of the book, so the main
+    characters of different videos do not all look alike (always the same hair, the same coat and the same hat)."""
+    _VARIETY["offset"] = zlib.crc32(norm(book.get("title_en") or "").encode("utf-8")) % len(DIVERSITY_SLOTS)
+
+
 def diversity_text():
-    rows = "\n".join(f"  character {k + 1}: {h}; {b}; main outfit color {c}"
-                     for k, (h, b, c) in enumerate(DIVERSITY_SLOTS))
+    off = _VARIETY["offset"]
+    rows = "\n".join(f"  character {k + 1}: {DIVERSITY_SLOTS[(k + off) % len(DIVERSITY_SLOTS)][0]}; "
+                     f"{DIVERSITY_SLOTS[(k + off) % len(DIVERSITY_SLOTS)][1]}; "
+                     f"main outfit color {DIVERSITY_SLOTS[(k + off) % len(DIVERSITY_SLOTS)][2]}; "
+                     f"{EYE_COLORS[(k * 5 + off * 2 + 1) % len(EYE_COLORS)]}"
+                     for k in range(len(DIVERSITY_SLOTS)))
     return ("- VARIETY SLOTS (starting points so that nobody looks alike; the SOURCE, the place, the era, the gender and "
-            "the age always win: when a slot does not fit a character, choose another hair color, build and outfit color "
-            "that nobody else has):\n" + rows)
+            "the age always win: when a slot does not fit a character, choose another hair color, eye color, build and "
+            "outfit color that nobody else has). The main character is NEVER a default man in a green coat and a hat with "
+            "black hair and dark eyes: his or her look comes from the source, the era, the job and these slots:\n" + rows)
 
 
 # ----- every character gets a DIFFERENT hair color, shirt color and trousers/skirt color (checked by CODE, not only
@@ -630,7 +645,8 @@ def enforce_distinct_faces(chars, picks):
     for k, c in enumerate(chars):
         want = picks.get(k)
         if want is None or not (0 <= want < len(FACE_TYPES)) or want in used:
-            want = next((x for x in range(len(FACE_TYPES)) if x not in used), k % len(FACE_TYPES))
+            order = [(x + _VARIETY["offset"]) % len(FACE_TYPES) for x in range(len(FACE_TYPES))]
+            want = next((x for x in order if x not in used), k % len(FACE_TYPES))
         used.add(want)
         c["face_en"] = FACE_TYPES[want]
         c["look_en"] = str(c.get("look_en") or "").rstrip(". ") + f". Face: {FACE_TYPES[want]}."
@@ -666,10 +682,38 @@ def enforce_distinct_garments(chars):
     return chars
 
 
+_NEUTRAL_FAMILIES = ("black", "gray", "brown", "white", "cream")
+_VIVID_TOPS = ("red", "mustard yellow", "forest green", "purple", "teal", "orange", "navy blue", "pink")
+
+
+def enforce_vivid_tops(chars):
+    """Free check in code: at most ONE character wears a dull top (black, gray, brown, white, cream); every other one gets
+    a clear color, so that the viewer tells the people apart at first sight."""
+    seen_dull = False
+    for c in chars:
+        val = str(c.get("top_color") or "").strip()
+        fam = color_family(val)
+        if not fam:
+            continue
+        if fam in _NEUTRAL_FAMILIES:
+            if not seen_dull:
+                seen_dull = True
+                continue
+            taken = {color_family(x.get("top_color") or "") for x in chars if x is not c}
+            free = [v for v in _VIVID_TOPS if color_family(v) not in taken]
+            if free:
+                print(f"Cast: {c.get('name')} wore a dull top color '{val}': changed to '{free[0]}' (easier to tell apart).",
+                      flush=True)
+                _swap_color(c, val, free[0], "shirt")
+                c["top_color"] = free[0]
+    return chars
+
+
 def enforce_distinct_cast(chars):
     """No two characters share a hair color, a shirt color or a trousers/skirt color (two old people may both have gray
     hair). Fills "key_en": the short who-wears-what line that is pasted into every picture of the person."""
     enforce_distinct_garments(chars)
+    enforce_vivid_tops(chars)
     used = {"hair_color": set(), "top_color": set(), "bottom_color": set()}
     for c in chars:
         try:
@@ -720,7 +764,7 @@ def add_signatures(chars):
         female = bool(re.search(r"\b(woman|girl|female|lady|mother|daughter|wife|she)\b", text))
         pool = _ACCESSORIES_F if female else _ACCESSORIES_M
         for off in range(len(pool)):
-            acc = pool[(k + off) % len(pool)]
+            acc = pool[(k + off + _VARIETY["offset"]) % len(pool)]
             key = acc.split()[-1]
             if key not in text:
                 c["signature_en"] = acc
@@ -815,6 +859,7 @@ Return JSON with exactly this key:
 def design_cast(book, src):
     """Step B0: BEFORE the script is written, design the era and ONE fixed look sheet for every important character
     (ages that fit the family, very different faces and bodies, different clothes, true to the era)."""
+    set_variety(book)
     prompt = f"""You are a film casting director and a costume designer. Design the characters of a picture video about
 the novel "{book['title_en']}" by {book['author_en']}.
 
@@ -852,7 +897,10 @@ Return JSON with exactly these keys:
 Rules:
 - AGES: use the ages of the source; otherwise decide them so they fit the story and the family tree. A parent is at least
   18 years older than his or her child, grandparents are older than parents, a teenager looks like a teenager and an old
-  person looks old.
+  person looks old. The age must FIT THE ROLE: a person who marries, is engaged, is a bride or a groom, has a love story,
+  has children or works at an adult job is drawn as a grown person of at least 18 years (when the source gives a younger
+  age, choose 18 to 20 for the look sheet); a child is never a bride, a groom or a lover, and never wears a wedding dress.
+  A child looks like a child and a grown person never looks like a child.
 - FACES: every character has a clearly different face: a different face shape, hair color and style, eye color and
   distinctive feature. Skin tone fits the place and the people of the story. Nobody looks like a twin of somebody else
   unless the source says they are twins.
@@ -923,8 +971,8 @@ def cast_prompt(cast):
 
 # ---------------------------------------------------------------- story spine
 def plan_events(src):
-    """How many key events the story spine may have: about one per 70 words of the Plot, 6 to 12."""
-    return max(6, min(12, round(src["en_words"] / 70)))
+    """How many key events the story spine may have: about one per 85 words of the Plot, 6 to 10 (fewer, bigger events)."""
+    return max(6, min(10, round(src["en_words"] / 85)))
 
 
 def clean_spine(d, lo):
@@ -1064,7 +1112,7 @@ def _norm_wrap(t):
     return t.replace("\u200c", "").replace(" ", "")
 
 
-def tagged_to_scenes(raw, n_ev, strict=True):
+def tagged_to_scenes(raw, n_ev, strict=True, max_words=None):
     """The writer tags EVERY sentence with the story event it tells (or with its part). The program joins the
     sentences of a scene into the narration and DROPS every sentence whose tag is not allowed for its part, so that a
     sentence that serves no event never reaches the video. Returns (scenes, problems)."""
@@ -1084,6 +1132,33 @@ def tagged_to_scenes(raw, n_ev, strict=True):
                     t = str(x.get("ev") if x.get("ev") is not None else "").strip()
                     if t.isdigit() and need_of(x) >= 2:
                         support[int(t)] = support.get(int(t), 0) + 1
+    over = set()                                   # ids of NEED 2 sentences removed because the narration is too long
+    if max_words:
+        def ev_num(x):
+            t = str(x.get("ev") if x.get("ev") is not None else "").strip()
+            return int(t) if t.isdigit() else None
+
+        total_w, cands = 0, []
+        for s in raw or []:
+            if not isinstance(s, dict):
+                continue
+            is_story = str(s.get("part") or "").strip().lower() == "story"
+            for x in s.get("sentences") or []:
+                if not isinstance(x, dict):
+                    continue
+                nw, e_ = len(str(x.get("fa") or "").split()), ev_num(x)
+                if is_story and need_of(x) == 1 and e_ is not None and support.get(e_, 0) >= 1:
+                    continue                       # already removed as decoration
+                total_w += nw
+                if is_story and need_of(x) == 2 and e_ is not None:
+                    cands.append((nw, e_, id(x)))
+        for nw, e_, xid in sorted(cands, reverse=True):
+            if total_w <= max_words:
+                break
+            if support.get(e_, 0) >= 2:            # the event keeps at least one other sentence with NEED 2 or 3
+                support[e_] -= 1
+                total_w -= nw
+                over.add(xid)
     for s in raw or []:
         if not isinstance(s, dict):
             continue
@@ -1109,6 +1184,9 @@ def tagged_to_scenes(raw, n_ev, strict=True):
                 ok = num is not None
                 if ok and need_of(x) == 1 and support.get(num, 0) >= 1:
                     dropped_need += 1             # decoration: its event is already told by other sentences
+                    continue
+                if ok and id(x) in over:
+                    dropped_need += 1             # an explanation that the length of the video cannot afford
                     continue
                 if ok and num < last_ev:
                     if not strict:                # last attempt: a sentence that jumps back is deleted, not kept
@@ -1228,6 +1306,9 @@ Rules for the narration:
 - ONLY WHAT MATTERS: tell the important events of the spine completely and clearly (who, what, why, what follows) and leave
   out everything else, even if the source mentions it: minor characters, side episodes, small details, names that no later
   event needs. A listener must never be confused by a person or a place that does not matter to the story.
+  A short summary keeps ONLY the spine: one clear step for every event, in one or two sentences; no names of side people (a
+  name is given only to a hero or to a person that a later event needs), no dates and numbers unless the story needs them, no
+  description of a place unless the place matters, no second example, no explanation longer than a few words.
   SENTENCE TEST: before you keep a sentence ask "if I delete it, does the viewer lose a hero, a cause, a turning point, the
   climax or the ending?" If not, do not write it. A sentence that only decorates, repeats, describes a mood or names a side
   person is deleted. Better a short, complete, clear summary than a long one.
@@ -1254,6 +1335,8 @@ Rules for the narration:
 - The voice engine can fail on very long noun chains: at most TWO consecutive ezafe links in a noun phrase (never
   "noun of noun of noun of noun"); prefer verbs and clauses over long genitive chains.
 - Correct grammar and spelling, proper half-spaces. It will be read aloud: no emojis, no brackets, no abbreviations.
+- NUMBERS: write every number as separate Persian words with spaces and a separate «و» («هفتاد و هفت», «بیست و پنج», «صد و بیست»),
+  never as one glued word («هفتادوهفت»), and never with digits.
 - Never use English loanwords or words that sound English (for example «پادکست»، «ویدئو»، «آنلاین»، «لایک»،
   «اپلیکیشن»، «استایل»): use the Persian word. Never say the video is a podcast.
 - Use everyday words that any listener understands at once. Avoid rare, archaic, heavy literary or Arabic words.
@@ -1271,7 +1354,9 @@ Rules for the visuals:
             data["era_en"] = cast["era_en"]
             data["locations"] = cast.get("locations") or []
         try:
-            scenes, problems = tagged_to_scenes(data.get("scenes"), n_ev, strict=attempt < 3)
+            hi_words = int(re.findall(r"\d+", words)[-1]) if re.findall(r"\d+", words) else None
+            scenes, problems = tagged_to_scenes(data.get("scenes"), n_ev, strict=attempt < 3,
+                                                max_words=int(hi_words * 1.03) if hi_words else None)
         except Exception as e:  # noqa: BLE001
             scenes, problems = [], [f"unreadable script: {e}"]
         if cast:
@@ -1351,7 +1436,8 @@ Return JSON with exactly these keys, in this order:
   word for word), each {{"id": "3.1", "meaning_en": "what the author most likely meant, in plain words"}}. Empty list if none.
 - "irrelevant": ids of sentences that tell nothing the story needs (the removal test: without them the chain of cause and
   effect stays complete): praise, trivia, background, the author's life, a detail that no later event needs, a repeated
-  point. Empty list if none.
+  point, a description of a place or a mood, the name of a side person, a second example of something already shown.
+  Be strict: when in doubt, list it. Empty list if none.
 - "order_problems": ids of sentences that tell something BEFORE the thing that causes it, or whose time order contradicts the
   rest (a later event or the ending told too early, a jump ahead and then back again, an earlier event told after a later
   one). Empty list if the story runs in one straight line.
@@ -1504,7 +1590,7 @@ A) "narration_fa" (also shown as the subtitle)
    facts. Keep the order and the number of paragraphs. Keep names in English (Latin) letters exactly as they are.
    {TONE_RULES}
    Keep the length and the number of sentences of every paragraph; at most TWO consecutive ezafe links in a noun phrase; numbers as words, no
-   digits, no emojis, no brackets, no abbreviations, no English word except names; simple everyday words. A paragraph that
+   digits (a number is written as separate words: «هفتاد و هفت», never «هفتادوهفت»), no emojis, no brackets, no abbreviations, no English word except names; simple everyday words. A paragraph that
    contains «جمع‌بندی» must keep that word and stay a clear, useful conclusion.
 
 B) "spoken_fa" (read by the voice only, never shown): the SAME final text as "narration_fa", written with FULL
@@ -1651,6 +1737,8 @@ Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
 def sanitize_narration(data, book):
     before = [s["narration_fa"].replace("ي", "ی").replace("ك", "ک") for s in data["scenes"]]
     data = _sanitize_core(data, book)
+    for s in data["scenes"]:
+        s["narration_fa"] = fix_numbers(s["narration_fa"])
     for s, b in zip(data["scenes"], before):
         if s["narration_fa"] != b or not s.get("spoken_fa"):
             s["spoken_fa"] = s["narration_fa"]       # the narration changed: the old voice text no longer fits
@@ -1895,6 +1983,9 @@ Check EVERY plan:
    symbolic picture of a part in which something happens is rewritten.
 12. FIGURATIVE SENTENCES: when the narration uses a figure of speech (a metaphor, a personification, an idiom, a euphemism), the
    picture shows the REAL event behind it, never the literal impossible image.
+14. AGE FIT: nobody who looks like a child is a bride, a groom, a lover or in a wedding scene; people who marry, are engaged
+   or have children are drawn as grown people (at least 18), a child looks like a child, a parent looks older than his or
+   her child; fix a mismatch.
 13. CLOTHES FIT THE SITUATION: nobody wears pajamas, a nightgown or a bathrobe unless the narration says that he or she goes to
    bed, sleeps, has just woken up or lies ill in bed; everybody wears the day or work clothes of the era and job.
 9. CLOTHES FIT THE JOB: the clothes of every person in "visual_en" and "others" match his or her job and class (a uniform
@@ -2064,6 +2155,9 @@ Rules:
 - FIGURATIVE SENTENCES: when the part says something with a figure of speech (a metaphor, a personification, an idiom, a
   euphemism: for example a ship that «kills itself»), draw the REAL event behind it, judged from "text_en", the SOURCE TEXT and
   the story, never the literal impossible image.
+- AGE FIT: every person is drawn at the age that fits his or her ROLE in THIS moment (parent, bride, groom, worker, child,
+  old person); a child is NEVER drawn as a bride, a groom, a lover or in a wedding dress or a wedding scene: a person who
+  marries or is engaged is drawn as a young adult of at least 18 years.
 - CLOTHES FIT THE SITUATION: everybody is dressed for THIS moment: day clothes or work clothes of the era and the job; a coat,
   hat, scarf or gloves where the weather is cold; nightwear ONLY when the part says that a person goes to bed, is asleep, has
   just woken up or lies ill in bed. Never pajamas, a nightgown or a bathrobe for a person who walks, talks, works, travels or
@@ -2418,34 +2512,68 @@ def gemini_tts(text, kind, out_wav, style=""):
 GEMINI_GROUP_WORDS = int(os.environ.get("AZIM_GEMINI_GROUP_WORDS") or 260)   # words per Gemini TTS request
 
 
-def split_by_silence(path, weights):
-    """Cuts ONE long recording of several paragraphs back into paragraphs: every cut goes to the longest pause that is
-    near the expected place (expected place = share of the characters). Returns [(start, end), ...] in seconds."""
+def split_by_silence(path, weights, extras=None, min_gap=1.0, min_sil=0.3, window_min=4.0, win_frac=0.15):
+    """Cuts ONE recording into consecutive pieces (paragraphs, or the sentences of a paragraph) whose texts have the given
+    weights (characters). The expected place of every cut comes from the speech rate (solved from the whole length, with the
+    expected pauses in "extras" seconds after every piece); then ALL cuts are chosen together (dynamic programming) among the
+    detected pauses: close to the expected place, long pauses preferred, always in order. One wrong estimate can no longer
+    push the voice several sentences ahead of the text. Returns [(start, end), ...] in seconds."""
     total = probe_duration(path)
+    n = len(weights)
+    if n <= 1:
+        return [(0.0, total)]
     out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af",
-                          "silencedetect=noise=-35dB:d=0.3", "-f", "null", "-"],
+                          f"silencedetect=noise=-35dB:d={min_sil}", "-f", "null", "-"],
                          capture_output=True, text=True).stderr
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", out)]
     ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", out)]
-    sil = [(a, b) for a, b in zip(starts, ends)]
-    wsum = float(sum(weights))
-    cuts, acc, prev = [], 0.0, 0.0
-    window = max(4.0, 0.08 * total)
-    for w in weights[:-1]:
-        acc += w
-        t = total * acc / wsum
-        best, best_score = t, None
-        for a, b in sil:
-            mid = (a + b) / 2
-            if abs(mid - t) <= window and mid > prev + 1.0:
-                score = (b - a) - 0.15 * abs(mid - t)
-                if best_score is None or score > best_score:
-                    best, best_score = mid, score
-        best = max(best, prev + 1.0)
-        cuts.append(best)
-        prev = best
+    sil = [((a + b) / 2, b - a) for a, b in zip(starts, ends)]
+    extras = list(extras) if extras else [0.0] * n
+    extras = (extras + [0.0] * n)[:n]
+    wsum = float(sum(max(w, 1) for w in weights))
+    rate = max((total - sum(extras[:-1])) / wsum, 1e-4)             # seconds of speech per character
+    targets, acc = [], 0.0
+    for w, ex in zip(weights[:-1], extras[:-1]):
+        acc += max(w, 1) * rate + ex
+        targets.append(min(max(acc, 0.0), total))
+    window = max(window_min, win_frac * total)
+    scale = max(window / 3.0, 0.3)
+    cands = []
+    for t in targets:
+        c = [(mid, ln, 0.6 * abs(mid - t) / scale - 1.5 * min(ln, 1.0)) for mid, ln in sil if abs(mid - t) <= window]
+        c.append((t, 0.0, 1.6))                                       # no pause near: the expected place itself
+        cands.append(c)
+    INF = float("inf")
+    best = [[INF] * len(c) for c in cands]
+    prev = [[-1] * len(c) for c in cands]
+    for i, (mid, ln, cost) in enumerate(cands[0]):
+        best[0][i] = cost
+    for k in range(1, len(cands)):
+        for i, (mid, ln, cost) in enumerate(cands[k]):
+            for j, (pm, _, _) in enumerate(cands[k - 1]):
+                if best[k - 1][j] < INF and mid >= pm + min_gap and best[k - 1][j] + cost < best[k][i]:
+                    best[k][i] = best[k - 1][j] + cost
+                    prev[k][i] = j
+    cuts = None
+    if best and min(best[-1]) < INF:
+        i = min(range(len(best[-1])), key=lambda x: best[-1][x])
+        cuts = []
+        for k in range(len(cands) - 1, -1, -1):
+            cuts.append(cands[k][i][0])
+            i = prev[k][i]
+        cuts.reverse()
+    if cuts is None:                                                   # no consistent choice: the expected places
+        cuts, last = [], 0.0
+        for t in targets:
+            last = max(t, last + min(min_gap, 0.2))
+            cuts.append(min(last, total))
     edges = [0.0] + cuts + [total]
     return list(zip(edges[:-1], edges[1:]))
+
+
+def paragraph_extras(texts):
+    """Expected pauses (seconds) after every paragraph of one recording: a little after every sentence, more at its end."""
+    return [0.35 * max(len(split_sentences(t)), 1) + 0.5 for t in texts]
 
 
 # Voice-only writing of the short words that the Gemini voice swallows or merges («در این» -> «دین»/«این»,
@@ -2468,7 +2596,8 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
 _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
-                ("ثروت", "سَروَت"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
+                ("ثروت", "سَروَت"),
+                ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
 def force_marks(t):
@@ -2507,6 +2636,7 @@ def load_pronunciation():
 
 
 def gemini_voice_text(t):
+    t = fix_numbers(t)
     if not _PRON:
         _PRON["rules"] = load_pronunciation()
         w, pf, rx = _PRON["rules"]
@@ -2543,7 +2673,7 @@ def gemini_voice_groups(scenes, kind):
                           else sc["narration_fa"]).strip())
         full = WORK / f"graw_{gi:02d}.wav"
         gemini_tts("\n\n".join(gemini_voice_text(x) for x in texts), kind, full, GEMINI_TTS_STYLE)
-        cuts = split_by_silence(full, [max(len(t), 1) for t in texts])
+        cuts = split_by_silence(full, [max(len(t), 1) for t in texts], paragraph_extras(texts))
         note("  Gemini group %d: cuts at %s s" % (gi, ", ".join(f"{b:.1f}" for _, b in cuts[:-1])))
         for i, (a, b) in zip(idxs, cuts):
             sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(full), "-ss", f"{a:.2f}", "-to", f"{b:.2f}",
@@ -3485,6 +3615,7 @@ For EACH picture return:
     half, doing something with writing (desk, typewriter, library table, reading), seen from the side or behind (no
     portrait); outdoors: at most 3; the UPPER 40 percent must be an EMPTY plain wall (a big book is placed there later): any
     object, window, shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4;
+  * AGE FIT: a person who looks like a child but is a bride, a groom, a lover or in a wedding scene: at most 3;
   * kind "author" (and "cover" false): ONE writer of the gender in "exact_people", seen from behind or the side (no portrait),
     INDOORS in a library with bookshelves, and a framed PAINTING OF A SAMURAI hanging on the wall; no samurai painting: at most
     4; a wrong gender: at most 3; any other person: at most 3. Kind
@@ -3495,6 +3626,9 @@ For EACH picture return:
   from the reference: at most 3; a face that is blurred, distorted or too small to see: at most 5; several people are
   clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
   color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
+- "painting_box": ONLY when kind is "author": the bounding box of the framed painting of the samurai on the wall, as
+  [ymin, xmin, ymax, xmax] with every number from 0 to 1000 (0,0 = top left corner of the picture); null when there is no
+  such painting (and for every other kind).
 - "people_count": the NUMBER of people you can see in the picture. Count EVERY person: also small ones, far away, in a
   window or doorway, in a painting or a statue, half hidden or cut by the border. Count first, then compare with
   "expected_people" (null = a crowd, do not compare).
@@ -3541,7 +3675,14 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "hands_p
             if c.get("twins") is True and isinstance(exp, int) and exp >= 2:
                 score = min(score, 3)
                 fix = ("the people with clearly different faces, hair colors and clothes colors; " + fix)[:200]
-            res.append((score, fix))
+            box = c.get("painting_box")
+            try:
+                box = [float(x) for x in box][:4] if isinstance(box, (list, tuple)) and len(box) >= 4 else None
+                if box and not (0 <= box[0] < box[2] <= 1000 and 0 <= box[1] < box[3] <= 1000):
+                    box = None
+            except (TypeError, ValueError):
+                box = None
+            res.append((score, fix, box))
         return res
     except (GeminiBlocked, GeminiQuotaExhausted):
         raise
@@ -3594,14 +3735,37 @@ def author_gender(book):
         return ""
 
 
+WRITER_CUES = {
+    "woman": "a woman with long hair pinned up in a bun and a few loose strands on her shoulders, narrow shoulders, a long dress with a shawl",
+    "man": "a man with short hair, broad shoulders, a jacket and trousers",
+}
+_MALE_WORDS = re.compile(r"\b(man|male|he|his|him|gentleman|beard|mustache|moustache|boy)\b", re.I)
+_FEMALE_WORDS = re.compile(r"\b(woman|female|she|her|lady|girl|dress|skirt|blouse)\b", re.I)
+
+
+def writer_look(a):
+    """The look sheet of the writer. The gender is a fact (Wikidata): when the sheet of the robot says the other gender, or
+    says nothing visible from behind, the sheet is built from clear gender cues (hair, shoulders, clothes), because a
+    writer seen from behind is otherwise drawn as a man."""
+    a = a or {}
+    gender = a.get("gender") if a.get("gender") in WRITER_CUES else ""
+    look = str(a.get("look_en") or "").strip()
+    if not gender:
+        return look or "a writer"
+    wrong = _MALE_WORDS.search(look) if gender == "woman" else _FEMALE_WORDS.search(look)
+    if not look or wrong:
+        return WRITER_CUES[gender]
+    return f"{look}; {WRITER_CUES[gender]}"
+
+
 def design_author(book, src):
     """ONE small Gemini call: who the writer is (gender, age, outfit of the writer's time) and 4 indoor writing places
     of the writer's time. The look is pasted into every writer picture, so it never changes."""
     prompt = f"""The novel "{book['title_en']}" was written by {book['author_en']}. Return JSON with exactly these keys:
 - "gender": "woman" or "man" (the real gender of this writer{(": it is a " + book["author_gender"]) if book.get("author_gender") else ""}).
 - "age": the age of the writer when the book was written (a number).
-- "look_en": 25 to 35 English words: gender, age, hair, build and the clothes (colors) of that writer in the time when the
-  book was written. No face details.
+- "look_en": 25 to 35 English words: gender, age, hair (length and style, visible from behind), build and the clothes (colors)
+  of that writer in the time when the book was written. The gender in the words is the one of "gender" above. No face details.
 - "scenes_en": 4 English texts of 25 to 40 words, each ONE different INDOOR place and activity that has to do with
   writing, fitting the writer's own time (a writing desk with pen and ink; a typewriter only if typewriters already existed;
   a library reading table with stacks of books; an armchair with a manuscript...). Each starts with "the writer sits" and
@@ -3628,7 +3792,7 @@ def writer_desk_plan(era, author=None, n=0):
     where the big book with the English names is laid later (make_title_cards)."""
     a = author or {}
     scenes = a.get("scenes_en") or list(WRITER_SCENES)
-    who = a.get("look_en") or "a writer"
+    who = writer_look(a)
     gender = a.get("gender") or "person"
     visual = (f"Vertical storybook scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from the side and slightly from behind, the face turned away from the viewer; exactly "
@@ -3644,7 +3808,7 @@ def writer_desk_plan(era, author=None, n=0):
 def author_library_plan(author=None):
     """The ONE picture about the writer: the first picture of the video. A library; on its wall a framed painting of a samurai."""
     a = author or {}
-    who = a.get("look_en") or "a writer"
+    who = writer_look(a)
     gender = a.get("gender") or "person"
     visual = (f"Vertical storybook scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and on the back wall in the "
@@ -3654,6 +3818,7 @@ def author_library_plan(author=None):
     return {"kind": "author", "visual_en": visual, "event_en": "the writer sits in a library", "cover": False,
             "characters_present": [], "others": [], "roles": {}, "emotion_en": "",
             "people_en": f"exactly one person: the writer, a {gender}, seen from the side and behind, nobody else",
+            "painting": True,
             "must_show": [f"one {gender} writer indoors", "a library with bookshelves", "a framed painting of a samurai on the wall"]}
 
 
@@ -3716,6 +3881,53 @@ def cover_ass(title, author, font, bold):
             "Style: Card,%s,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,%d,0,0,0,100,100,0,0,1,2,0,5,10,10,0,1\n\n"
             "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n") % (
         W, H, font, 1 if bold else 0) + "\n".join(ev) + "\n"
+
+
+PAINTING_TEXT = "Samurai Reader"
+PAINTING_SIZE = max(SUB_FONT_SIZE - 4, 1)            # four sizes smaller than the subtitle font (same font, red)
+DEFAULT_PAINTING_BOX = (130, 300, 380, 700)          # [ymin, xmin, ymax, xmax] of 1000: where the library prompt puts it
+
+
+def stamp_painting(jobs):
+    """The name of the channel is written in RED in the lower right corner of the samurai painting of the writer picture.
+    The painting is found by the picture judge (its box comes with the check that is made anyway: no extra call); when
+    there is no box, the place where the prompt asks for the painting is used. The text is burned into the picture
+    BEFORE the video is made, so it moves with the picture."""
+    font = setup_sub_font()
+    for k, j in enumerate(jobs):
+        sc = j.get("sc") or {}
+        if not (sc.get("painting") and sc.get("kind") == "author"):
+            continue
+        img = j["img"]
+        try:
+            dims = subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                            "stream=width,height", "-of", "csv=p=0:s=x", str(img)], text=True).strip()
+            w, h = (int(x) for x in dims.split("x"))
+            box = j.get("painting_box") or list(DEFAULT_PAINTING_BOX)
+            ymin, xmin, ymax, xmax = box
+            right = int(xmax / 1000 * w) - max(int(0.012 * w), 5)       # a little inside the corner of the frame
+            bottom = int(ymax / 1000 * h) - max(int(0.008 * h), 4)
+            size = PAINTING_SIZE * h / 288.0                              # the same scale as the subtitles (288 lines)
+            room = (xmax - xmin) / 1000 * w * 0.92
+            if size * 0.62 * len(PAINTING_TEXT) > room:                   # a very small painting: the text must still fit
+                size = max(room / (0.62 * len(PAINTING_TEXT)), 6)
+            ass = ("[Script Info]\nScriptType: v4.00+\n" f"PlayResX: {w}\nPlayResY: {h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
+                   "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+                   "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+                   "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+                   f"Style: PT,{font},{size:.1f},&H000000FF,&H000000FF,&H00FFFFFF,&H00000000,{1 if _sub_bold else 0},0,0,0,"
+                   "100,100,0,0,1,1,0,3,0,0,0,1\n\n"
+                   "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+                   f"Dialogue: 0,0:00:00.00,0:00:10.00,PT,,0,0,0,,{{\\an3\\pos({right},{bottom})}}{PAINTING_TEXT}\n")
+            (WORK / f"painting_{k}.ass").write_text(ass, encoding="utf-8")
+            tmp = f"painting_tmp_{k}.jpg"
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-vf",
+                f"subtitles=painting_{k}.ass:fontsdir=azim_fonts", "-frames:v", "1", "-q:v", "2", tmp], cwd=WORK)
+            shutil.move(str(WORK / tmp), str(img))
+            print(f"Painting text: '{PAINTING_TEXT}' written in red at {right},{bottom} of {w}x{h} "
+                  f"({'judge box' if j.get('painting_box') else 'default place'}).", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"Painting text skipped ({e}): the plain picture is used.", flush=True)
 
 
 def make_title_cards(jobs, book):
@@ -3784,10 +3996,12 @@ def check_and_fix_images(jobs):
         if not results:
             break
         low = []
-        for k, (score, missing) in sorted(results.items()):
+        for k, r in sorted(results.items()):
+            score, missing = r[0], r[1]
+            box = r[2] if len(r) > 2 else None
             data = jobs[k]["img"].read_bytes()
             if k not in best or score > best[k][0]:
-                best[k] = (score, data)
+                best[k] = (score, data, box)
             if score < MIN_SCORE:
                 print(f"Image check: picture {k + 1} score {score}/10 - {missing}", flush=True)
                 low.append((k, missing))
@@ -3809,10 +4023,11 @@ def check_and_fix_images(jobs):
         except ImageServiceUnavailable as e:
             print(f"Redraw stopped ({e}): the best pictures so far are kept.", flush=True)
             break
-    for k, (score, data) in best.items():                  # keep the best picture of all tries
+    for k, (score, data, box) in best.items():             # keep the best picture of all tries
         jobs[k]["img"].write_bytes(data)
+        jobs[k]["painting_box"] = box
     if best:
-        low_left = sum(1 for sc_, _ in best.values() if sc_ < MIN_SCORE)
+        low_left = sum(1 for sc_, _, _ in best.values() if sc_ < MIN_SCORE)
         print(f"Image check done: {len(best)} pictures, {low_left} still below {MIN_SCORE}/10.", flush=True)
 
 
@@ -3857,6 +4072,30 @@ def chunk_phrases(sent, maxw=None):
         else:
             final.append(c)
     return final or [sent]
+
+
+_NUM_UNITS = "یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه"
+_NUM_TEENS = "ده|یازده|دوازده|سیزده|چهارده|پانزده|شانزده|هفده|هجده|نوزده"
+_NUM_TENS = "بیست|سی|چهل|پنجاه|شصت|هفتاد|هشتاد|نود"
+_NUM_HUNDREDS = "صد|دویست|سیصد|چهارصد|پانصد|ششصد|هفتصد|هشتصد|نهصد"
+_NUM_BIG = "هزار|میلیون|میلیارد"
+_NUM_ALL = f"{_NUM_BIG}|{_NUM_HUNDREDS}|{_NUM_TENS}|{_NUM_TEENS}|{_NUM_UNITS}"
+_GLUED_NUM = re.compile(
+    rf"(?<![\u0600-\u06FF])({_NUM_TENS}|{_NUM_HUNDREDS}|{_NUM_BIG})\u200c?و\u200c?"
+    rf"({_NUM_UNITS}|{_NUM_TEENS}|{_NUM_TENS}|{_NUM_HUNDREDS})"
+    rf"(?:(?![\u0600-\u06FF])|(?=\u200c?و\u200c?(?:{_NUM_ALL})(?:[^\u0600-\u06FF]|$|\u200c?و)))")
+
+
+def fix_numbers(text):
+    """A number written as ONE glued word («هفتادوهفت», «بیست‌وپنج», «صدوبیست») is read wrongly by the voice («هفتید و هفت»):
+    every part of a number becomes its own word with a separate «و»."""
+    t = str(text or "")
+    for _ in range(6):
+        t2 = _GLUED_NUM.sub(r"\1 و \2", t)
+        if t2 == t:
+            break
+        t = t2
+    return t
 
 
 def split_sentences(text):
@@ -4089,16 +4328,34 @@ def build_video(scenes, durs, out_path, names=None):
         clips.append(clip.name)
 
         # subtitles: always the clean text (no diacritics), cut into sentences
-        sents = [c for x in split_sentences(subtitle_text(s["narration_fa"], names)) for c in chunk_phrases(x)]
-        weights = [max(len(x), 1) for x in sents]
-        total_w = sum(weights)
-        acc = 0
-        for x, w in zip(sents, weights):
-            start = t + d * acc / total_w
-            acc += w
-            end = t + d * acc / total_w + (PAD * 0.5 if acc == total_w else 0)
-            n += 1
-            srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
+        full_sents = split_sentences(subtitle_text(s["narration_fa"], names))
+        spans = None
+        if len(full_sents) >= 2:
+            try:
+                vmp3 = WORK / f"voice_{i:02d}.mp3"
+                real = probe_duration(vmp3)
+                cuts = split_by_silence(vmp3, [max(len(x), 1) for x in full_sents], [0.3] * len(full_sents),
+                                        min_gap=0.35, min_sil=0.12, window_min=1.5, win_frac=0.25)
+                k_ = d / real if real > 0 else 1.0
+                spans = [(a * k_, b * k_) for a, b in cuts]
+            except Exception as e:  # noqa: BLE001
+                note(f"  Subtitle timing of paragraph {i} by pauses failed ({str(e)[:80]}): characters are used.")
+        if not spans:
+            spans = [(0.0, d)]
+            full_sents = [" ".join(full_sents)]
+        for si_, (fs, (sa, sb)) in enumerate(zip(full_sents, spans)):
+            phr = chunk_phrases(fs)
+            weights = [max(len(x), 1) for x in phr]
+            total_w = sum(weights)
+            acc = 0
+            for x, w in zip(phr, weights):
+                start = t + sa + (sb - sa) * acc / total_w
+                acc += w
+                end = t + sa + (sb - sa) * acc / total_w
+                if acc == total_w and si_ == len(spans) - 1:
+                    end += PAD * 0.5
+                n += 1
+                srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
         t += length
 
     if _dropped_chars:
@@ -4357,7 +4614,7 @@ def main():
                 sc["era_en"] = "the writer's own time"
             elif sc.get("kind") == "author" and script.get("author"):        # same writer, same gender in every picture
                 a_ = script["author"]
-                sc["visual_en"] = f"{sc.get('visual_en', '')} The writer (seen from behind) is {a_.get('look_en', 'a writer')}."
+                sc["visual_en"] = f"{sc.get('visual_en', '')} The writer (seen from behind) is {writer_look(a_)}."
                 sc["people_en"] = f"exactly one person: the writer, a {a_.get('gender', 'person')}, seen from behind, nobody else"
             sc["look_sheets"] = [f"{c['name']}: {c['look_en']}" for c in script.get("characters", [])
                                  if isinstance(c, dict) and c.get("name") in (sc.get("characters_present") or [])]
@@ -4405,6 +4662,7 @@ def main():
     if IMAGE_CHECK:
         check_and_fix_images(jobs)
     make_title_cards(jobs, book)          # after the check: the cards use the best version of the story pictures
+    stamp_painting(jobs)                  # "Samurai Reader" in red on the painting of the writer picture
 
     final = WORK / "azim_final.mp4"
     total = build_video(scenes, durs, final, script.get("names") or {})
