@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 12       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 12       # a saved script of another version is not resumed
+VISUAL_VERSION = 13       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 13       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -518,6 +518,18 @@ TONE_RULES = """- TONE AND FLOW: a warm storyteller who tells the story to ONE l
   Punctuation guides the voice: commas for breath, «…» for suspense, «؟» for a real question (rare), «!» only for
   strong emotion."""
 
+MEANING_RULE = """- MEANING, NOT WORDS - THE LISTENER MUST NEVER HEAR SOMETHING ILLOGICAL. The source is English. Never translate word for
+  word. Before you write a sentence, ask: "Is this sentence logical in the real world of THIS story? Could it really
+  happen as I wrote it?" When the literal reading is impossible, absurd or silly (a spaceship that «commits suicide», a house
+  that «dies», a city that «sleeps», an ocean that «thinks», a thing that does something only a person can do), the author
+  meant something ELSE: a metaphor, a personification, irony, a euphemism, a technical term, a nickname, an idiom or a double
+  meaning (ایهام). Find the real meaning from the whole story and the SOURCE TEXT, and write what REALLY happened in plain,
+  natural Persian (for example a ship that «kills itself» = the ship destroys itself on purpose, so write that it destroyed
+  itself). When a word has two meanings at once, write the meaning that the story needs; add the second one in a short
+  clause only if the listener would miss the point without it. Never invent a meaning that the source and the story do not
+  support: when you are not sure, write the plain physical fact that the source states. Every sentence must make sense to a
+  Persian listener who never read the book."""
+
 NAMES_RULE = """- NAMES: write the names of people, places, the novel and its author in ENGLISH (Latin) letters, as in the
   SOURCE TEXT (for example Holden, The Catcher in the Rye). SHORT NAMES: a long name misleads the listener. A person with
   a name of several parts (first name, middle name, patronymic, family name, title) is called ONLY by the FIRST name
@@ -724,10 +736,13 @@ def char_tag(c):
 
 
 PLACES_SPEC = """- "locations": the 3 to 7 places where the story really happens, most important first, each {{"id": "short_snake_case",
-  "name_en": "...", "detail_en": "55 to 75 English words: the concrete look of this place in that era: kind of building
-  or landscape, materials, colors, furniture and objects, plants, typical light and weather, what is seen far away,
-  and the 3 or 4 objects or features of this place that the EVENTS of the story need (the bed of a death, the door of a
-  flight, the table of a quarrel, the bench of a trial...).
+  "name_en": "...", "detail_en": "90 to 120 English words: the concrete look of this place in that era, in this order:
+  kind of building or landscape and its size; walls, floor, ceiling or ground and their materials, colors and state (new,
+  worn, cracked, wet, dusty); windows, doors, stairs, lamps or other light sources; furniture, machines, tools and
+  other objects with their colors; plants, water, sky and weather; typical light and its color; what is seen far away; small
+  signs of life or age (stains, scratches, marks, mist, smoke, reflections); and the 3 or 4 objects or features of this
+  place that the EVENTS of the story need (the bed of a death, the door of a flight, the table of a quarrel, the bench of a
+  trial...).
   Geographically and historically correct for THIS story; take it from the SOURCE TEXT, and where the source is silent
   choose what surely fits the place and the era (never modern things in an old story)."}}"""
 
@@ -740,6 +755,42 @@ def clean_locations(raw):
                         "name_en": " ".join(str(x.get("name_en") or x["id"]).split()),
                         "detail_en": " ".join(str(x["detail_en"]).split())})
     return out[:7]
+
+
+NIGHTWEAR = re.compile(r"\b(pajamas?|pyjamas?|nightgowns?|nightdress(?:es)?|nightshirts?|nightwear|sleepwear|night clothes|"
+                       r"nightclothes|nightcaps?|bath ?robes?|dressing gowns?|negligees?)\b", re.I)
+DAY_CLOTHES_RULE = "real daytime clothes that show his or her job and the era"
+BED_WORDS = re.compile(r"\b(bed|beds|bedroom|sleep|sleeps|sleeping|asleep|slept|wake|wakes|woke|waking|dream|dreams|nightgown|"
+                       r"pajamas?|pyjamas?|nightwear|sleepwear|bathroom|bath|hospital|sickbed|deathbed|cot)\b", re.I)
+
+
+MODERN_ERA = re.compile(r"future|space|modern|science|robot|galaxy|planet|\b(19[3-9]\d|20\d\d)\b|twentieth|21st|20th", re.I)
+
+
+def fix_nightwear(chars, source_text="", era=""):
+    """Free check in code: a character whose look sheet says pajamas / nightgown / bathrobe gets real day clothes instead
+    (the reference portrait and every picture copy the look sheet, so one such word dresses the hero in pajamas for the
+    whole video). Not changed when the SOURCE itself says that the person lives in such clothes."""
+    if NIGHTWEAR.search(str(source_text or "")):
+        return chars
+    for c in chars:
+        if not isinstance(c, dict):
+            continue
+        text = " ".join(str(c.get(k) or "") for k in ("look_en", "tag_en", "top_en", "bottom_en"))
+        if not NIGHTWEAR.search(text):
+            continue
+        female = bool(re.search(r"\b(woman|girl|female|lady|mother|daughter|wife|she)\b", text.lower()))
+        modern = bool(MODERN_ERA.search(str(era or "")))
+        if NIGHTWEAR.search(str(c.get("top_en") or "")):
+            c["top_en"] = "work jacket over a shirt" if (modern or not female) else "blouse with a fitted jacket"
+        if NIGHTWEAR.search(str(c.get("bottom_en") or "")):
+            c["bottom_en"] = "trousers" if (modern or not female) else "long skirt"
+        for k in ("look_en", "tag_en"):
+            v = str(c.get(k) or "")
+            if NIGHTWEAR.search(v):
+                c[k] = " ".join(NIGHTWEAR.sub("daytime clothes", v).split())
+        print(f"Cast: {c.get('name')} was dressed in night clothes: changed to day clothes.", flush=True)
+    return chars
 
 
 def design_places(book, src, era):
@@ -777,14 +828,15 @@ Return JSON with exactly these keys:
 {PLACES_SPEC}
 - "era_en": the time and place of the story in one short English phrase (for example "provincial Russia, 1860s").
 - "costume_en": 20 to 35 English words: what ordinary people of THAT time, place and social classes really wore
-  (garments, fabrics, hats, shoes). Historically correct: nothing modern in an old story.
+  (garments, fabrics, hats, shoes): daytime and working clothes, never nightwear; for a future, space or invented world: what
+  its people wear at work. Historically correct: nothing modern in an old story.
 - "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "...",
   "age": 30, "face_type": 3, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "..."}}.
   "name" is the name in English letters: ONLY the FIRST name (or the shortest known name; no middle name, patronymic,
   family name or title), written the same way in every text. "look_en" is ONE look sheet of 55 to 75 English words in
   this fixed order: gender and exact age in years; body build; skin tone; eyes (color and shape);
   eyebrows; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
-  freckles, glasses...); the usual outfit with colors. It is pasted into EVERY picture of this
+  freckles, glasses...); the DAY OUTFIT with colors (see the OUTFIT rule below). It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
@@ -816,6 +868,14 @@ Rules:
 - CLOTHES FIT THE JOB: the outfit shows the real job and class of the person (a merchant in a merchant's coat or
   waistcoat, a farmer in work clothes, a priest in a cassock, a nurse in a nurse's dress); uniforms and armor ONLY for
   soldiers, officers or guards. Say the job at the start of "look_en".
+- OUTFIT = DAY CLOTHES (very important): "look_en", "top_en" and "bottom_en" describe what the person wears while ACTING in the
+  main part of the story: real day clothes or work clothes of that era, place and job (in a story set in the future, in space
+  or in an invented world: what the people there wear for their work, for example a crew uniform, a work jumpsuit, a lab
+  coat, a protective suit, a long coat). NEVER nightwear: no pajamas, nightgown, nightshirt, bathrobe or dressing gown, and no
+  plain loose pale cotton set that looks like pajamas, unless the source clearly says that this very person stays in bed or in
+  night clothes for the whole story. A person who is in bed in one scene still has day clothes as the usual outfit. Give every
+  outfit a clear cut (collar, belt, buttons, pockets, boots or shoes), a texture and a strong color, so that it can never be
+  mistaken for sleepwear.
 - Never contradict the source (gender, age, hair, body, job, family relations).
 """ + diversity_text() + "\n"
     try:
@@ -835,7 +895,8 @@ Rules:
                               **{k: (c.get(k) if k == "age" else " ".join(str(c.get(k) or "").split()))
                                  for k in ("age", "hair_color", "hair_style", "top_en", "top_color", "bottom_en",
                                            "bottom_color")}})
-        chars = add_signatures(enforce_distinct_cast(enforce_distinct_faces(chars[:6], picks)))
+        chars = fix_nightwear(chars[:6], src["text"], era)
+        chars = add_signatures(enforce_distinct_cast(enforce_distinct_faces(chars, picks)))
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -952,7 +1013,10 @@ Return JSON with exactly these keys:
 - "events": {lo} to {hi} objects, in the order of the story, each {{"id": 1, "who_en": "...", "what_en": "...",
   "where_en": "...", "because_en": "..."}}:
     "who_en": the people who act (with a few words of role for anyone who is not a hero);
-    "what_en": ONE English sentence: what happens (a concrete event, not a description);
+    "what_en": ONE English sentence: what REALLY happens, in plain literal facts that a viewer could picture (a concrete
+      event, not a description). When the source says it with a metaphor, a personification, a euphemism or a technical
+      word (a ship that «kills itself», a city that «dies»), write the real event behind it (the ship destroys itself on
+      purpose), judged from the whole story;
     "where_en": the place (and the time if it changes);
     "because_en": what in the PREVIOUS event caused this one ("" for event 1).
   Every event object also has: "role_en" (exactly one of: "setup", "inciting incident", "turning point", "complication",
@@ -970,6 +1034,10 @@ Return JSON with exactly these keys:
   * Event 1 is the situation at the start. The last event is the ending (how the story ends for the hero).
   * REMOVAL TEST: an event is listed only if removing it would break the chain of cause and effect, or would hide a turning
     point, the climax or the change of the hero. Episodes, side characters, trips, descriptions and details are NOT events.
+  * CHANGE TEST: an event is listed only if it CHANGES the situation of the hero (what he or she has, knows, wants, fears or
+    is) or of the conflict. A scene that only shows a mood, a habit, a place, a side person or a repeated episode changes
+    nothing: do not list it. Prefer fewer, bigger events (each one a real step of the story) over many small ones, and when
+    there are too many, keep the ones that matter most for understanding WHY the ending happens.
   * Every event follows from the one before it (a real cause, not just \"then\"). Together they tell the whole story from
     the beginning to the end, with nothing important missing.
   * Only facts of the PLOT in the source text.
@@ -1001,6 +1069,21 @@ def tagged_to_scenes(raw, n_ev, strict=True):
     sentences of a scene into the narration and DROPS every sentence whose tag is not allowed for its part, so that a
     sentence that serves no event never reaches the video. Returns (scenes, problems)."""
     problems, scenes, covered, last_ev, dropped = [], [], set(), 0, 0
+
+    def need_of(x):
+        try:
+            return max(1, min(3, int(str(x.get("need") if x.get("need") is not None else 2).strip()[:1] or 2)))
+        except (TypeError, ValueError):
+            return 2
+
+    support, dropped_need = {}, 0         # event number -> how many sentences with NEED 2 or 3 tell it
+    for s in raw or []:
+        if isinstance(s, dict) and str(s.get("part") or "").strip().lower() == "story":
+            for x in s.get("sentences") or []:
+                if isinstance(x, dict):
+                    t = str(x.get("ev") if x.get("ev") is not None else "").strip()
+                    if t.isdigit() and need_of(x) >= 2:
+                        support[int(t)] = support.get(int(t), 0) + 1
     for s in raw or []:
         if not isinstance(s, dict):
             continue
@@ -1024,6 +1107,9 @@ def tagged_to_scenes(raw, n_ev, strict=True):
                 ok = tag == "wrap" or num is not None
             else:
                 ok = num is not None
+                if ok and need_of(x) == 1 and support.get(num, 0) >= 1:
+                    dropped_need += 1             # decoration: its event is already told by other sentences
+                    continue
                 if ok and num < last_ev:
                     if not strict:                # last attempt: a sentence that jumps back is deleted, not kept
                         dropped += 1
@@ -1056,6 +1142,8 @@ def tagged_to_scenes(raw, n_ev, strict=True):
         problems.append("the first wrap-up scene does not contain «جمع‌بندی»")
     if dropped:
         print(f"Script check: {dropped} sentence(s) without a valid event tag were removed.", flush=True)
+    if dropped_need:
+        print(f"Script check: {dropped_need} decorative sentence(s) (need 1) were removed.", flush=True)
     if not strict:                    # last attempt: only a broken structure is refused, the rest is repaired by the gate
         problems = [p for p in problems if "order of the parts" in p]
     return scenes, problems
@@ -1120,7 +1208,7 @@ Return JSON with exactly these keys:
        «در جمع‌بندی». (a) In 2 or 3 flowing sentences tell the WHOLE arc of the story from the beginning to the end (only
        events of the spine); (b) then ONE sentence with the MESSAGE of the book (only from CENTRAL IDEA, said as the author's message to
        the reader; skip only if CENTRAL IDEA is none); (c) the very last sentence is short and memorable. No new events, no empty praise.
-  Every scene is {{"part": "...", "sentences": [{{"fa": "ONE Persian sentence", "ev": TAG}}, ...], "source_en": "the English
+  Every scene is {{"part": "...", "sentences": [{{"fa": "ONE Persian sentence", "ev": TAG, "need": NEED}}, ...], "source_en": "the English
   sentence of the SOURCE TEXT this scene is based on (copy it, at most 45 words)", "characters_present": [names from
   "characters" that this scene is about or that are visible], "setting_en": "where the picture takes place (place, time,
   light)", "action_en": "exactly what is happening in the picture: who does what", "mood_en": "..."}}.
@@ -1130,12 +1218,19 @@ Return JSON with exactly these keys:
       of a story scene carries an event number. A sentence that tells no event of the spine is NOT part of this video: the
       program deletes it. The numbers never go backwards and every event number is used;
     * "wrap" scenes: the word "wrap".
+  The NEED of EVERY sentence is a number: 3 = the viewer cannot follow the story without it (an event, its cause, the
+  introduction of a hero, a turning point, the ending); 2 = it makes an event or its cause clear (a short link, a place, a
+  word of explanation); 1 = it only adds color, mood, description or a detail. Write a sentence with NEED 1 only if you
+  cannot do without it; the program deletes the sentences with NEED 1 of the story part.
 
 Rules for the narration:
 - Total narration: {words} Persian words. Stay close to the source and the spine; never pad.
 - ONLY WHAT MATTERS: tell the important events of the spine completely and clearly (who, what, why, what follows) and leave
   out everything else, even if the source mentions it: minor characters, side episodes, small details, names that no later
   event needs. A listener must never be confused by a person or a place that does not matter to the story.
+  SENTENCE TEST: before you keep a sentence ask "if I delete it, does the viewer lose a hero, a cause, a turning point, the
+  climax or the ending?" If not, do not write it. A sentence that only decorates, repeats, describes a mood or names a side
+  person is deleted. Better a short, complete, clear summary than a long one.
 - ORDER: tell the events exactly in the order of the spine, ONE straight line from the first event to the last. NEVER jump
   ahead to the ending or to a later event and then come back (no teaser, no hint of the end before the wrap-up); never
   mention a later event before its turn; say «قبل از آن» or «سال‌ها پیش» only when the spine marks a flashback.
@@ -1153,10 +1248,7 @@ Rules for the narration:
   person, time or problem) through a connector that shows cause or time («برای همین»، «چند روز بعد»، «در نتیجه»، «اما»،
   «تا این‌که»); never start a scene from nowhere and never jump to a new subject without a bridge. Whenever a person appears
   again after a gap, remind the viewer who he or she is in a few words.
-- MEANING, NOT WORDS: the source is English. Translate what the author MEANT, never word by word. When an idiom, a figure of
-  speech, irony, a nickname, a title or an expression would mean something else (or nothing) in Persian when translated
-  literally, write the real meaning in natural Persian (an idiom for «died» becomes «مُرد»). Ask for every sentence: does a
-  Persian listener understand exactly what the English reader understood? The listener must never be misled.
+{MEANING_RULE}
 {TONE_RULES}
 {NAMES_RULE}
 - The voice engine can fail on very long noun chains: at most TWO consecutive ezafe links in a noun phrase (never
@@ -1254,6 +1346,9 @@ Return JSON with exactly these keys, in this order:
   who is used without being introduced (who is this?), a pronoun that could mean two people, an unexplained term, title or
   custom, a new place or time that was not announced, a sentence that does not follow from the one before it, a result
   without its cause. Empty list if none.
+- "illogical": the sentences that make no sense or sound silly when taken literally in the world of this story (a thing that
+  does what only a person can do, such as a ship that «commits suicide»; a metaphor, a personification or an idiom translated
+  word for word), each {{"id": "3.1", "meaning_en": "what the author most likely meant, in plain words"}}. Empty list if none.
 - "irrelevant": ids of sentences that tell nothing the story needs (the removal test: without them the chain of cause and
   effect stays complete): praise, trivia, background, the author's life, a detail that no later event needs, a repeated
   point. Empty list if none.
@@ -1273,6 +1368,11 @@ Return JSON with exactly these keys, in this order:
                 protect.add(r["id"])
         confusing = [{"id": str(g.get("id")), "problem": str(g.get("problem") or "")} for g in (t.get("confusing") or [])
                      if isinstance(g, dict) and str(g.get("id")) in valid][:8]
+        for g in (t.get("illogical") or []):
+            if isinstance(g, dict) and str(g.get("id")) in valid and str(g.get("id")) not in [c["id"] for c in confusing]:
+                confusing.append({"id": str(g.get("id")),
+                                  "problem": "illogical when read literally; the author probably meant: "
+                                             + str(g.get("meaning_en") or "")[:160] + ". Say what REALLY happened"})
         irrelevant = []
         for g in (t.get("irrelevant") or []):
             gid = str(g.get("id") if isinstance(g, dict) else g)
@@ -1316,6 +1416,7 @@ Return JSON {{"ops": [{{"op": "replace", "id": "3.1", "fa": "..."}}]}} where "op
   facts of the SOURCE TEXT, joined to the sentence before it by a connector and leading into the sentence after it.
 Rules: at most 10 operations; change as little as possible; every other sentence stays untouched. Every new "fa" is ONE
 Persian sentence of 8 to 24 words that continues the story smoothly.
+{MEANING_RULE}
 {TONE_RULES}
 {NAMES_RULE}"""
         out = gemini_json(fix, minutes=8, models=WRITE_MODELS)
@@ -1391,9 +1492,10 @@ A) "narration_fa" (also shown as the subtitle)
 1. FACTS: keep only what the SOURCE TEXT supports. Remove or fix every fact, name, date, number, quote or interpretation
    that is not in the source, every wrong fact, and every sentence that is filler without information. If nothing
    supported remains, return "" for both texts of that paragraph.
-   MEANING: a sentence that is a word-for-word translation and so says something different from what the author meant (an
-   idiom, a figure of speech, irony, a nickname, an expression) is rewritten with the REAL meaning in natural Persian (this is
-   the one case where you may change the wording of a sentence).
+   MEANING: a sentence that is illogical when read literally, or a word-for-word translation that says something different
+   from what the author meant, is rewritten with the REAL meaning in natural Persian (this is the one case where you may
+   change the wording of a sentence). Follow this rule:
+{MEANING_RULE}
    Do not remove a sentence that tells a main event, a turning point, the introduction of a hero, the author sentence, the
    ending or the wrap-up. A sentence about a minor detail or a side person that no main event needs may be removed (never
    leave a hole in the chain of cause and effect).
@@ -1641,7 +1743,7 @@ def diversify_visuals(vis, items, book):
 below. Each one must still show exactly what its narration says, but with a DIFFERENT shot (choose from
 {json.dumps(SHOTS)}), a different part of the place or a different background detail, different light or time of day
 where the story allows, and different foreground objects than "previous_picture" and "next_picture".
-Keep the same characters, the SAME PLACE (its concrete details stay, only the viewpoint and the part of the place change) and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 75 to 100 English words, start with the shot type, no person that is not already in the picture. Medium-wide pictures with large people: nobody cropped by the border, no extreme close-ups.
+Keep the same characters, the SAME PLACE (its concrete details stay, only the viewpoint and the part of the place change) and the SAME EVENT (what happens in the narration must stay the main thing), no names, no text, 90 to 110 English words, start with the shot type, no person that is not already in the picture. Medium-wide pictures with large people: nobody cropped by the border, no extreme close-ups.
 Return JSON {{"visuals": [{{"i": 0, "shot": "...", "visual_en": "..."}}]}}
 Pictures: {json.dumps(jobs, ensure_ascii=False)}"""
     try:
@@ -1785,9 +1887,16 @@ Check EVERY plan:
 5. TWO FACES AT MOST: at most 2 people have a large clear face; every other person is a small figure far away or seen
    from behind, and "visual_en" says it.
 6. Nothing modern in an old story; no names, no text, no logos in "visual_en".
-7. PLACE DETAILS: "visual_en" names at least 6 concrete details of the place (objects, furniture, architecture, weather,
-   light) that belong to THIS event and its mood, taken from the sentence, the source and the place; a vague or
-   generic place is rewritten with them.
+7. PLACE DETAILS: "visual_en" names at least 8 concrete details of the place (objects, furniture, machines, architecture,
+   materials, weather, season, light, atmosphere) that belong to THIS event and its mood, taken from the sentence, the source
+   and the place; a vague or generic place is rewritten with them.
+11. MOMENT MATCH: "visual_en" shows the one most important moment of the narration with the visible RESULT of the action, and
+   every concrete thing that the narration names (people and their number, objects, place, weather, time of day); a calm or
+   symbolic picture of a part in which something happens is rewritten.
+12. FIGURATIVE SENTENCES: when the narration uses a figure of speech (a metaphor, a personification, an idiom, a euphemism), the
+   picture shows the REAL event behind it, never the literal impossible image.
+13. CLOTHES FIT THE SITUATION: nobody wears pajamas, a nightgown or a bathrobe unless the narration says that he or she goes to
+   bed, sleeps, has just woken up or lies ill in bed; everybody wears the day or work clothes of the era and job.
 9. CLOTHES FIT THE JOB: the clothes of every person in "visual_en" and "others" match his or her job and class (a uniform
    only on a soldier or guard); fix a mismatch.
 10. KILLING AND GHOSTS: a death by a knife shows the knife and a small red stain at the wound (not gory), never a person who
@@ -1795,7 +1904,7 @@ Check EVERY plan:
 8. BODIES: every person has one head, two arms, two hands; nothing is planned that could show a missing head or an extra hand.
 For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
 "problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
-(English, 75 to 100 words, starts with the shot type, written again completely whenever the people or the event change),
+(English, 90 to 110 words, starts with the shot type, written again completely whenever the people or the event change),
 "people_en", "must_show", "characters_present" (names exactly as in the characters), "others" (one short English
 description per unnamed person), "roles".
 Return JSON {{"checks": [...]}} with one item per plan, in the same order.
@@ -1935,13 +2044,30 @@ Rules:
   what that person does, WHO does it to WHOM, exactly as the sentence says (for example "the mother, sitting at the bed
   and nursing her sick daughter" and "the sick daughter, lying in the bed"). Never swap who gives and who receives
   (caregiver and patient, parent and child, killer and victim, speaker and listener).
-- "visual_en": English, 75 to 100 words. It STARTS with the shot type, then the event of "event_en" with the people doing it,
-  then the PLACE in three layers: (1) the foreground: 3 concrete objects of THIS moment; (2) the middle ground: the
-  architecture or landscape around the people with its materials, colors and 4 to 6 characteristic details copied from the
-  place description of the chosen location (furniture, windows, doors, trees, walls, floor, tools...); (3) the background:
-  what is far away, the sky, the weather. Then the time of day and the direction and color of the light. NO unnamed people in
+- "visual_en": English, 90 to 110 words. It STARTS with the shot type, then the event of "event_en" with the people doing it,
+  then the PLACE in three layers: (1) the foreground: 4 concrete objects of THIS moment, each with its color and state; (2) the
+  middle ground: the architecture or landscape around the people with its materials, colors and 6 to 8 characteristic details
+  copied from the place description of the chosen location (furniture, machines, windows, doors, trees, walls, floor, tools...);
+  (3) the background: what is far away, the sky, the weather. Then the time of day, the season, the direction and color of the
+  light and the atmosphere (dust, mist, rain, smoke, steam, reflections, sparks, shadows). Write it DENSE and telegraphic
+  (nouns with their colors and states, no filler words such as "there is"): the picture text has a strict length limit, so
+  the most important things come FIRST (the event, then what the people do, then the foreground, middle ground and
+  background) and the light and atmosphere come last in a few words. NO unnamed people in
   the background unless the part itself names them (a crowd, soldiers, villagers...); then they are counted in
   \"people_en\". Otherwise \"visual_en\" ends with: no other person anywhere in the picture. Everything belongs to the era of the story; nothing modern in an old story.
+- MOMENT MATCH (very important): the picture shows the ONE most important moment of the part: the event told by its main verb,
+  at the instant when it is easiest to see (the door opening, the hand pushing, the ship exploding), and the RESULT of the action
+  is visible (an open door, a fallen cup, smoke, a broken window). Every concrete thing that the Persian part names (people and
+  their number, objects, animals, vehicles, place, weather, time of day, season, direction of the movement) is visible. A
+  thought, a plan or a feeling is shown by the faces, the pose and a concrete object of the story, never by a symbol or a calm
+  unrelated scene. When a part tells two events, draw the later and more important one, with the trace of the first one.
+- FIGURATIVE SENTENCES: when the part says something with a figure of speech (a metaphor, a personification, an idiom, a
+  euphemism: for example a ship that «kills itself»), draw the REAL event behind it, judged from "text_en", the SOURCE TEXT and
+  the story, never the literal impossible image.
+- CLOTHES FIT THE SITUATION: everybody is dressed for THIS moment: day clothes or work clothes of the era and the job; a coat,
+  hat, scarf or gloves where the weather is cold; nightwear ONLY when the part says that a person goes to bed, is asleep, has
+  just woken up or lies ill in bed. Never pajamas, a nightgown or a bathrobe for a person who walks, talks, works, travels or
+  fights.
 - PLACE FITS THE EVENT (very important): the place is never a neutral backdrop; its details tell the same story as the
   event and its mood. Take them from the sentence, from the SOURCE TEXT and from the place description: the objects,
   furniture, tools, architecture, weather, season, time of day and light that THIS exact event needs (a deathbed: a bed
@@ -2787,10 +2913,9 @@ def _wc(t):
 KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
-ANATOMY = ("Every person has exactly one head, exactly two arms, exactly two hands with five fingers each and exactly two "
-           "legs with two feet; each hand clearly belongs to its own person; arms and legs of different people never overlap; "
-           "no third hand, no third leg")
-NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no figures far away, no faces in windows or doorways"
+ANATOMY = ("Every person has exactly one head, two arms, two hands with five fingers each and two legs; each hand belongs "
+           "clearly to its own person; limbs of different people never overlap; no third hand, no third leg")
+NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no faces in windows or doorways"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
@@ -2841,7 +2966,10 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     else:
         count = ""
     if total >= 2:
-        count += "Every person has a different face, different hair and clothes of different colors. "
+        count += "Every person has a different face, hair and clothes color. "
+    if (present or others) and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
+                                                    + " ".join(map(str, scene.get("must_show") or []))):
+        count += "Everybody wears proper day clothes. "
     has_people = bool(present or others) or bool(people_en and not people_en.lower().startswith("no people"))
     if has_people:
         count += ANATOMY + ". "
@@ -2880,8 +3008,8 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
                              f"face): {_trim_words(o, 22)}")
             else:
                 parts.append(_trim_words(o, 22))
-        lead = ("Copy each person's face, hair and clothes from the reference image with his or her number, not its pose; "
-                "a stranger never copies a reference face. " if (ref_idx and present) else "")
+        lead = ("Copy each face, hair and clothes from the reference image with the same number, not its pose; "
+                "a stranger copies no reference. " if (ref_idx and present) else "")
         return lead + ("Clearly different people: " if len(parts) > 1 else "The person: ") + "; ".join(parts) + ". "
 
     emo = " ".join(str(scene.get("emotion_en") or "").split())
@@ -2900,9 +3028,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
                     f"the border, rich detailed foreground, middle ground and background, no writing on any object; "
                     f"the lower fifth only floor or ground; {tail}")
         return (f"{head}{art_s}. {count}{main_t} {people(full)}{era_part}"
-                f"Vertical 9:16 medium-wide shot: people large (about half of the picture height) with clear, carefully "
-                f"drawn faces (eyes, nose, mouth), whole heads and bodies inside the picture, busy with the action, never "
-                f"looking at the camera; detailed environment; the lower fifth only floor or ground; {tail}")
+                f"Vertical 9:16 medium-wide shot: people large (half of the picture height) with clear, carefully drawn "
+                f"faces, whole heads and bodies inside the picture, busy with the action, not looking at the camera; "
+                f"detailed environment; the lower fifth only floor or ground; {tail}")
 
     for full, era, tail, n_role in ((True, era_full, CLEAN, 10), (True, era_short, CLEAN, 8),
                                     (True, era_short, CLEAN_SHORT, 6), (False, era_short, CLEAN_SHORT, 0)):
@@ -3155,7 +3283,8 @@ def keep_saved(src_file, name):
 
 
 def _ref_prompt(c, era_short, extra=""):
-    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 95)}. From the head down to the "
+    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+            f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
             f"background, nothing else. {extra}Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. "
@@ -3184,7 +3313,9 @@ IMAGE {len(names)}. Items: {json.dumps(blocks, ensure_ascii=False)}
 For EACH image answer: "ok": true only if (a) the face is drawn cleanly and naturally (two eyes, one nose, one mouth,
 natural proportions, nothing melted, doubled or cut off), (b) gender, age, hair, build and clothes fit the look sheet,
 (c) the whole head is inside the picture, (d) this person looks clearly DIFFERENT from every other image (face shape, hair,
-age, clothes), (e) no text or letters. Otherwise "ok": false and "fix_en": what the new portrait must clearly show, in
+age, clothes), (e) no text or letters, (f) the person wears real day or work clothes of the story's world, NOT pajamas,
+nightwear or a bathrobe (when the clothes look like sleepwear, set "ok" to false and say in "fix_en" which day clothes to
+draw). Otherwise "ok": false and "fix_en": what the new portrait must clearly show, in
 positive words, at most 25 words.
 Also list in "similar_pairs" EVERY pair of images whose faces, hair or clothes look alike, even a little: [n, m].
 Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}], "similar_pairs": [[1, 3]]}} with one check per image."""
@@ -3332,6 +3463,10 @@ For EACH picture return:
     colors). A photo-like, 3D, anime, comic, flat vector or sketch style: at most 3;
   * CLOTHES FIT THE JOB: every person wears what his or her job, class and the era say (a merchant in a merchant's coat,
     a servant in plain work clothes, a soldier in uniform ONLY if he is a soldier); a wrong costume: at most 4;
+  * CLOTHES FIT THE SITUATION: a person who wears pajamas, a nightgown or a bathrobe while the narration is NOT about
+    going to bed, sleeping, waking up or lying ill in bed: at most 4;
+  * PLACE DETAIL: a bare, empty or generic place that lacks the objects, materials and light that "intended_picture" names
+    (so the viewer cannot tell where and in what situation this is): at most 5;
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * LOOK AT EVERY BODY: one head, two arms, two hands (five fingers each), two legs. A person with a third arm or hand,
     extra fingers or legs, a missing head or a headless body, a head on the wrong place, merged or floating bodies, melted
