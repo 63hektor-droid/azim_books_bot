@@ -363,5 +363,15 @@
   "date_pt": "2026-11-07",
   "wiki": "Flatland",
   "date": "2026-11-07"
+ },
+ {
+  "title_en": "The Lost World",
+  "title_fa": "جهان گمشده",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-08",
+  "wiki": "The Lost World (Crichton novel)",
+  "date": "2026-11-08"
  }
 ]
