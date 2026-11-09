@@ -373,5 +373,15 @@
   "date_pt": "2026-11-08",
   "wiki": "The Lost World (Crichton novel)",
   "date": "2026-11-08"
+ },
+ {
+  "title_en": "The Dead Zone",
+  "title_fa": "منطقه مرده",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-09",
+  "wiki": "The Dead Zone (novel)",
+  "date": "2026-11-09"
  }
 ]
