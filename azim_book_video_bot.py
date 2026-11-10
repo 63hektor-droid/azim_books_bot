@@ -63,7 +63,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 18       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 19       # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 18       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -406,7 +406,8 @@ def fix_author_fa(book):
     if book.get("author_fa"):
         return book
     try:
-        hits = wiki_search("en", book["author_en"])
+        last = norm(book["author_en"].split()[-1])
+        hits = [h_ for h_ in wiki_search("en", book["author_en"]) if last and last in norm(h_)]   # the same person, not a book
         if hits:
             t = wiki_title_fa(hits[0])
             if t:
@@ -536,11 +537,11 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    # ONE fixed style for ALL videos (the user's choice, Nov 1, 2026): a hand-drawn storybook / animated-film look -
-    # soft ink outlines, warm painterly colors, atmospheric detailed backgrounds, cozy warm light, expressive faces.
-    "storybook": ("hand-drawn storybook illustration in the style of a gentle animated film, fine dark ink outlines, "
-                  "soft painterly colors, warm cozy lamplight and atmospheric weather, richly detailed backgrounds, "
-                  "natural proportions, expressive realistic faces, whole picture in this one style",
+    # ONE fixed style for ALL videos (the user's choice, changed Nov 10, 2026 to the look of the sample frame): a modern
+    # stylized 2D animated film - clean shapes, smooth shading, big expressive eyes, saturated colors, glowing warm light.
+    "storybook": ("modern stylized 2D animated-film illustration, clean simplified shapes, soft smooth shading, thin soft "
+                  "outlines, large expressive eyes, slightly exaggerated cartoon proportions, rich saturated colors, strong "
+                  "glowing warm light with rim lighting, detailed painterly backgrounds, whole picture in this one style",
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -3564,8 +3565,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, hand-painted storybook illustration, not a photo, not 3D, not anime"
-CLEAN_SHORT = "sharp focus, crisp clean details, hand-painted storybook illustration, not a photo, not 3D"
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, stylized 2D animated-film illustration, not a photo, not 3D, not anime"
+CLEAN_SHORT = "sharp focus, crisp clean details, stylized 2D animated-film illustration, not a photo, not 3D"
 
 
 def _wc(t):
@@ -3780,7 +3781,7 @@ def _cf_errors(r):
     return codes, msg
 
 
-SAFE_PREFIX = ("Gentle peaceful children's storybook illustration, calm friendly mood, warm soft light, "
+SAFE_PREFIX = ("Gentle peaceful stylized 2D animated-film illustration, calm friendly mood, warm soft light, "
                "everyone fully clothed. ")
 
 
@@ -4009,11 +4010,11 @@ def keep_saved(src_file, name):
 
 def _ref_prompt(c, era_short, extra=""):
     if c.get("nonhuman"):
-        return (f"Hand-drawn storybook character reference picture of {c.get('species_en') or 'a character'}: "
+        return (f"Stylized 2D animated-film character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
                 f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
-    return (f"Hand-drawn storybook character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+    return (f"Stylized 2D animated-film character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
@@ -4194,8 +4195,9 @@ For EACH picture return:
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
-  * STYLE: every picture must be the same hand-painted storybook illustration (fine dark ink outlines, soft painterly
-    colors). A photo-like, 3D, anime, comic, flat vector or sketch style: at most 3;
+  * STYLE: every picture must be the same modern stylized 2D animated-film illustration (clean simplified shapes, soft smooth
+    shading, large expressive eyes, saturated colors, glowing warm light). A photo-like, 3D, anime, realistic painting, flat
+    vector or sketch style: at most 3;
   * CLOTHES FIT THE JOB: every person wears what his or her job, class and the era say (a merchant in a merchant's coat,
     a servant in plain work clothes, a soldier in uniform ONLY if he is a soldier); a wrong costume: at most 4;
   * CLOTHES FIT THE SITUATION: a person who wears pajamas, a nightgown or a bathrobe while the narration is NOT about
@@ -4408,7 +4410,7 @@ def writer_desk_plan(era, author=None, n=0):
     scenes = a.get("scenes_en") or list(WRITER_SCENES)
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical storybook scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
+    visual = (f"Vertical animated-film scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from behind (back view), the head and the body facing the SAME direction, never a head turned around; exactly "
               f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
               f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
@@ -4424,7 +4426,7 @@ def author_library_plan(author=None):
     a = author or {}
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical storybook scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
+    visual = (f"Vertical animated-film scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and on the back wall in the "
               f"middle a large framed painting of a samurai warrior in armor, clearly visible, with a calm plain light area in its "
               f"lower right corner. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
@@ -5289,16 +5291,16 @@ def main():
                     return build_prompt(FIXED_STYLE, script.get("characters", []), sc2, "", ref_names=[],
                                         limit=max((limit or PROMPT_WORDS) - 10, 60))
                 if level == 2 and gentle:    # the same event, wide: the creature stays large, the people are small
-                    return (f"Wide storybook illustration, the creature large and the people small: {_trim_words(gentle, 45)}. "
+                    return (f"Wide animated-film illustration, the creature large and the people small: {_trim_words(gentle, 45)}. "
                             f"Setting: {_trim_words(str(sc.get('era_en') or ''), 25)}. Style: "
                             f"{', '.join(FIXED_STYLE.split(', ')[:4])}. Vertical 9:16 composition, {CLEAN_SHORT}")
                 art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
                 cr = [soften_violence(x) for x in (sc.get("creatures_en") or []) if str(x).strip()][:2]
                 if cr:           # the creature and the place of the story, no people: a safe picture that still shows the subject
-                    return (f"Hand-drawn storybook illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
+                    return (f"Stylized 2D animated-film illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
                             f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                             f"the creature large in the middle, atmospheric detailed environment, {CLEAN_SHORT}")
-                return (f"Hand-drawn storybook illustration of a calm, quiet place in a peaceful moment. "
+                return (f"Stylized 2D animated-film illustration of a calm, quiet place in a peaceful moment. "
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
