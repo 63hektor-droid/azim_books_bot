@@ -1,0 +1,26 @@
+# One click (Actions tab -> "azim validate booklist" -> Run workflow). Free: only the Wikipedia API, no Gemini, no Cloudflare.
+# Put this file in .github/workflows/ ; azim_validate_booklist.py and azim_books_list.json stay next to the bot in the repo root.
+name: azim validate booklist
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - run: python azim_validate_booklist.py
+      - name: save the results (also when the run was stopped: the next run continues from the cache)
+        if: always()
+        run: |
+          git config user.name "azim-bot"
+          git config user.email "azim-bot@users.noreply.github.com"
+          git add azim_books_list_verified.json azim_books_list_dropped.json azim_books_list_report.txt azim_booklist_cache.json || true
+          git commit -m "azim: verified book list" || echo "nothing to commit"
+          git push || true
