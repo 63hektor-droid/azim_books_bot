@@ -393,5 +393,15 @@
   "date_pt": "2026-11-09",
   "wiki": "Hamlet",
   "date": "2026-11-10"
+ },
+ {
+  "title_en": "Romeo and Juliet",
+  "title_fa": "رومئو و ژولیت",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-10",
+  "wiki": "Romeo and Juliet",
+  "date": "2026-11-10"
  }
 ]
