@@ -23,5 +23,20 @@
   "title_en": "Shatter Me",
   "reason": "Gemini blocked the prompt: gemini-3.6-flash: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
   "date": "2026-11-05"
+ },
+ {
+  "title_en": "The Count of Monte Cristo",
+  "reason": "no usable Plot section on Wikipedia",
+  "date": "2026-11-10"
+ },
+ {
+  "title_en": "The Three Musketeers",
+  "reason": "no usable Plot section on Wikipedia",
+  "date": "2026-11-10"
+ },
+ {
+  "title_en": "Anna Karenina",
+  "reason": "no usable Plot section on Wikipedia",
+  "date": "2026-11-10"
  }
 ]
