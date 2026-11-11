@@ -423,5 +423,15 @@
   "date_pt": "2026-11-11",
   "wiki": "Oliver Twist",
   "date": "2026-11-11"
+ },
+ {
+  "title_en": "David Copperfield",
+  "title_fa": "دیوید کاپرفیلد",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-11",
+  "wiki": "David Copperfield",
+  "date": "2026-11-11"
  }
 ]
