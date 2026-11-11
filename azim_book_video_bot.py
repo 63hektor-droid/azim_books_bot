@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 19       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 18       # a saved script of another version is not resumed
+VISUAL_VERSION = 20       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 19       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -540,8 +540,9 @@ STYLES = {
     # ONE fixed style for ALL videos (the user's choice, changed Nov 10, 2026 to the look of the sample frame): a modern
     # stylized 2D animated film - clean shapes, smooth shading, big expressive eyes, saturated colors, glowing warm light.
     "storybook": ("modern stylized 2D animated-film illustration, clean simplified shapes, soft smooth shading, thin soft "
-                  "outlines, large expressive eyes, slightly exaggerated cartoon proportions, rich saturated colors, strong "
-                  "glowing warm light with rim lighting, detailed painterly backgrounds, whole picture in this one style",
+                  "outlines, large expressive eyes, attractive graceful proportions with a natural head size, the same in every "
+                  "picture, rich saturated colors, strong glowing warm light with rim lighting, beautiful detailed painterly "
+                  "backgrounds, whole picture in this one style",
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -759,9 +760,81 @@ def enforce_vivid_tops(chars):
     return chars
 
 
+_FACIAL = ("clean-shaven", "a neat mustache", "a full beard", "a short stubble beard", "a goatee", "long sideburns")
+_FH_WORDS = re.compile(r"(?:\b(?:thick|bushy|neat|full|long|short|gray|grey|white|black|dark|brown|red|blond|trimmed|small|"
+                       r"well-groomed)\s+){0,2}(?:mustache|moustache|beard|goatee|stubble|sideburns|whiskers)\b|\bclean[- ]shaven\b",
+                       re.I)
+_FEMALE_TXT = re.compile(r"\b(woman|girl|female|lady|mother|daughter|wife|she|queen|princess|maid|nun)\b", re.I)
+
+
+def _norm_facial(v):
+    v = str(v or "").lower()
+    if not v.strip():
+        return ""
+    if re.search(r"clean|shaved|none|no facial|smooth", v):
+        return "clean-shaven"
+    if "goatee" in v:
+        return "a goatee"
+    if "stubble" in v:
+        return "a short stubble beard"
+    if "beard" in v:
+        return "a full beard"
+    if re.search(r"mustache|moustache", v):
+        return "a neat mustache"
+    if re.search(r"sideburn|whisker", v):
+        return "long sideburns"
+    return ""
+
+
+def set_facial_hair(chars):
+    """Free check in code: EVERY man of 16 or older has one stated kind of facial hair (clean-shaven is a state too), different
+    from the other men (clean-shaven at most twice), written into his look sheet and his key line, so he is the same in every
+    picture and nobody gets a mustache out of nothing. The state of the source wins."""
+    used, clean = set(), 0
+    off = _VARIETY.get("offset", 0)
+    men = []
+    for c in chars:
+        text = " ".join(str(c.get(k) or "") for k in ("look_en", "tag_en"))
+        try:
+            age = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
+        except (IndexError, ValueError):
+            age = 30
+        if c.get("nonhuman") or _FEMALE_TXT.search(text) or age < 16:
+            c["facial_en"] = ""
+            continue
+        men.append((c, text))
+    for k, (c, text) in enumerate(men):
+        fh = _norm_facial(c.get("facial_hair"))
+        if not fh:
+            m_ = _FH_WORDS.search(text)
+            fh = _norm_facial(m_.group(0)) if m_ else ""
+        if not fh or (c.get("facial_hair_in_source") is not True and (fh in used and fh != "clean-shaven" or (fh == "clean-shaven" and clean >= 2))):
+            for step in range(len(_FACIAL)):
+                cand = _FACIAL[(k + off + step) % len(_FACIAL)]
+                if (cand not in used and cand != "clean-shaven") or (cand == "clean-shaven" and clean < 2 and not fh):
+                    fh = cand
+                    break
+            else:
+                fh = fh or "clean-shaven"
+        used.add(fh)
+        clean += fh == "clean-shaven"
+        c["facial_en"] = fh
+        for key in ("look_en", "tag_en"):
+            t = _FH_WORDS.sub("", str(c.get(key) or ""))
+            for _ in range(4):                                                   # «with a , brown hair» -> «, brown hair»
+                t = re.sub(r"\b(?:with|and|a|an|the)\s*(?=[,;.]|$)", "", t)
+            t = re.sub(r"[,;]\s*(?=[,;.])", "", t)
+            t = re.sub(r"\s+([,;.])", r"\1", t)
+            t = re.sub(r"^[,;\s]+", "", t)
+            c[key] = " ".join(t.split())
+        c["look_en"] = c["look_en"].rstrip(". ") + f". Facial hair: {fh}."
+    return chars
+
+
 def enforce_distinct_cast(chars):
     """No two characters share a hair color, a shirt color or a trousers/skirt color (two old people may both have gray
     hair). Fills "key_en": the short who-wears-what line that is pasted into every picture of the person."""
+    set_facial_hair(chars)
     humans = [c for c in chars if not c.get("nonhuman")]
     enforce_distinct_garments(humans)
     enforce_vivid_tops(humans)
@@ -793,13 +866,14 @@ def enforce_distinct_cast(chars):
         hair = " ".join(x for x in (c.get("hair_color"), c.get("hair_style")) if x)
         top = " ".join(x for x in (c.get("top_color"), c.get("top_en")) if x)
         bottom = " ".join(x for x in (c.get("bottom_color"), c.get("bottom_en")) if x)
-        c["key_en"] = (f"{hair} hair, " if hair else "") + (f"wearing a {top}" if top else "") + \
+        c["key_en"] = (f"{hair} hair, " if hair else "") + (f"{c['facial_en']}, " if c.get("facial_en") else "") \
+                      + (f"wearing a {top}" if top else "") + \
                       (f" and {bottom}" if (top and bottom) else (f"wearing {bottom}" if bottom else ""))
         c["key_en"] = c["key_en"].strip(" ,")
     return chars
 
 
-_ACCESSORIES_M = ("a flat cap", "round glasses", "a thick mustache", "a long scarf", "a brimmed hat", "a bushy beard")
+_ACCESSORIES_M = ("a flat cap", "round glasses", "a bow tie", "a long scarf", "a brimmed hat", "a walking cane")
 _ACCESSORIES_F = ("a headscarf", "a shawl over the shoulders", "a hair ribbon", "a white apron", "a bonnet",
                   "a necklace with a pendant")
 
@@ -999,7 +1073,7 @@ Return JSON with exactly these keys:
 - "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "...",
   "age": 30, "face_type": 3, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "...",
   "eye_color": "...", "hair_in_source": false, "eyes_in_source": false, "outfit_color_in_source": false,
-  "species_en": "human", "species_note_en": ""}}.
+  "species_en": "human", "species_note_en": "", "facial_hair": "clean-shaven", "facial_hair_in_source": false}}.
   CREATURES: an important non-human being that appears in several events of the story (a dinosaur species, a monster, a
   dragon, a wolf pack, a ship, a machine) is cast as a character too (use the free places of the cast), with "species_en" and
   a look sheet, so that it looks the same in every picture and is drawn whenever the story speaks of it.
@@ -1053,6 +1127,13 @@ Rules:
 - CLOTHES FIT THE JOB: the outfit shows the real job and class of the person (a merchant in a merchant's coat or
   waistcoat, a farmer in work clothes, a priest in a cassock, a nurse in a nurse's dress); uniforms and armor ONLY for
   soldiers, officers or guards. Say the job at the start of "look_en".
+- ATTRACTIVE CAST: every main character is good-looking in the way of an animated feature film: a harmonious, appealing face
+  with expressive eyes, well-groomed hair, and a fit or graceful figure that suits the age; write the build in "look_en"
+  (slim, athletic, graceful, broad-shouldered...). Keep what the source says (old, ill, ugly, fat, scarred) only when the story
+  needs it.
+- FACIAL HAIR: every man of 16 or older has "facial_hair": exactly one of "clean-shaven", "a neat mustache", "a full beard",
+  "a short stubble beard", "a goatee" or "long sideburns"; "facial_hair_in_source" is true only when the SOURCE states it. Women
+  and children: "".
 - OUTFIT = DAY CLOTHES (very important): "look_en", "top_en" and "bottom_en" describe what the person wears while ACTING in the
   main part of the story: real day clothes or work clothes of that era, place and job (in a story set in the future, in space
   or in an invented world: what the people there wear for their work, for example a crew uniform, a work jumpsuit, a lab
@@ -1085,6 +1166,8 @@ Rules:
                               "outfit_color_in_source": c.get("outfit_color_in_source") is True,
                               "species_en": " ".join(str(c.get("species_en") or "human").split()),
                               "species_note_en": " ".join(str(c.get("species_note_en") or "").split()),
+                              "facial_hair": " ".join(str(c.get("facial_hair") or "").split()),
+                              "facial_hair_in_source": c.get("facial_hair_in_source") is True,
                               "nonhuman": not _HUMAN_SPECIES.match(" ".join(str(c.get("species_en") or "human").split()) or "human")})
         chars = vary_free_traits(chars[:6], d.get("natural_hair_colors"), d.get("natural_eye_colors"))
         chars = fix_nightwear(chars, src["text"], era)
@@ -2126,7 +2209,7 @@ _THING_LEXICON = [
     (r"\bعقاب|\bشاهین", "a big eagle with wide wings, clearly visible", ("eagle", "hawk")),
     (r"\bاسب", "a strong horse, clearly visible", ("horse",)),
     (r"\bمار\b|ماری\b", "a long snake, clearly visible", ("snake",)),
-    (r"کشتی بزرگ|ناو\b|کشتی‌?ی", "a large ship on the water, clearly visible", ("ship",)),
+    (r"کشتی بزرگ|ناو\b", "a large ship on the water, clearly visible", ("ship",)),
 ]
 
 
@@ -2135,8 +2218,9 @@ _EVENT_LEXICON = [
     (r"تعقیب|دنبال کرد|شکار", ("chase", "chasing", "hunt", "pursu"), "a creature chases the fleeing people through the place"),
     (r"فرار|گریخت", ("flee", "fleeing", "run", "escap"), "the people run away in fear"),
     (r"قفس|گیر افتاد|گرفتار|به دام", ("trap", "cage", "bars", "caught"), "a person is trapped behind strong bars and cannot get out"),
-    (r"کشته|جان باخت|مرگ\b|مُرد|مرد\b", ("still figure", "lies still", "covered", "grief"),
-     "a still figure lies on the ground covered by a cloth while the others kneel in grief"),
+    (r"کشته|جان\s*باخت|درگذشت|فوت\s*کرد|به\s*قتل\s*رسید|خودکشی", ("still figure", "lies still", "covered", "grief"),
+     "a figure lies on the ground completely covered from head to feet by a plain white cloth, no hands and no face visible, "
+     "while the others kneel in grief"),
     (r"سقوط|پرت شد", ("fall", "fell"), "a person falls through the air"),
     (r"انفجار", ("explo", "blast"), "a big explosion with smoke and fire"),
     (r"طوفان|باران شدید", ("storm", "heavy rain"), "a heavy storm with rain and wind"),
@@ -2398,7 +2482,7 @@ Check EVERY plan:
    control room, the laboratory), never a generic room; fix a plan whose place does not fit the sentence.
 15. HANDS: at most two hands are clearly visible in the whole picture; people are posed with hidden hands (pockets, sleeves,
    behind the back, under a table or cloak) instead of crossed arms, hand holding, handshakes or hugs; fix a pose that shows
-   many hands.
+   many hands; nobody has a missing arm or hand (a hidden hand is in a pocket or on an object).
 14. AGE FIT: nobody who looks like a child is a bride, a groom, a lover or in a wedding scene; people who marry, are engaged
    or have children are drawn as grown people (at least 18), a child looks like a child, a parent looks older than his or
    her child; fix a mismatch.
@@ -2682,10 +2766,16 @@ Rules:
   creature ITSELF drawn big and clearly visible (roaring, charging, rearing, looming over the place, its whole head and body
   seen), people running, hiding, climbing or behind bars, and fear on the faces. The creature is NEVER reduced to a shadow, a
   far away dot or something outside the picture.
+- SAME SCALE: all people of one picture are drawn at ONE consistent scale: adults about equally tall at the same distance, a
+  child clearly smaller, nobody a giant or a dwarf next to the others; the heads of everybody have the same natural size
+  relative to the bodies.
+- BEAUTIFUL PLACES: every place is attractive and atmospheric: harmonious colors, depth (foreground, middle ground,
+  background), glowing light and interesting details; never a bare or dull backdrop.
 - HANDS (the picture model often draws a third hand): in every picture at most TWO hands are clearly visible in total; the
-  other people keep their hands out of sight (in pockets or sleeves, behind the back, under a table, a cloak or a shawl,
-  holding a big object against the chest) or turned away. Never crossed arms, hand holding, handshakes, hugs with visible
-  hands, pointing fingers, or several hands on one object.
+  other people keep their hands simple and calm (resting at the sides, in pockets, or holding a big object against the chest).
+  EVERY person always has BOTH arms drawn (sleeves down to the wrists, or the hands in pockets or on an object): a hidden hand
+  is hidden by a pocket or an object, NEVER by leaving the arm or hand out. Never crossed arms, hand holding, handshakes, hugs
+  with visible hands, pointing fingers, or several hands on one object.
 - CLOTHES FIT THE SITUATION: everybody is dressed for THIS moment: day clothes or work clothes of the era and the job; a coat,
   hat, scarf or gloves where the weather is cold; nightwear ONLY when the part says that a person goes to bed, is asleep, has
   just woken up or lies ill in bed. Never pajamas, a nightgown or a bathrobe for a person who walks, talks, works, travels or
@@ -3129,7 +3219,7 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
 _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
-                ("ثروت", "سَروَت"),
+                ("ثروت", "سَروَت"), ("کشنده", "کُشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
@@ -3731,8 +3821,8 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
                     f"inside the picture, clear shapes and expressive eyes, busy with the action, not looking at the camera; "
                     f"detailed environment; the lower fifth only floor or ground; {tail}")
         return (f"{head}{art_s}. {subject}{count}{main_t} {people(full)}{era_part}"
-                f"Vertical 9:16 medium-wide shot: people large (half of the picture height) with clear, carefully drawn "
-                f"faces, whole heads and bodies inside the picture, busy with the action, not looking at the camera; "
+                f"Vertical 9:16 medium-wide shot: all people at the same scale (adults equally tall, about half of the picture "
+                f"height) with attractive, clear, carefully drawn faces, whole heads and bodies inside the picture, busy with the action, not looking at the camera; "
                 f"detailed environment; the lower fifth only floor or ground; {tail}")
 
     for full, era, tail, n_role in ((True, era_full, CLEAN, 10), (True, era_short, CLEAN, 8),
@@ -4196,8 +4286,12 @@ For EACH picture return:
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
   * STYLE: every picture must be the same modern stylized 2D animated-film illustration (clean simplified shapes, soft smooth
-    shading, large expressive eyes, saturated colors, glowing warm light). A photo-like, 3D, anime, realistic painting, flat
-    vector or sketch style: at most 3;
+    shading, large expressive eyes, graceful proportions, saturated colors, glowing warm light). A photo-like, 3D, anime,
+    realistic painting, flat vector or sketch style, or characters whose heads are suddenly much bigger (a chibi look) than in
+    the other pictures: at most 3;
+  * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
+    nature): at most 4;
+  * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
   * CLOTHES FIT THE JOB: every person wears what his or her job, class and the era say (a merchant in a merchant's coat,
     a servant in plain work clothes, a soldier in uniform ONLY if he is a soldier); a wrong costume: at most 4;
   * CLOTHES FIT THE SITUATION: a person who wears pajamas, a nightgown or a bathrobe while the narration is NOT about
@@ -4242,6 +4336,10 @@ For EACH picture return:
 - "painting_box": ONLY when kind is "author": the bounding box of the framed painting of the samurai on the wall, as
   [ymin, xmin, ymax, xmax] with every number from 0 to 1000 (0,0 = top left corner of the picture); null when there is no
   such painting (and for every other kind).
+- "painting_free": ONLY when "painting_box" is not null: {{"bottom": true, "top": true}}. "bottom" is true ONLY when the whole
+  lowest quarter of the painting's canvas, across its full width, is completely visible with NOTHING in front of it (no person,
+  head, hair, hand, plant, lamp, shelf, furniture, frame of another thing or shadow); "top" is the same for the highest quarter.
+  False when anything covers even a small part of that band or the band is outside the picture.
 - "people_count": the NUMBER of people you can see in the picture. Count EVERY person: also small ones, far away, in a
   window or doorway, in a painting or a statue, half hidden or cut by the border. Count first, then compare with
   "expected_people" (null = a crowd, do not compare).
@@ -4298,6 +4396,10 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "hands_p
                     box = None
             except (TypeError, ValueError):
                 box = None
+            if box:
+                fr = c.get("painting_free")
+                fr = {k_: (fr.get(k_) is True) for k_ in ("bottom", "top")} if isinstance(fr, dict) else {}
+                box = {"box": box, "free": fr}
             res.append((score, fix, box))
         return res
     except (GeminiBlocked, GeminiQuotaExhausted):
@@ -4429,7 +4531,8 @@ def author_library_plan(author=None):
     visual = (f"Vertical animated-film scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and on the back wall in the "
               f"middle a large framed painting of a samurai warrior in armor, clearly visible, with a calm plain light area in its "
-              f"lower right corner. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
+              f"lower right corner; the whole painting stays unobstructed: the writer's head and shoulders are BELOW its lower edge "
+              f"and no plant, lamp or shelf stands in front of it. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
               f"view), looking down at the open book; the head and the body face the SAME direction, the neck is natural and "
               f"the head is never turned around; the face is not visible; exactly one person, one head, two arms, two "
               f"hands; no text anywhere.")
@@ -4521,11 +4624,19 @@ def stamp_painting(jobs):
             dims = subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                             "stream=width,height", "-of", "csv=p=0:s=x", str(img)], text=True).strip()
             w, h = (int(x) for x in dims.split("x"))
-            box = j.get("painting_box") or list(DEFAULT_PAINTING_BOX)
+            info = j.get("painting_box")
+            box = info.get("box") if isinstance(info, dict) else None
+            free = info.get("free") if isinstance(info, dict) else {}
+            band = "bottom" if free.get("bottom") else ("top" if free.get("top") else "")
+            if not box or not band:
+                print("Painting text skipped: the painting or a free band of it was not found (a signature is never put "
+                      "over something that stands in front of the painting).", flush=True)
+                continue
             ymin, xmin, ymax, xmax = box
             bw, bh = (xmax - xmin), (ymax - ymin)                         # the frame; the canvas is a little smaller
             right = int((xmax - 0.10 * bw) / 1000 * w)                    # inside the canvas, like a painter's signature
-            bottom = int((ymax - 0.09 * bh) / 1000 * h)
+            bottom = int((ymax - 0.09 * bh) / 1000 * h) if band == "bottom" else int((ymin + 0.09 * bh) / 1000 * h)
+            an = 3 if band == "bottom" else 9
             size = PAINTING_SIZE * h / 288.0                              # the same scale as the subtitles (288 lines)
             room = (xmax - xmin) / 1000 * w * 0.78
             if size * 0.62 * len(PAINTING_TEXT) > room:                   # a very small painting: the text must still fit
@@ -4537,14 +4648,14 @@ def stamp_painting(jobs):
                    f"Style: PT,{font},{size:.1f},&H000000FF,&H000000FF,&H00000000,&H00000000,0,1,0,0,"
                    "100,100,0,0,1,0,0,3,0,0,0,1\n\n"
                    "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-                   f"Dialogue: 0,0:00:00.00,0:00:10.00,PT,,0,0,0,,{{\\an3\\pos({right},{bottom})\\frz3\\alpha&H38&\\blur0.6}}{PAINTING_TEXT}\n")
+                   f"Dialogue: 0,0:00:00.00,0:00:10.00,PT,,0,0,0,,{{\\an{an}\\pos({right},{bottom})\\frz3\\alpha&H38&\\blur0.6}}{PAINTING_TEXT}\n")
             (WORK / f"painting_{k}.ass").write_text(ass, encoding="utf-8")
             tmp = f"painting_tmp_{k}.jpg"
             sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-vf",
                 f"subtitles=painting_{k}.ass:fontsdir=azim_fonts", "-frames:v", "1", "-q:v", "2", tmp], cwd=WORK)
             shutil.move(str(WORK / tmp), str(img))
             print(f"Painting text: '{PAINTING_TEXT}' written in red at {right},{bottom} of {w}x{h} "
-                  f"({'judge box' if j.get('painting_box') else 'default place'}).", flush=True)
+                  f"({band} band, free of anything in front).", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"Painting text skipped ({e}): the plain picture is used.", flush=True)
 
