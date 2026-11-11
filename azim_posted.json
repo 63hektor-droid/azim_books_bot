@@ -413,5 +413,15 @@
   "date_pt": "2026-11-10",
   "wiki": "The Brothers Karamazov",
   "date": "2026-11-11"
+ },
+ {
+  "title_en": "Oliver Twist",
+  "title_fa": "الیور توئیست",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-11",
+  "wiki": "Oliver Twist",
+  "date": "2026-11-11"
  }
 ]
