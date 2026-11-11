@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 20       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 19       # a saved script of another version is not resumed
+VISUAL_VERSION = 21       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 20       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -474,6 +474,60 @@ def pick_plot(text):
     return lead, "\n\n".join(chosen)
 
 
+# The plot / characters sections of the OTHER Wikipedias (free, same licence, no Gemini call). Another editor's summary of the
+# same novel confirms the events, fills what the English one skips and shows the real meaning of a term.
+EXTRA_LANGS = (("fa", "Persian"), ("fr", "French"), ("de", "German"), ("ru", "Russian"), ("es", "Spanish"))
+PLOT_HEAD_LANG = {
+    "fa": re.compile(r"^(خلاصه|داستان|طرح|پیرنگ|مضمون|پیرنگ)", re.I),
+    "fr": re.compile(r"^(résumé|resume|intrigue|synopsis|histoire|argument|trame|contenu)", re.I),
+    "de": re.compile(r"^(handlung|inhalt|inhaltsangabe|zusammenfassung|kurzinhalt)", re.I),
+    "ru": re.compile(r"^(сюжет|содержание|краткое содержание)", re.I),
+    "es": re.compile(r"^(argumento|sinopsis|resumen|trama)", re.I),
+}
+CHAR_HEAD = re.compile(r"^(characters?|main characters?|principal characters?|major characters?|cast of characters|cast)\b", re.I)
+EXTRA_WORDS_MAX = int(os.environ.get("AZIM_EXTRA_WORDS") or 800)      # words taken from one other-language summary
+EXTRA_SOURCES = int(os.environ.get("AZIM_EXTRA_SOURCES") or 2)       # at most this many other-language summaries
+
+
+def pick_characters(text):
+    """The 'Characters' section of the English article: who is who (ages, roles, relations). Never a source of events."""
+    lead, secs = split_wiki(text)
+    chosen = [b for t, b in secs if len(b) >= 120 and CHAR_HEAD.match(t)]
+    return "\n\n".join(chosen)
+
+
+def fetch_extra_plots(title_en, en_words):
+    """[(language name, plot text)] from other-language Wikipedias (interlanguage links of the English article). Any failure
+    only means fewer extra sources: the English Plot alone is always enough."""
+    out = []
+    try:
+        d = wiki_api("en", {"action": "query", "prop": "langlinks", "lllimit": "max", "redirects": 1, "titles": title_en})
+        links = {x["lang"]: x["title"] for x in (d["query"]["pages"][0].get("langlinks") or [])}
+    except Exception as e:  # noqa: BLE001
+        print(f"Other-language Wikipedia links not found ({e}).", flush=True)
+        return out
+    for lang, name in EXTRA_LANGS:
+        if len(out) >= EXTRA_SOURCES:
+            break
+        t = links.get(lang)
+        if not t:
+            continue
+        try:
+            found = wiki_fulltext(lang, t)
+            if not found:
+                continue
+            lead, secs = split_wiki(found[1])
+            plot = "\n\n".join(b for tt, b in secs if len(b) >= 80 and PLOT_HEAD_LANG[lang].match(tt.strip()))
+            words = plot.split()
+            if len(words) < max(150, int(en_words * 0.5)):          # a thin section adds nothing
+                continue
+            out.append((name, " ".join(words[:EXTRA_WORDS_MAX])))
+            print(f"Extra source: {name} Wikipedia plot, {len(words)} words (using {min(len(words), EXTRA_WORDS_MAX)}).", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"Extra source {lang} skipped ({e}).", flush=True)
+    return out
+
+
 def fetch_wiki(book):
     """The English Wikipedia article of the novel: lead, Plot section and a short 'significance' text."""
     last = (book["author_en"].replace("\u200c", "").lower().split() or [""])[-1]
@@ -496,7 +550,7 @@ def fetch_wiki(book):
         return None
     lead, plot = pick_plot(text)
     return {"title": title, "lead": lead, "plot": plot, "plot_words": len(plot.split()),
-            "sig": pick_significance(text)}
+            "sig": pick_significance(text), "chars": pick_characters(text)}
 
 
 def fetch_source(book):
@@ -514,11 +568,18 @@ def fetch_source(book):
     parts = ["INTRODUCTION (what the novel is, who wrote it, when):\n" + en["lead"][:900],
              f"PLOT (an editor-reviewed concise summary of the whole story, {pw} words; the ONLY source of "
              "the events):\n" + en["plot"]]
+    for name_, txt_ in fetch_extra_plots(en["title"], pw):
+        parts.append(f"SECOND SOURCE - PLOT from the {name_} Wikipedia (another editor's summary of the SAME novel: use it to "
+                     "confirm events, to fill what the English PLOT skips and to understand a term; when they disagree the "
+                     "English PLOT wins; write every name as in the English text):\n" + txt_)
+    if en.get("chars"):
+        parts.append("CHARACTERS (only to know who is who: ages, roles and relations; NEVER a source of events):\n"
+                     + " ".join(en["chars"].split()[:450]))
     if en["sig"]:
         parts.append("SIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the "
                      "novel matters):\n" + en["sig"][:1500])
     url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(en["title"].replace(" ", "_"))
-    print(f"Source: Wikipedia Plot section, {pw} words.", flush=True)
+    print(f"Source: Wikipedia Plot section, {pw} words (+ {len(parts) - 2 - bool(en['sig'])} extra part(s)).", flush=True)
     return {"text": "\n\n".join(parts), "en_words": pw, "url": url, "title": en["title"],
             "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"}
 
@@ -537,12 +598,12 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    # ONE fixed style for ALL videos (the user's choice, changed Nov 10, 2026 to the look of the sample frame): a modern
-    # stylized 2D animated film - clean shapes, smooth shading, big expressive eyes, saturated colors, glowing warm light.
-    "storybook": ("modern stylized 2D animated-film illustration, clean simplified shapes, soft smooth shading, thin soft "
-                  "outlines, large expressive eyes, attractive graceful proportions with a natural head size, the same in every "
-                  "picture, rich saturated colors, strong glowing warm light with rim lighting, beautiful detailed painterly "
-                  "backgrounds, whole picture in this one style",
+    # ONE fixed style for ALL videos (the user's choice, changed Nov 11, 2026 to the sample picture): a polished 3D animated
+    # feature-film look - smooth soft skin, large expressive eyes, elegant attractive faces, rich costumes, cinematic light.
+    # NOTE: only the first 4 comma-separated pieces are used in most picture prompts, so they carry everything important.
+    "storybook": ("polished 3D animated feature-film look, smooth skin and large expressive eyes, elegant attractive faces "
+                  "with graceful adult proportions, soft cinematic warm light with cool rim light, richly detailed textured "
+                  "costumes, beautiful detailed atmospheric backgrounds, whole picture in this one style",
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -560,7 +621,14 @@ TONE_RULES = """- TONE AND FLOW: a warm storyteller who tells the story to ONE l
   Clean standard spoken Iranian Persian (no slang contractions such as «میگم» or «اون»); never stiff written-style forms
   such as «نمود»، «گردید»، «می‌باشد»، «لذا»، «مذکور»; no advertising tone.
   Punctuation guides the voice: commas for breath, «…» for suspense, «؟» for a real question (rare), «!» only for
-  strong emotion."""
+  strong emotion.
+  MAKE THE LISTENER CURIOUS AND MOVED (a retelling that is only correct is boring): the video opens with a HOOK from the START
+  situation of the story (the strange, gripping problem the hero faces), never a dry announcement; the WANT and the FEAR of
+  each hero (what he or she risks) are said in plain words the first time he or she matters; every turning point, loss,
+  betrayal, discovery and the ending gets weight: a short sentence of its own and ONE concrete detail from the source (an
+  object, a place, a spoken line, a gesture) that makes the moment memorable; a scene ends on the question or the tension that
+  the next event answers; irony and the price of a choice are said when the source shows them. Everything comes from the
+  source: nothing is invented and no spoiler comes before its turn."""
 
 MEANING_RULE = """- MEANING, NOT WORDS - THE LISTENER MUST NEVER HEAR SOMETHING ILLOGICAL. The source is English. Never translate word for
   word. Before you write a sentence, ask: "Is this sentence logical in the real world of THIS story? Could it really
@@ -761,6 +829,8 @@ def enforce_vivid_tops(chars):
 
 
 _FACIAL = ("clean-shaven", "a neat mustache", "a full beard", "a short stubble beard", "a goatee", "long sideburns")
+# the words that are pasted into the pictures: a clean-shaven man must never get a mustache out of nothing
+FACIAL_TEXT = {"clean-shaven": "clean-shaven with a bare smooth upper lip and chin"}
 _FH_WORDS = re.compile(r"(?:\b(?:thick|bushy|neat|full|long|short|gray|grey|white|black|dark|brown|red|blond|trimmed|small|"
                        r"well-groomed)\s+){0,2}(?:mustache|moustache|beard|goatee|stubble|sideburns|whiskers)\b|\bclean[- ]shaven\b",
                        re.I)
@@ -827,7 +897,7 @@ def set_facial_hair(chars):
             t = re.sub(r"\s+([,;.])", r"\1", t)
             t = re.sub(r"^[,;\s]+", "", t)
             c[key] = " ".join(t.split())
-        c["look_en"] = c["look_en"].rstrip(". ") + f". Facial hair: {fh}."
+        c["look_en"] = c["look_en"].rstrip(". ") + f". Facial hair: {FACIAL_TEXT.get(fh, fh)}."
     return chars
 
 
@@ -866,7 +936,7 @@ def enforce_distinct_cast(chars):
         hair = " ".join(x for x in (c.get("hair_color"), c.get("hair_style")) if x)
         top = " ".join(x for x in (c.get("top_color"), c.get("top_en")) if x)
         bottom = " ".join(x for x in (c.get("bottom_color"), c.get("bottom_en")) if x)
-        c["key_en"] = (f"{hair} hair, " if hair else "") + (f"{c['facial_en']}, " if c.get("facial_en") else "") \
+        c["key_en"] = (f"{hair} hair, " if hair else "") + (f"{FACIAL_TEXT.get(c['facial_en'], c['facial_en'])}, " if c.get("facial_en") else "") \
                       + (f"wearing a {top}" if top else "") + \
                       (f" and {bottom}" if (top and bottom) else (f"wearing {bottom}" if bottom else ""))
         c["key_en"] = c["key_en"].strip(" ,")
@@ -1334,7 +1404,10 @@ def build_spine(book, src, cast):
     prompt = f"""You are a story editor. Prepare the SUMMARY SPINE of the novel "{book['title_en']}" by {book['author_en']}:
 the few things that a viewer who NEVER read the book must be told, in order, to understand the WHOLE story.
 
-SOURCE TEXT (the only truth; use nothing else):
+SOURCE TEXT (the only truth; use nothing else). It may hold several summaries of the same novel (English PLOT first, then
+summaries from other-language Wikipedias, then CHARACTERS): tell every event ONCE; when they disagree the English PLOT wins;
+use the other summaries to confirm an event, to fill a gap that the English one skips and to understand the real meaning of
+a term. Names always as in the English text.
 {src['text']}
 {names_txt}
 Return JSON with exactly these keys:
@@ -1580,8 +1653,8 @@ Return JSON with exactly these keys:
   above, copy them unchanged. Empty list if there are no characters.
 - "scenes": a list of scene objects in EXACTLY this order of "part" ({min_sc} to {max_sc + 2} scenes in all):
     1. ONE scene with part "open": the introduction, 2 or 3 sentences (35 to 60 words): the name of the novel and of its author
-       in English letters, when it was published (only if the AUTHOR SENTENCE SOURCE says so), and in one sentence who the
-       hero is and what the story is about (from the logline). NO SPOILER AND NO JUMP: this scene tells only the situation at
+       in English letters, when it was published (only if the AUTHOR SENTENCE SOURCE says so), and in one GRIPPING sentence (a hook: the
+       hero, what he or she wants and the problem that threatens it, from the logline). NO SPOILER AND NO JUMP: this scene tells only the situation at
        the START of the story (event 1); it never mentions how the story goes on or ends. Nothing else about the author (no
        biography), no praise.
     2. ONE scene with part "heroes" (only if the spine has 2 or more heroes): 2 to 4 sentences (35 to 65 words) that say who is
@@ -2191,39 +2264,50 @@ def cast_visual(chars, name):
             "characters_present": [name]}
 
 
+_PERS = "\u0600-\u06FF"
+
+
+def _pw(stems, suffix=True):
+    """A Persian WORD (not a piece of a longer word: «مشغول» is not «غول», «قفسه» is not «قفس»)."""
+    return rf"(?<![{_PERS}])(?:{stems})" + (r"(?:ها|های|ی|ای|ان|هایی)?" if suffix else "") + rf"(?![{_PERS}])"
+
+
 _THING_LEXICON = [
-    (r"دایناسور|تی\W?رکس|تیرانوزور|ولوسیراپتور|راپتور|براکیوسور|تری\W?سراتوپس|استگوسور",
+    (_pw(r"دایناسور|تی\W?رکس|تیرانوزور|ولوسیراپتور|راپتور|براکیوسور|تری\W?سراتوپس|استگوسور"),
      "a huge dinosaur, much taller than the people, scaly green-brown skin, a big head with a wide mouth and strong legs, its whole body visible", ("dinosaur", "raptor", "rex")),
-    (r"اژدها|اژدر", "a huge dragon with wings, scales and a long neck, its whole body visible", ("dragon",)),
-    (r"\bگرگ", "a large gray wolf, alert and powerful, its whole body visible", ("wolf",)),
-    (r"\bببر\b|پلنگ", "a big striped tiger, powerful and alert, its whole body visible", ("tiger", "leopard")),
-    (r"\bخرس", "a huge brown bear on its hind legs, its whole body visible", ("bear",)),
-    (r"کوسه", "a big gray shark in the water, its whole body visible", ("shark",)),
-    (r"نهنگ", "a gigantic whale, its whole body visible", ("whale",)),
-    (r"هیولا|غول\b", "a gigantic monster, much taller than the people, its whole body visible", ("monster", "giant")),
-    (r"قفس", "a strong metal cage with thick bars, big and clearly visible", ("cage",)),
-    (r"حصار|نرده|فنس", "a tall fence with strong posts and wire, clearly visible", ("fence",)),
-    (r"جیپ", "an open off-road jeep, clearly visible", ("jeep",)),
-    (r"سفینه|فضاپیما", "a large spaceship with metal walls and lights, clearly visible", ("spaceship", "ship")),
-    (r"\bربات", "a metal robot with clear arms and legs, clearly visible", ("robot",)),
-    (r"\bعقاب|\bشاهین", "a big eagle with wide wings, clearly visible", ("eagle", "hawk")),
-    (r"\bاسب", "a strong horse, clearly visible", ("horse",)),
-    (r"\bمار\b|ماری\b", "a long snake, clearly visible", ("snake",)),
-    (r"کشتی بزرگ|ناو\b", "a large ship on the water, clearly visible", ("ship",)),
+    (_pw("اژدها|اژدر"), "a huge dragon with wings, scales and a long neck, its whole body visible", ("dragon",)),
+    (_pw("گرگ"), "a large gray wolf, alert and powerful, its whole body visible", ("wolf",)),
+    (_pw("ببر|پلنگ"), "a big striped tiger, powerful and alert, its whole body visible", ("tiger", "leopard")),
+    (_pw("خرس"), "a huge brown bear on its hind legs, its whole body visible", ("bear",)),
+    (_pw("کوسه"), "a big gray shark in the water, its whole body visible", ("shark",)),
+    (_pw("نهنگ"), "a gigantic whale, its whole body visible", ("whale",)),
+    (_pw("هیولا|غول"), "a gigantic monster, much taller than the people, its whole body visible", ("monster", "giant")),
+    (_pw("قفس"), "a strong metal cage with thick bars, big and clearly visible", ("cage",)),
+    (_pw("حصار|نرده|فنس"), "a tall fence with strong posts and wire, clearly visible", ("fence",)),
+    (_pw("جیپ"), "an open off-road jeep, clearly visible", ("jeep",)),
+    (_pw("سفینه|فضاپیما"), "a large spaceship with metal walls and lights, clearly visible", ("spaceship", "ship")),
+    (_pw("ربات"), "a metal robot with clear arms and legs, clearly visible", ("robot",)),
+    (_pw("عقاب|شاهین"), "a big eagle with wide wings, clearly visible", ("eagle", "hawk")),
+    (_pw("اسب"), "a strong horse, clearly visible", ("horse",)),
+    (rf"(?<![{_PERS}])(?:مار|افعی)(?:ها)?(?![{_PERS}])", "a long snake, clearly visible", ("snake",)),
+    (_pw("کشتی بزرگ|ناو", False), "a large ship on the water, clearly visible", ("ship",)),
 ]
 
 
 _EVENT_LEXICON = [
-    (r"حمله", ("attack", "charg", "lung", "pounc"), "the huge creature lunges toward the running people with its mouth wide open"),
-    (r"تعقیب|دنبال کرد|شکار", ("chase", "chasing", "hunt", "pursu"), "a creature chases the fleeing people through the place"),
-    (r"فرار|گریخت", ("flee", "fleeing", "run", "escap"), "the people run away in fear"),
-    (r"قفس|گیر افتاد|گرفتار|به دام", ("trap", "cage", "bars", "caught"), "a person is trapped behind strong bars and cannot get out"),
-    (r"کشته|جان\s*باخت|درگذشت|فوت\s*کرد|به\s*قتل\s*رسید|خودکشی", ("still figure", "lies still", "covered", "grief"),
-     "a figure lies on the ground completely covered from head to feet by a plain white cloth, no hands and no face visible, "
-     "while the others kneel in grief"),
-    (r"سقوط|پرت شد", ("fall", "fell"), "a person falls through the air"),
-    (r"انفجار", ("explo", "blast"), "a big explosion with smoke and fire"),
-    (r"طوفان|باران شدید", ("storm", "heavy rain"), "a heavy storm with rain and wind"),
+    (_pw("حمله"), ("attack", "charg", "lung", "pounc"), "the huge creature lunges toward the running people with its mouth wide open"),
+    (_pw("تعقیب|دنبال کرد|شکار"), ("chase", "chasing", "hunt", "pursu"), "a creature chases the fleeing people through the place"),
+    (_pw("فرار|گریخت"), ("flee", "fleeing", "run", "escap"), "the people run away in fear"),
+    (_pw("قفس|گیر افتاد|گرفتار|به دام"), ("trap", "cage", "bars", "caught"), "a person is trapped behind strong bars and cannot get out"),
+    (_pw(r"حلق\s*آویز|به\s*دار\s*آویخت|دار\s*زد|خود\s*را\s*آویخت"), ("rope", "noose", "toppled chair"),
+     "a thick rope hangs empty from a ceiling beam above a toppled wooden chair in a dim quiet room; nobody hangs from it and "
+     "no body is shown anywhere"),
+    (_pw(r"کشته|جان\s*باخت|درگذشت|فوت\s*کرد|به\s*قتل\s*رسید|خودکشی"), ("grief", "mourn", "candle", "bowed"),
+     "the people who loved the lost person stand with bowed heads and tears of grief beside a small table with a lit candle "
+     "and a single white flower; nobody lies on the ground and no body is shown anywhere"),
+    (_pw("سقوط|پرت شد"), ("fall", "fell"), "a person falls through the air"),
+    (_pw("انفجار"), ("explo", "blast"), "a big explosion with smoke and fire"),
+    (_pw("طوفان|باران شدید"), ("storm", "heavy rain"), "a heavy storm with rain and wind"),
 ]
 
 
@@ -2367,6 +2451,11 @@ def strip_colors(text):
     return " ".join(t.split())
 
 
+_OTHER_BUILDS = ("slim build", "stocky build", "tall lanky build", "short sturdy build", "heavy-set build")
+_OTHER_FACES = ("round face", "long narrow face", "square jaw", "oval face with high cheekbones", "heart-shaped face",
+                "angular face with a hooked nose", "soft wide face", "thin face with sharp cheekbones")
+
+
 def fix_others_in_code(vis, chars):
     """FREE check in code: every unnamed person of a picture (rescuer, doctor, neighbour...) gets a hair color, a shirt
     color and a trousers color that NO named person of that picture and no other unnamed person has. The model only
@@ -2378,8 +2467,12 @@ def fix_others_in_code(vis, chars):
         if not others:
             continue
         used = {"hair": set(), "top": set(), "bottom": set()}
+        used_face, used_fh, used_build = set(), set(), set()
         for n in v.get("characters_present") or []:
             c = byname.get(n) or {}
+            used_face.add(str(c.get("face_en") or "")[:12])
+            if c.get("facial_en"):
+                used_fh.add(c["facial_en"])
             for f, k in (("hair_color", "hair"), ("top_color", "top"), ("bottom_color", "bottom")):
                 fam = color_family(c.get(f))
                 if fam:
@@ -2388,7 +2481,7 @@ def fix_others_in_code(vis, chars):
         keys = sorted({k for k, _ in _COLOR_FAMILIES}, key=len, reverse=True)
         color_re = re.compile(r"\b(" + "|".join(keys) + r")\b((?:[- ]?(?:haired|colou?red|skinned))?)", re.I)
         for o in others:
-            o = " ".join(str(o).split()[:18])
+            o = " ".join(str(o).split()[:12])
             old = bool(re.search(r"\b(old|elderly|aged|grandmother|grandfather|white-haired|gray-haired|grey-haired)\b", o, re.I))
             hair_pool = (("gray", "white") + HAIR_PALETTE) if old else HAIR_PALETTE
             hair = next((x for x in hair_pool if color_family(x) not in used["hair"]), "")
@@ -2418,6 +2511,17 @@ def fix_others_in_code(vis, chars):
             for k, val in (("hair", hair), ("top", top), ("bottom", bottom)):
                 if val:
                     used[k].add(color_family(val))
+            # a different build, face shape and (for men) facial hair for EVERY unnamed person of the picture
+            build = next((b_ for b_ in _OTHER_BUILDS if b_ not in used_build), _OTHER_BUILDS[len(used_build) % len(_OTHER_BUILDS)])
+            face = next((f_ for f_ in _OTHER_FACES if f_ not in used_face), _OTHER_FACES[len(used_face) % len(_OTHER_FACES)])
+            used_build.add(build)
+            used_face.add(face)
+            extra = [build, face]
+            if not _FEMALE_TXT.search(o) and not re.search(r"\b(child|boy|girl|kid|baby)\b", o, re.I):
+                fh_ = next((f_ for f_ in _FACIAL if f_ not in used_fh), "clean-shaven")
+                used_fh.add(fh_)
+                extra.append(FACIAL_TEXT.get(fh_, fh_))
+            text = text.rstrip(" .,") + ", " + ", ".join(extra)
             new.append(text)
         if new != others:
             changed += 1
@@ -2749,7 +2853,8 @@ Rules:
   other EVENT, the picture shows that very event happening (the attacker, the victim in danger, the movement, the place), not
   the people standing calmly. A violent event is shown by the THREAT and its RESULT without gore: the huge creature lunging
   with its mouth open and the people fleeing; a person trapped behind the bars of a cage; the creature rearing over the
-  empty place where the person stood, a fallen hat or bag on the ground; a still figure covered by a cloth with the others kneeling and the creature far away.
+  empty place where the person stood, a fallen hat or bag on the ground; the mourners with bowed heads, a lit candle and a flower with the creature far away; a hanging is shown ONLY by an
+  empty rope above a toppled chair.
 - "creatures_en": the creatures, animals, monsters, vehicles, machines, cages, fences or other THINGS that are the subject of the
   event of this part or that the part names, and that are NOT in the list of characters (a dinosaur, a wolf, a jeep, a
   cage...): each one described in 12 to 25 English words (what it is, its size compared with the people, colors, pose and
@@ -2766,21 +2871,26 @@ Rules:
   creature ITSELF drawn big and clearly visible (roaring, charging, rearing, looming over the place, its whole head and body
   seen), people running, hiding, climbing or behind bars, and fear on the faces. The creature is NEVER reduced to a shadow, a
   far away dot or something outside the picture.
+- NO BODIES (very important): never draw a dead, lying, unconscious or sleeping-on-the-ground person, a body under a cloth or
+  a sheet, or a person hanging. A death, a murder, a suicide or an accident is told by what the LIVING do and see: grief on
+  their faces, a lit candle, a flower, an empty chair or bed, a dropped hat or bag, an empty place; a hanging is shown only by
+  an empty rope above a toppled chair. Everybody in every picture is alive, awake and upright (standing or sitting), except a
+  person who sleeps or is ill in a BED when the sentence says so.
 - SAME SCALE: all people of one picture are drawn at ONE consistent scale: adults about equally tall at the same distance, a
   child clearly smaller, nobody a giant or a dwarf next to the others; the heads of everybody have the same natural size
   relative to the bodies.
 - BEAUTIFUL PLACES: every place is attractive and atmospheric: harmonious colors, depth (foreground, middle ground,
   background), glowing light and interesting details; never a bare or dull backdrop.
-- HANDS (the picture model often draws a third hand): in every picture at most TWO hands are clearly visible in total; the
-  other people keep their hands simple and calm (resting at the sides, in pockets, or holding a big object against the chest).
-  EVERY person always has BOTH arms drawn (sleeves down to the wrists, or the hands in pockets or on an object): a hidden hand
-  is hidden by a pocket or an object, NEVER by leaving the arm or hand out. Never crossed arms, hand holding, handshakes, hugs
-  with visible hands, pointing fingers, or several hands on one object.
+- HANDS (the picture model often draws a third hand or loses one): every person has EXACTLY two arms and two hands: each arm
+  ends in ONE hand, and every hand is either calmly visible (resting at the side, on the lap, on a table, or holding one object
+  against the body) or hidden behind a pocket, a sleeve or an object; NEVER a missing hand, an arm without a hand, a third hand
+  or a hand that belongs to nobody. People never touch each other with their hands: no hand holding, handshakes, hugs,
+  pointing fingers, crossed arms or several hands on one object; the hands of different people stay apart.
 - CLOTHES FIT THE SITUATION: everybody is dressed for THIS moment: day clothes or work clothes of the era and the job; a coat,
   hat, scarf or gloves where the weather is cold; nightwear ONLY when the part says that a person goes to bed, is asleep, has
   just woken up or lies ill in bed. Never pajamas, a nightgown or a bathrobe for a person who walks, talks, works, travels or
   fights.
-- THE PLACE OF THE SENTENCE (very important): when the part says where it happens (a jungle, a control room, a cage, a laboratory, a fence, a road, a kitchen), that EXACT place is drawn, even when it is not in PLACES: then "location" is "new" and "visual_en" describes that place in full (materials, colors, objects, light). The nearest place of the list is chosen ONLY when it really is the same place. The event of the part (the attack, the escape, the capture, the death, the discovery) is the MAIN thing in the picture, shown as its moment and its visible result (the fence broken, the cage closed, the jaws open, a body in the grass shown gently), never a quiet portrait of people standing.
+- THE PLACE OF THE SENTENCE (very important): when the part says where it happens (a jungle, a control room, a cage, a laboratory, a fence, a road, a kitchen), that EXACT place is drawn, even when it is not in PLACES: then "location" is "new" and "visual_en" describes that place in full (materials, colors, objects, light). The nearest place of the list is chosen ONLY when it really is the same place. The event of the part (the attack, the escape, the capture, the death, the discovery) is the MAIN thing in the picture, shown as its moment and its visible result (the fence broken, the cage closed, the jaws open, a dropped hat or bag in the grass), never a quiet portrait of people standing.
 - PLACE FITS THE EVENT (very important): the place is never a neutral backdrop; its details tell the same story as the
   event and its mood. Take them from the sentence, from the SOURCE TEXT and from the place description: the objects,
   furniture, tools, architecture, weather, season, time of day and light that THIS exact event needs (a deathbed: a bed
@@ -3209,7 +3319,8 @@ _VOICE_WORDS = (("در", "دَر"), ("این", "اِین"), ("را", "رَا"), 
 # (رسوا -> رسوا، رسوایی، رسواکننده...). Only the voice text gets the vowel mark: the subtitles stay clean.
 _VOICE_PREFIX = (("رسوا", "رُسوا"), ("دسر", "دِسِر"), ("دلهره", "دلهُره"))
 # «عمو» is read with fatha (عَمو) but «عمومی» keeps its damma: so only these exact word forms are marked.
-_VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|یم|یت|یش|یمان|یتان|یشان)?(?![{_PL}]))", "عَمو"),)
+_VOICE_REGEX = ((rf"(?<![\u0600-\u06FF])کشنده(?![{_PL}])", "کُوشَنده"),
+                (rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|یم|یت|یش|یمان|یتان|یشان)?(?![{_PL}]))", "عَمو"),)
 
 
 # Words that MUST be read with these exact vowel marks, by BOTH voices (Gemini and Pocket). The entry matches the word
@@ -3219,7 +3330,7 @@ _VOICE_REGEX = ((rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|ی
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
 _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
-                ("ثروت", "سَروَت"), ("کشنده", "کُشَنده"),
+                ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
@@ -3655,8 +3766,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, stylized 2D animated-film illustration, not a photo, not 3D, not anime"
-CLEAN_SHORT = "sharp focus, crisp clean details, stylized 2D animated-film illustration, not a photo, not 3D"
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, polished 3D animated feature-film render, not a photo, not flat 2D, not anime, not chibi"
+CLEAN_SHORT = "sharp focus, crisp clean details, polished 3D animated feature-film render, not a photo, not flat 2D"
 
 
 def _wc(t):
@@ -3666,9 +3777,9 @@ def _wc(t):
 KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
-ANATOMY = ("Every person has exactly one head, two arms, two hands with five fingers each and two legs; each hand belongs "
-           "clearly to its own person; limbs of different people never overlap; no third hand, no third leg")
-NO_EXTRA = "No other person anywhere: no crowd, no passers-by, no faces in windows or doorways"
+ANATOMY = ("Every person has one head, two arms ending in two hands with five fingers each (none missing, none extra) "
+           "and two legs; limbs of different people never overlap")
+NO_EXTRA = "No other person anywhere, no crowd, no faces in windows"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
@@ -3735,7 +3846,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     if creatures:
         count = count.replace("nobody else", "no other people")
     if total >= 2:
-        count += "Every person has a different face, hair and clothes color. "
+        count += "Every person has a different face, hair and clothes color; same natural head size for all. "
     if (present or others) and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
                                                     + " ".join(map(str, scene.get("must_show") or []))):
         count += "Everybody wears proper day clothes. "
@@ -3752,7 +3863,11 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
         if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
             count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else NO_EXTRA) + ". "
     if total > MAX_PEOPLE:
-        count += f"Only {MAX_PEOPLE} people show a large clear face; the others are small, far away or seen from behind. "
+        count += f"Only {MAX_PEOPLE} people have large clear faces; the others are small, far away or from behind. "
+    if has_people and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en"))):
+        count += "Everybody alive and upright. "
+    if not creatures:
+        count += "Only the listed people, no animals. "
 
     def people(full):
         if not (present or others):
@@ -3785,9 +3900,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
                              f"no clear face): {_trim_words(o, 14)}")
             elif present or len(others) > 1:
                 parts.append(f"person {len(present) + j + 1} (a stranger, in no reference image, a completely different "
-                             f"face): {_trim_words(o, 22)}")
+                             f"face): {_trim_words(o, 30)}")
             else:
-                parts.append(_trim_words(o, 22))
+                parts.append(_trim_words(o, 30))
         lead = (("Copy each character's look from the reference image with the same number, not its pose; "
                  if nh_all else "Copy each face, hair and clothes from the reference image with the same number, not its pose; ")
                 + "a stranger copies no reference. " if (ref_idx and present) else "")
@@ -3871,8 +3986,8 @@ def _cf_errors(r):
     return codes, msg
 
 
-SAFE_PREFIX = ("Gentle peaceful stylized 2D animated-film illustration, calm friendly mood, warm soft light, "
-               "everyone fully clothed. ")
+SAFE_PREFIX = ("Polished 3D animated feature-film render, graceful adult proportions with a natural head size, warm soft "
+               "cinematic light, everyone fully clothed, alive and upright. ")
 
 
 # FLUX.2 [klein] 4B on Cloudflare (free daily allowance, same as before): it takes width/height (so the picture is
@@ -3987,7 +4102,8 @@ _VIOLENT = [
     (r"\b(?:kill(?:s|ed|ing)?|murder(?:s|ed|ing)?|slaughter(?:s|ed|ing)?|devour(?:s|ed|ing)?|eat(?:s|ing)?|ate|attack(?:s|ed|ing)?|assault(?:s|ed|ing)?)\b",
      "charges at"),
     (r"\b(?:bit|bites?|biting)\b", "lunges at"),
-    (r"\b(?:dying|dies|died|death|dead)\b", "lies still"),
+    (r"\b(?:hang(?:s|ed|ing)? (?:himself|herself|themselves)|hanged|hanging from (?:a|the) (?:rope|noose|beam))\b", "an empty rope hangs above a toppled chair"),
+    (r"\b(?:dying|dies|died|death|dead)\b", "is mourned by the others"),
     (r"\b(?:scream(?:s|ed|ing)?|shriek(?:s|ed|ing)?)\b", "cries out"),
     (r"\b(?:jaws?|teeth|fangs?|claws?)\b", "head"),
     (r"\b(?:guns?|rifles?|shot|shoots?|shooting|weapons?|knife|knives|swords?)\b", "tool"),
@@ -4100,11 +4216,11 @@ def keep_saved(src_file, name):
 
 def _ref_prompt(c, era_short, extra=""):
     if c.get("nonhuman"):
-        return (f"Stylized 2D animated-film character reference picture of {c.get('species_en') or 'a character'}: "
+        return (f"Polished 3D animated feature-film character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
                 f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
-    return (f"Stylized 2D animated-film character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+    return (f"Polished 3D animated feature-film character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
@@ -4277,18 +4393,19 @@ For EACH picture return:
   said just by looking; 0 = unrelated). Strict limits:
   * the EVENT of the narration (a death, a fight, a meeting, a departure, a discovery...) must be recognisable; a calm
     or unrelated picture of a place or a person gets at most 3;
-  * a killing or death by a weapon: the weapon and a small red wound stain must be visible; a person who only seems to
-    sleep: at most 3. A ghost or spirit must be a translucent glowing figure with the person's shape and clothes; only a
-    halo, light or mist: at most 3;
+  * a killing, death or suicide: it is shown by the grief of the living and objects (candle, flower, empty chair or bed, dropped
+    hat or bag, an empty rope above a toppled chair for a hanging); ANY dead, lying or sheet-covered body, or a person hanging
+    from a rope or by the hands: at most 2. A ghost or spirit must be a translucent glowing figure with the person's shape and
+    clothes; only a halo, light or mist: at most 3;
   * the place and situation must fit the narration (inside/outside, kind of place, time, weather), else at most 5;
   * every character of the sheets must be visible in the picture; one missing: at most 5;
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
-  * STYLE: every picture must be the same modern stylized 2D animated-film illustration (clean simplified shapes, soft smooth
-    shading, large expressive eyes, graceful proportions, saturated colors, glowing warm light). A photo-like, 3D, anime,
-    realistic painting, flat vector or sketch style, or characters whose heads are suddenly much bigger (a chibi look) than in
-    the other pictures: at most 3;
+  * STYLE: every picture must be the same polished 3D animated feature-film render (smooth soft skin, large expressive
+    eyes, elegant attractive faces, graceful adult proportions, rich textured costumes, soft cinematic warm light with cool
+    rim light). A photo-like, flat 2D, anime, sketch or realistic-painting look, or characters whose heads are suddenly much
+    bigger (a chibi look) or whose style differs from the other pictures: at most 3;
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
@@ -4512,7 +4629,7 @@ def writer_desk_plan(era, author=None, n=0):
     scenes = a.get("scenes_en") or list(WRITER_SCENES)
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical animated-film scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
+    visual = (f"Vertical 3D animated feature-film scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from behind (back view), the head and the body facing the SAME direction, never a head turned around; exactly "
               f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
               f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
@@ -4528,7 +4645,7 @@ def author_library_plan(author=None):
     a = author or {}
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical animated-film scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
+    visual = (f"Vertical 3D animated feature-film scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and on the back wall in the "
               f"middle a large framed painting of a samurai warrior in armor, clearly visible, with a calm plain light area in its "
               f"lower right corner; the whole painting stays unobstructed: the writer's head and shoulders are BELOW its lower edge "
@@ -4604,6 +4721,26 @@ def cover_ass(title, author, font, bold):
         W, H, font, 1 if bold else 0) + "\n".join(ev) + "\n"
 
 
+CALM_MAX = float(os.environ.get("AZIM_CALM_MAX") or 26)    # brightness spread (0-255) of a calm plain area of the canvas
+
+
+def region_spread(img, x, y, rw, rh, w, h):
+    """How busy a rectangle of the picture is: the spread (standard deviation) of its brightness. A plain wall or canvas
+    corner is small; a head, a lamp, a book or a shelf makes it large. None when the rectangle cannot be read."""
+    try:
+        x, y = max(int(x), 0), max(int(y), 0)
+        rw, rh = max(min(int(rw), w - x), 4), max(min(int(rh), h - y), 4)
+        raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(img), "-vf",
+                                       f"crop={rw}:{rh}:{x}:{y},scale=64:-2,format=gray", "-f", "rawvideo", "-"], timeout=60)
+        if len(raw) < 16:
+            return None
+        m = sum(raw) / len(raw)
+        return (sum((b - m) ** 2 for b in raw) / len(raw)) ** 0.5
+    except Exception as e:  # noqa: BLE001
+        print(f"Painting check could not read the picture ({e}).", flush=True)
+        return None
+
+
 PAINTING_TEXT = "Samurai Reader"                    # written like the signature of the painter, inside the canvas
 PAINTING_SIZE = max(SUB_FONT_SIZE - 4, 1)            # four sizes smaller than the subtitle font (same font, red)
 DEFAULT_PAINTING_BOX = (130, 300, 380, 700)          # [ymin, xmin, ymax, xmax] of 1000: where the library prompt puts it
@@ -4634,6 +4771,7 @@ def stamp_painting(jobs):
                 continue
             ymin, xmin, ymax, xmax = box
             bw, bh = (xmax - xmin), (ymax - ymin)                         # the frame; the canvas is a little smaller
+            order = ["bottom", "top"] if band == "bottom" else ["top", "bottom"]
             right = int((xmax - 0.10 * bw) / 1000 * w)                    # inside the canvas, like a painter's signature
             bottom = int((ymax - 0.09 * bh) / 1000 * h) if band == "bottom" else int((ymin + 0.09 * bh) / 1000 * h)
             an = 3 if band == "bottom" else 9
@@ -4641,6 +4779,28 @@ def stamp_painting(jobs):
             room = (xmax - xmin) / 1000 * w * 0.78
             if size * 0.62 * len(PAINTING_TEXT) > room:                   # a very small painting: the text must still fit
                 size = max(room / (0.62 * len(PAINTING_TEXT)), 6)
+            # PIXEL CHECK in code (no Gemini call): the place of the signature must be a calm plain area of the canvas. When
+            # a head, a lamp, a shelf or anything else stands in front of that corner, the place is busy: the other corner
+            # of the painting is tried, and when it is busy too the signature is NOT written (it is never on top of an object).
+            tw, th = size * 0.62 * len(PAINTING_TEXT), size * 1.25
+            chosen = None
+            for bnd in order:
+                if not free.get(bnd):
+                    continue
+                by = int((ymax - 0.09 * bh) / 1000 * h) if bnd == "bottom" else int((ymin + 0.09 * bh) / 1000 * h)
+                x0 = int(right - tw - 0.06 * tw)
+                y0 = int(by - th - 0.2 * th) if bnd == "bottom" else int(by - 0.2 * th)
+                sd = region_spread(img, x0, y0, int(tw * 1.12), int(th * 1.4), w, h)
+                print(f"Painting text: place '{bnd}' spread={sd if sd is None else round(sd, 1)} (calm if below {CALM_MAX}).", flush=True)
+                if sd is not None and sd <= CALM_MAX:
+                    chosen = (bnd, by)
+                    break
+            if not chosen:
+                print("Painting text skipped: the corner of the painting is not a calm plain area (something stands in front "
+                      "of it): the signature is never written over an object.", flush=True)
+                continue
+            band, bottom = chosen
+            an = 3 if band == "bottom" else 9
             ass = ("[Script Info]\nScriptType: v4.00+\n" f"PlayResX: {w}\nPlayResY: {h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
                    "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
                    "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
@@ -5402,16 +5562,16 @@ def main():
                     return build_prompt(FIXED_STYLE, script.get("characters", []), sc2, "", ref_names=[],
                                         limit=max((limit or PROMPT_WORDS) - 10, 60))
                 if level == 2 and gentle:    # the same event, wide: the creature stays large, the people are small
-                    return (f"Wide animated-film illustration, the creature large and the people small: {_trim_words(gentle, 45)}. "
+                    return (f"Wide polished 3D animated feature-film scene, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
                             f"Setting: {_trim_words(str(sc.get('era_en') or ''), 25)}. Style: "
                             f"{', '.join(FIXED_STYLE.split(', ')[:4])}. Vertical 9:16 composition, {CLEAN_SHORT}")
                 art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
                 cr = [soften_violence(x) for x in (sc.get("creatures_en") or []) if str(x).strip()][:2]
                 if cr:           # the creature and the place of the story, no people: a safe picture that still shows the subject
-                    return (f"Stylized 2D animated-film illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
+                    return (f"Polished 3D animated feature-film render, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
                             f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                             f"the creature large in the middle, atmospheric detailed environment, {CLEAN_SHORT}")
-                return (f"Stylized 2D animated-film illustration of a calm, quiet place in a peaceful moment. "
+                return (f"Polished 3D animated feature-film render of a calm, quiet place in a peaceful moment. "
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
