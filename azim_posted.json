@@ -403,5 +403,15 @@
   "date_pt": "2026-11-10",
   "wiki": "Romeo and Juliet",
   "date": "2026-11-10"
+ },
+ {
+  "title_en": "The Brothers Karamazov",
+  "title_fa": "برادران کارامازوف",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-10",
+  "wiki": "The Brothers Karamazov",
+  "date": "2026-11-11"
  }
 ]
