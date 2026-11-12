@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 21       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 20       # a saved script of another version is not resumed
+VISUAL_VERSION = 22       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 21       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -486,7 +486,17 @@ PLOT_HEAD_LANG = {
 }
 CHAR_HEAD = re.compile(r"^(characters?|main characters?|principal characters?|major characters?|cast of characters|cast)\b", re.I)
 EXTRA_WORDS_MAX = int(os.environ.get("AZIM_EXTRA_WORDS") or 800)      # words taken from one other-language summary
-EXTRA_SOURCES = int(os.environ.get("AZIM_EXTRA_SOURCES") or 2)       # at most this many other-language summaries
+EXTRA_SOURCES = int(os.environ.get("AZIM_EXTRA_SOURCES") or 3)       # at most this many other-language summaries
+
+
+THEME_HEAD = re.compile(r"^(themes?|themes and motifs|analysis|interpretation|symbolism|style and themes|major themes|"
+                        r"literary (?:analysis|significance)|meaning)\b", re.I)
+
+
+def pick_themes(text):
+    """The 'Themes' / 'Analysis' sections: the heart of the book (what it is REALLY about). Never a source of events."""
+    lead, secs = split_wiki(text)
+    return "\n\n".join(b for t, b in secs if len(b) >= 150 and THEME_HEAD.match(t))
 
 
 def pick_characters(text):
@@ -521,7 +531,8 @@ def fetch_extra_plots(title_en, en_words):
             words = plot.split()
             if len(words) < max(150, int(en_words * 0.5)):          # a thin section adds nothing
                 continue
-            out.append((name, " ".join(words[:EXTRA_WORDS_MAX])))
+            lead_w = " ".join(lead.split()[:180])
+            out.append((name, (f"INTRODUCTION ({name}): {lead_w}\n\nPLOT: " if lead_w else "") + " ".join(words[:EXTRA_WORDS_MAX])))
             print(f"Extra source: {name} Wikipedia plot, {len(words)} words (using {min(len(words), EXTRA_WORDS_MAX)}).", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"Extra source {lang} skipped ({e}).", flush=True)
@@ -550,7 +561,8 @@ def fetch_wiki(book):
         return None
     lead, plot = pick_plot(text)
     return {"title": title, "lead": lead, "plot": plot, "plot_words": len(plot.split()),
-            "sig": pick_significance(text), "chars": pick_characters(text)}
+            "sig": pick_significance(text), "chars": pick_characters(text),
+            "themes": pick_themes(text)}
 
 
 def fetch_source(book):
@@ -572,6 +584,9 @@ def fetch_source(book):
         parts.append(f"SECOND SOURCE - PLOT from the {name_} Wikipedia (another editor's summary of the SAME novel: use it to "
                      "confirm events, to fill what the English PLOT skips and to understand a term; when they disagree the "
                      "English PLOT wins; write every name as in the English text):\n" + txt_)
+    if en.get("themes"):
+        parts.append("THEMES AND MEANING (what the book is REALLY about: use ONLY for the opening hook, the want and fear of the "
+                     "heroes and the wrap-up; NEVER a source of events):\n" + " ".join(en["themes"].split()[:450]))
     if en.get("chars"):
         parts.append("CHARACTERS (only to know who is who: ages, roles and relations; NEVER a source of events):\n"
                      + " ".join(en["chars"].split()[:450]))
@@ -598,12 +613,13 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    # ONE fixed style for ALL videos (the user's choice, changed Nov 11, 2026 to the sample picture): a polished 3D animated
-    # feature-film look - smooth soft skin, large expressive eyes, elegant attractive faces, rich costumes, cinematic light.
-    # NOTE: only the first 4 comma-separated pieces are used in most picture prompts, so they carry everything important.
-    "storybook": ("polished 3D animated feature-film look, smooth skin and large expressive eyes, elegant attractive faces "
-                  "with graceful adult proportions, soft cinematic warm light with cool rim light, richly detailed textured "
-                  "costumes, beautiful detailed atmospheric backgrounds, whole picture in this one style",
+    # ONE fixed style for ALL videos (the user's choice, changed Nov 12, 2026 to the 3 sample pictures): a detailed
+    # black-and-white graphite PENCIL drawing in manga / anime style - fine hatching, soft smooth shading, large expressive
+    # eyes, attractive faces, rich detailed clothes and backgrounds. Only the first 4 comma pieces go into most prompts.
+    "storybook": ("detailed black-and-white graphite pencil drawing in manga-anime style, fine hatching and soft smooth "
+                  "shading, large expressive eyes with sharp highlights, elegant attractive detailed faces with graceful adult "
+                  "proportions, richly detailed textured clothing, highly detailed atmospheric backgrounds drawn in pencil, "
+                  "strong contrast from deep black to white paper, whole picture in this one style",
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -1411,7 +1427,8 @@ a term. Names always as in the English text.
 {src['text']}
 {names_txt}
 Return JSON with exactly these keys:
-- "logline": ONE English sentence: who the hero is, what he or she wants, and what stands in the way.
+- "logline": ONE English sentence: who the hero is, what he or she wants, what stands in the way and what it will cost (the heart
+  of the book).
 - "heroes": 2 to 4 objects {{"name": "...", "role_en": "..."}}: only the people without whom the story cannot be told.
   "name" is ONLY the FIRST name (or the shortest known name) of the person; "role_en" 6 to 14 English words that introduce this person to a viewer (age or job,
   relation to the other heroes, what he or she wants), only from the source. Say what the hero REALLY is (a person, an
@@ -1447,9 +1464,12 @@ Return JSON with exactly these keys:
   that this event comes from, copied word for word, at most 30 words) and "flashback" (true only if the event happened BEFORE
   the previous event in time; otherwise false).
   Rules for the events:
-  * ORDER: the events are in the order in which they HAPPEN in time, which is also the order of the source unless the source
-    tells a flashback. A flashback event is marked "flashback": true and its "what_en" starts with the time («years earlier»,
-    «as a child»...). Never move an event before the event that causes it.
+  * ORDER (very important): the events are in the order in which they HAPPEN in the story's time, from the beginning to the
+    true ending, even if the book or the source starts with a prologue, a frame story, a scene from the end or a flashback:
+    such a part is moved to its true place in time (a flashback that must stay is marked "flashback": true and its "what_en"
+    starts with the time: «years earlier», «as a child»...). The LAST event is the real ending: nothing that happens after
+    the climax comes before it, and no earlier event contains the final outcome. Never move an event before the event that
+    causes it.
   * IMPORTANCE: choose ONLY the events that carry the story: the situation, the event that starts the conflict, every turning
     point, the climax and the ending. If the source has more events than {hi}, drop the least important ones (a side
     character, a journey, a repeated episode, a detail) and fold their cause into the next event's "because_en". A viewer must
@@ -1708,6 +1728,12 @@ Rules for the narration:
   SENTENCE TEST: before you keep a sentence ask "if I delete it, does the viewer lose a hero, a cause, a turning point, the
   climax or the ending?" If not, do not write it. A sentence that only decorates, repeats, describes a mood or names a side
   person is deleted. Better a short, complete, clear summary than a long one.
+- THE ENDING ONLY AT THE END (the listener gets confused when it comes early): no sentence before the last story scene tells
+  or hints at the final outcome (a death, a marriage, an escape, who did it, how it ends); the last event and its result are told
+  ONLY in the last story scene, after everything else.
+- THE ESSENCE: the listener must grasp the heart of the book: what the hero wants, what stands in the way, what it costs and
+  what the story finally shows. Every event is told as a step of this one main line, in plain words of cause and effect; never
+  lose the main line in side facts.
 - ORDER: tell the events exactly in the order of the spine, ONE straight line from the first event to the last. NEVER jump
   ahead to the ending or to a later event and then come back (no teaser, no hint of the end before the wrap-up); never
   mention a later event before its turn; say «قبل از آن» or «سال‌ها پیش» only when the spine marks a flashback.
@@ -2879,8 +2905,10 @@ Rules:
 - SAME SCALE: all people of one picture are drawn at ONE consistent scale: adults about equally tall at the same distance, a
   child clearly smaller, nobody a giant or a dwarf next to the others; the heads of everybody have the same natural size
   relative to the bodies.
-- BEAUTIFUL PLACES: every place is attractive and atmospheric: harmonious colors, depth (foreground, middle ground,
-  background), glowing light and interesting details; never a bare or dull backdrop.
+- BEAUTIFUL PLACES: every place is attractive and atmospheric: strong tonal contrast from deep black to white, depth
+  (foreground, middle ground, background), dramatic light and shadow and MANY fine concrete details (at least five objects,
+  textures, plants, architecture, tools of the place); never a bare or dull backdrop. Every character is striking and
+  attractive (a beautiful face, a graceful body, a detailed costume).
 - HANDS (the picture model often draws a third hand or loses one): every person has EXACTLY two arms and two hands: each arm
   ends in ONE hand, and every hand is either calmly visible (resting at the side, on the lap, on a table, or holding one object
   against the body) or hidden behind a pocket, a sleeve or an object; NEVER a missing hand, an arm without a hand, a third hand
@@ -3334,7 +3362,16 @@ _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u06
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
 
+# Words with a ZWNJ or a space inside (compounds): matched by a pattern; the lookahead keeps the ending of the word.
+#   جیب‌بری: first ب with sukun, SECOND ب with damma (the voice read it with fatha: بَری)
+#   پاک‌طینت: ک with sukun (no ezafe), «طینت» written with ت so that ط never gets a kasra of its own
+_FORCE_REGEX = ((rf"(?<![{_PL}])جیب[\u200c ]?بر(?=(?:ی|ان|ها|هایی?|ی\u200c?ها)?(?![{_PL}]))", "جیبْ\u200cبُر"),
+                (rf"(?<![{_PL}])پاک[\u200c ]?طینت", "پاکْ\u200cتینَت"))
+
+
 def force_marks(t):
+    for pat, marked in _FORCE_REGEX:
+        t = re.sub(pat, lambda m, mk=marked: mk, t)
     for plain, marked in _FORCE_MARKS:
         pat = rf"(?<![{_PL}])" + "".join(re.escape(ch) + r"[\u064B-\u0655\u0670]*" for ch in plain)
         t = re.sub(pat, lambda m, mk=marked: mk, t)
@@ -3766,8 +3803,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, polished 3D animated feature-film render, not a photo, not flat 2D, not anime, not chibi"
-CLEAN_SHORT = "sharp focus, crisp clean details, polished 3D animated feature-film render, not a photo, not flat 2D"
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, hand-drawn black-and-white graphite pencil drawing, not a photo, not colored, not 3D, not chibi"
+CLEAN_SHORT = "sharp focus, crisp clean details, black-and-white graphite pencil drawing, not a photo, not colored"
 
 
 def _wc(t):
@@ -3846,7 +3883,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     if creatures:
         count = count.replace("nobody else", "no other people")
     if total >= 2:
-        count += "Every person has a different face, hair and clothes color; same natural head size for all. "
+        count += "Every person has a different face, hairstyle and clothes (light or dark tones); same natural head size for all. "
     if (present or others) and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
                                                     + " ".join(map(str, scene.get("must_show") or []))):
         count += "Everybody wears proper day clothes. "
@@ -3986,8 +4023,8 @@ def _cf_errors(r):
     return codes, msg
 
 
-SAFE_PREFIX = ("Polished 3D animated feature-film render, graceful adult proportions with a natural head size, warm soft "
-               "cinematic light, everyone fully clothed, alive and upright. ")
+SAFE_PREFIX = ("Detailed black-and-white graphite pencil drawing in manga-anime style, graceful adult proportions with a "
+               "natural head size, soft shading, everyone fully clothed, alive and upright. ")
 
 
 # FLUX.2 [klein] 4B on Cloudflare (free daily allowance, same as before): it takes width/height (so the picture is
@@ -4216,11 +4253,11 @@ def keep_saved(src_file, name):
 
 def _ref_prompt(c, era_short, extra=""):
     if c.get("nonhuman"):
-        return (f"Polished 3D animated feature-film character reference picture of {c.get('species_en') or 'a character'}: "
+        return (f"Black-and-white graphite pencil drawing, manga-anime character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
                 f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
-    return (f"Polished 3D animated feature-film character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+    return (f"Black-and-white graphite pencil drawing, manga-anime character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
@@ -4402,10 +4439,10 @@ For EACH picture return:
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
-  * STYLE: every picture must be the same polished 3D animated feature-film render (smooth soft skin, large expressive
-    eyes, elegant attractive faces, graceful adult proportions, rich textured costumes, soft cinematic warm light with cool
-    rim light). A photo-like, flat 2D, anime, sketch or realistic-painting look, or characters whose heads are suddenly much
-    bigger (a chibi look) or whose style differs from the other pictures: at most 3;
+  * STYLE: every picture must be the same detailed black-and-white graphite PENCIL drawing in manga-anime style (fine hatching,
+    soft shading, large expressive eyes, attractive faces, graceful adult proportions, rich detailed clothes and backgrounds).
+    A colored picture, a photo-like, 3D, flat vector or painted look, or characters whose heads are suddenly much bigger (a
+    chibi look) or whose style differs from the other pictures: at most 3;
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
@@ -4447,7 +4484,8 @@ For EACH picture return:
     THIS story; an unrelated landscape or a random scene for these kinds: at most 3.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
-  from the reference: at most 3; a face that is blurred, distorted or too small to see: at most 5; several people are
+  from the reference: at most 3; a face that differs from the reference in face shape, eye shape, nose, hairstyle or age
+  even slightly (it could be another person): at most 5; a face that is blurred, distorted or too small to see: at most 5; several people are
   clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
   color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
 - "painting_box": ONLY when kind is "author": the bounding box of the framed painting of the samurai on the wall, as
@@ -4492,6 +4530,12 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "hands_p
             if j["sc"].get("look_sheets"):
                 score = min(score, int(c.get("look_score", 10)))
             fix = str(c.get("fix_en") or c.get("missing", "")).strip()
+            try:
+                if j["sc"].get("look_sheets") and int(c.get("look_score", 10)) < MIN_SCORE:
+                    fix = ("every person with exactly the face shape, eyes, nose, hairstyle and age of his or her reference "
+                           "image, the same person as in the other pictures; " + fix)[:200]
+            except (TypeError, ValueError):
+                pass
             exp, pc = expected_people(j["sc"]), c.get("people_count")
             if isinstance(exp, int) and isinstance(pc, (int, float)) and not isinstance(pc, bool) and int(pc) != exp:
                 score = min(score, 3 if int(pc) > exp else 4)         # counted by the judge, enforced by the program
@@ -4629,7 +4673,7 @@ def writer_desk_plan(era, author=None, n=0):
     scenes = a.get("scenes_en") or list(WRITER_SCENES)
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical 3D animated feature-film scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
+    visual = (f"Vertical black-and-white pencil drawing scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from behind (back view), the head and the body facing the SAME direction, never a head turned around; exactly "
               f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
               f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
@@ -4645,7 +4689,7 @@ def author_library_plan(author=None):
     a = author or {}
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical 3D animated feature-film scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
+    visual = (f"Vertical black-and-white pencil drawing scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and on the back wall in the "
               f"middle a large framed painting of a samurai warrior in armor, clearly visible, with a calm plain light area in its "
               f"lower right corner; the whole painting stays unobstructed: the writer's head and shoulders are BELOW its lower edge "
@@ -5562,16 +5606,16 @@ def main():
                     return build_prompt(FIXED_STYLE, script.get("characters", []), sc2, "", ref_names=[],
                                         limit=max((limit or PROMPT_WORDS) - 10, 60))
                 if level == 2 and gentle:    # the same event, wide: the creature stays large, the people are small
-                    return (f"Wide polished 3D animated feature-film scene, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
+                    return (f"Wide black-and-white graphite pencil drawing, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
                             f"Setting: {_trim_words(str(sc.get('era_en') or ''), 25)}. Style: "
                             f"{', '.join(FIXED_STYLE.split(', ')[:4])}. Vertical 9:16 composition, {CLEAN_SHORT}")
                 art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
                 cr = [soften_violence(x) for x in (sc.get("creatures_en") or []) if str(x).strip()][:2]
                 if cr:           # the creature and the place of the story, no people: a safe picture that still shows the subject
-                    return (f"Polished 3D animated feature-film render, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
+                    return (f"Detailed black-and-white graphite pencil drawing, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
                             f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                             f"the creature large in the middle, atmospheric detailed environment, {CLEAN_SHORT}")
-                return (f"Polished 3D animated feature-film render of a calm, quiet place in a peaceful moment. "
+                return (f"Detailed black-and-white graphite pencil drawing of a calm, quiet place in a peaceful moment. "
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
