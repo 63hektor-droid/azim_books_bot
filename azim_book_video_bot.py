@@ -5485,6 +5485,266 @@ def send_video(path, caption):
         raise RuntimeError(f"Telegram error: {r.status_code} {r.text[:300]}")
 
 
+# ---------------------------------------------------------------- the website (GitHub Pages, free)
+# After every posted video the bot also writes ONE clean web page about the novel (the same summary that was spoken) into the
+# folder docs/, plus the home page, sitemap.xml and robots.txt. GitHub Pages publishes the folder; Google finds the pages and
+# learns the name of the channel. Everything is static text (no tracking, no cost). A failure here NEVER stops a video.
+SITE_NAME = os.environ.get("AZIM_SITE_NAME") or "Samurai Reader"
+SITE_DIR = ROOT / "docs"
+SITE_META = SITE_DIR / "azim_site_pages.json"
+_SITE_PARTS = (("open", "معرفی کتاب"), ("heroes", "شخصیت‌های اصلی"), ("story", "خلاصهٔ داستان"), ("wrap", "جمع‌بندی"))
+_PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+_SITE_CSS = """
+:root{--bg:#f6f4ef;--card:#ffffff;--ink:#1b1b1f;--muted:#6a6a73;--line:#e4e0d6;--accent:#b3261e;--accent-ink:#ffffff}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1c1c20;--ink:#ececf0;--muted:#a0a0aa;--line:#2c2c33;--accent:#e0584f;--accent-ink:#141416}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn","Noto Sans Arabic",Tahoma,system-ui,sans-serif;line-height:2;font-size:17px}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.top{background:var(--card);border-bottom:1px solid var(--line)}
+.top .in{max-width:820px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:800;font-size:19px;color:var(--ink);letter-spacing:.2px;direction:ltr}
+.brand b{color:var(--accent)}
+.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:8px 18px;border-radius:999px;font-weight:700;font-size:15px;line-height:1.8}
+.btn:hover{text-decoration:none;opacity:.9}
+main{max-width:820px;margin:0 auto;padding:28px 20px 56px}
+.hero{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.hero img{display:block;width:100%;height:auto;max-height:560px;object-fit:cover;object-position:center 22%;background:#ddd}
+.hero .t{padding:22px 24px 26px}
+h1{margin:0 0 6px;font-size:28px;line-height:1.7}
+.sub{color:var(--muted);font-size:15px;margin:0}
+.sub bdi{direction:ltr}
+article{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 26px 20px;margin-top:20px}
+h2{font-size:21px;margin:26px 0 4px;padding-right:12px;border-right:4px solid var(--accent);line-height:1.8}
+p{margin:10px 0;text-align:justify}
+.cta{margin-top:22px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;text-align:center}
+.cta p{text-align:center;margin:0 0 12px}
+.more{margin-top:34px}.more h3{font-size:18px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.card{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;color:var(--ink)}
+.card:hover{text-decoration:none;border-color:var(--accent)}
+.card img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;object-position:center 22%;background:#ddd}
+.card .c{padding:10px 14px 12px}.card .c b{display:block;font-size:16px;line-height:1.7}.card .c span{font-size:13px;color:var(--muted)}
+.card.noimg .c{padding:16px 14px}
+footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:13.5px;line-height:1.9;text-align:center}
+footer a{color:var(--muted);text-decoration:underline}
+.lead{font-size:18px;color:var(--muted);margin:6px 0 22px}
+@media (max-width:560px){body{font-size:16px}h1{font-size:23px}article{padding:4px 18px 14px}.hero .t{padding:18px}}
+"""
+
+
+def _site_slug(title_en):
+    sl = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", title_en).encode("ascii", "ignore").decode().lower()).strip("-")
+    return sl or "book"
+
+
+def _site_base():
+    u = (os.environ.get("AZIM_SITE_URL") or "").strip().rstrip("/")
+    if u:
+        return u
+    repo = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
+    if "/" in repo:
+        owner, name = repo.split("/", 1)
+        return f"https://{owner.lower()}.github.io/{name}"
+    return ""
+
+
+def _site_channel_url():
+    u = (os.environ.get("AZIM_CHANNEL_URL") or "").strip()
+    if u:
+        return u
+    cid = str(CHANNEL_ID).strip()
+    if cid.startswith("@"):
+        return "https://t.me/" + cid[1:]
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChat", params={"chat_id": cid}, timeout=30)
+        un = ((r.json() or {}).get("result") or {}).get("username")
+        if un:
+            return "https://t.me/" + un
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _fa_html(text):
+    """Escaped text; every English name/word is wrapped in <bdi> so that the right-to-left sentence never scrambles."""
+    import html as _h
+    t = _h.escape(str(text), quote=False)
+    return re.sub(r"[A-Za-z][A-Za-z0-9'’\-]*(?: [A-Z][A-Za-z0-9'’\-]*)*", lambda m: f"<bdi>{m.group(0)}</bdi>", t)
+
+
+def _attr(text):
+    import html as _h
+    return _h.escape(str(text), quote=True)
+
+
+def _site_head(title, desc, canonical, base, image=None, extra_ld=None, kind="article"):
+    gsc = (os.environ.get("AZIM_GSC_TOKEN") or "").strip()
+    og_img = f'<meta property="og:image" content="{_attr(image)}">\n<meta name="twitter:card" content="summary_large_image">' if image \
+        else '<meta name="twitter:card" content="summary">'
+    can = f'<link rel="canonical" href="{_attr(canonical)}">\n<meta property="og:url" content="{_attr(canonical)}">' if canonical else ""
+    ver = f'<meta name="google-site-verification" content="{_attr(gsc)}">' if gsc else ""
+    ld = f'<script type="application/ld+json">{json.dumps(extra_ld, ensure_ascii=False)}</script>' if extra_ld else ""
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{_attr(title)}</title>
+<meta name="description" content="{_attr(desc)}">
+<meta name="robots" content="index, follow, max-image-preview:large">
+{ver}
+{can}
+<meta property="og:type" content="{kind}">
+<meta property="og:site_name" content="{_attr(SITE_NAME)}">
+<meta property="og:locale" content="fa_IR">
+<meta property="og:title" content="{_attr(title)}">
+<meta property="og:description" content="{_attr(desc)}">
+{og_img}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
+<style>{_SITE_CSS}</style>
+{ld}
+</head>
+"""
+
+
+def _site_top(home_href, channel):
+    btn = f'<a class="btn" href="{_attr(channel)}" rel="noopener" target="_blank">عضویت در کانال</a>' if channel else ""
+    return (f'<body>\n<header class="top"><div class="in"><a class="brand" href="{_attr(home_href)}">'
+            f'{_fa_html(SITE_NAME.split(" ", 1)[0])}<b> {_fa_html(SITE_NAME.split(" ", 1)[1]) if " " in SITE_NAME else ""}</b></a>{btn}</div></header>\n')
+
+
+def _site_footer(extra=""):
+    return (f'<footer>{extra}<p>© {date.today().year} {_fa_html(SITE_NAME)}</p></footer>\n</body>\n</html>\n')
+
+
+def _site_card(p, prefix):
+    img = f'<img src="{_attr(prefix + p["slug"] + "/cover.jpg")}" alt="{_attr(p["title_fa"])}" loading="lazy">' if p.get("cover") else ""
+    cls = "card" if p.get("cover") else "card noimg"
+    return (f'<a class="{cls}" href="{_attr(prefix + p["slug"] + "/")}">{img}<div class="c"><b>{_fa_html(p["title_fa"])}</b>'
+            f'<span>{_fa_html(p["author_fa"])}</span></div></a>')
+
+
+def _site_write_index(pages, base, channel):
+    pages = sorted(pages, key=lambda p: (p.get("date", ""), p["slug"]), reverse=True)
+    n = len(pages)
+    title = f"{SITE_NAME} | خلاصهٔ رمان‌های معروف جهان"
+    desc = (f"{SITE_NAME}: خلاصهٔ روان و دقیق رمان‌های معروف جهان به فارسی، همراه با ویدیو در کانال تلگرام. "
+            f"تا امروز {str(n).translate(_PERSIAN_DIGITS)} رمان.")
+    ld = {"@context": "https://schema.org", "@type": "WebSite", "name": SITE_NAME, "alternateName": ["SamuraiReader", "Samurai Reader fa"],
+          "inLanguage": "fa", "description": desc}
+    if base:
+        ld["url"] = base + "/"
+    cards = "\n".join(_site_card(p, "") for p in pages)
+    cta = (f'<div class="cta"><p>ویدیوی تصویری هر خلاصه را در کانال تلگرام {_fa_html(SITE_NAME)} ببین.</p>'
+           f'<a class="btn" href="{_attr(channel)}" rel="noopener" target="_blank">رفتن به کانال</a></div>') if channel else ""
+    html_ = (_site_head(title, desc, (base + "/") if base else "", base, extra_ld=ld, kind="website") + _site_top("./", channel)
+             + f'<main>\n<h1>{_fa_html(SITE_NAME)}</h1>\n<p class="lead">خلاصهٔ رمان‌های معروف جهان، روان و فشرده، با ویدیو در تلگرام.</p>\n'
+               f'<div class="grid">\n{cards}\n</div>\n{cta}\n</main>\n'
+             + _site_footer())
+    (SITE_DIR / "index.html").write_text(html_, encoding="utf-8")
+
+
+def publish_site_page(book, src, scenes, cover_img=None, site_dir=None):
+    """Writes docs/<slug>/index.html (+ cover.jpg), the home page, sitemap.xml, robots.txt, 404.html, .nojekyll."""
+    global SITE_DIR, SITE_META
+    if site_dir is not None:
+        SITE_DIR, SITE_META = Path(site_dir), Path(site_dir) / "azim_site_pages.json"
+    title_en = str(book.get("title_en") or "").strip()
+    title_fa = str(book.get("title_fa") or title_en).strip()
+    author_en = str(book.get("author_en") or "").strip()
+    author_fa = str(book.get("author_fa") or author_en).strip()
+    base, channel = _site_base(), _site_channel_url()
+    slug = _site_slug(title_en)
+    pdir = SITE_DIR / slug
+    pdir.mkdir(parents=True, exist_ok=True)
+
+    sections = []
+    for part, head in _SITE_PARTS:
+        paras = [" ".join(str(sc.get("narration_fa") or "").split()) for sc in scenes if sc.get("part") == part]
+        paras = [x for x in paras if x]
+        if paras:
+            sections.append((part, head, paras))
+    if not sections:
+        raise RuntimeError("no narration text for the page")
+    first = sections[0][2][0]
+    desc = (f"خلاصهٔ رمان «{title_fa}» نوشتهٔ {author_fa}: " + first)[:300]
+    if len(desc) >= 300:
+        desc = desc[:desc.rfind(" ", 0, 297)] + "…"
+
+    cover = False
+    if cover_img and Path(cover_img).exists():
+        try:
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(cover_img), "-vf", "scale='min(720,iw)':-2", "-q:v", "4", str(pdir / "cover.jpg")])
+            cover = (pdir / "cover.jpg").exists() and (pdir / "cover.jpg").stat().st_size > 2000
+        except Exception as e:  # noqa: BLE001
+            print(f"Site cover skipped ({str(e)[:80]}).", flush=True)
+
+    meta = load_json(SITE_META, [])
+    meta = [m for m in meta if m.get("slug") != slug]
+    rec = {"slug": slug, "title_fa": title_fa, "title_en": title_en, "author_fa": author_fa, "author_en": author_en,
+           "date": date.today().isoformat(), "cover": cover}
+    meta.append(rec)
+    save_json(SITE_META, meta)
+
+    url = f"{base}/{slug}/" if base else ""
+    ld = {"@context": "https://schema.org", "@type": "Article", "headline": f"خلاصهٔ رمان {title_fa}", "inLanguage": "fa",
+          "datePublished": rec["date"], "dateModified": rec["date"], "description": desc,
+          "about": {"@type": "Book", "name": title_en, "alternateName": title_fa,
+                    "author": {"@type": "Person", "name": author_en, "alternateName": author_fa}},
+          "author": {"@type": "Organization", "name": SITE_NAME}, "publisher": {"@type": "Organization", "name": SITE_NAME}}
+    if base:
+        ld["mainEntityOfPage"] = url
+        ld["publisher"]["url"] = base + "/"
+        if cover:
+            ld["image"] = f"{base}/{slug}/cover.jpg"
+    page_title = f"خلاصهٔ رمان {title_fa} | {SITE_NAME}"
+    img_abs = f"{base}/{slug}/cover.jpg" if (base and cover) else None
+    hero_img = (f'<img src="cover.jpg" alt="{_attr("طراحی مدادی برای رمان " + title_fa)}" width="576" height="1024">' if cover else "")
+    body = []
+    for part, head, paras in sections:
+        body.append(f"<h2>{_fa_html(head)}</h2>")
+        body.extend(f"<p>{_fa_html(x)}</p>" for x in paras)
+    others = [m for m in sorted(meta, key=lambda m: (m.get("date", ""), m["slug"]), reverse=True) if m["slug"] != slug][:6]
+    more = (f'<section class="more"><h3>رمان‌های دیگر</h3><div class="grid">' + "".join(_site_card(m, "../") for m in others)
+            + "</div></section>") if others else ""
+    cta = (f'<div class="cta"><p>ویدیوی تصویری این خلاصه را در کانال تلگرام {_fa_html(SITE_NAME)} ببین.</p>'
+           f'<a class="btn" href="{_attr(channel)}" rel="noopener" target="_blank">دیدن ویدیو در تلگرام</a></div>') if channel else ""
+    wiki = _attr(src.get("url") or "")
+    credit = (f'<p>این متن بازنویسی و خلاصه‌ای از بخش داستان مقالهٔ <a href="{wiki}" rel="noopener" target="_blank">ویکی‌پدیا دربارهٔ '
+              f'<bdi>{_fa_html(title_en)}</bdi></a> است و مانند آن با مجوز '
+              '<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fa" rel="license noopener" target="_blank">CC BY-SA 4.0</a> '
+              'منتشر می‌شود.</p>') if wiki else ""
+    html_ = (_site_head(page_title, desc, url, base, image=img_abs, extra_ld=ld)
+             + _site_top("../", channel)
+             + f'<main>\n<div class="hero">{hero_img}<div class="t"><h1>خلاصهٔ رمان «{_fa_html(title_fa)}»</h1>'
+               f'<p class="sub">{_fa_html(author_fa)} · <bdi>{_fa_html(title_en)}</bdi> · <bdi>{_fa_html(author_en)}</bdi></p></div></div>\n'
+               f'<article>\n' + "\n".join(body) + f'\n</article>\n{cta}\n{more}\n</main>\n'
+             + _site_footer(credit))
+    (pdir / "index.html").write_text(html_, encoding="utf-8")
+
+    _site_write_index(meta, base, channel)
+    # sitemap + robots + 404 + .nojekyll
+    urls = ([(base + "/", max(m["date"] for m in meta))] if base else []) + [(f"{base}/{m['slug']}/", m["date"]) for m in meta] if base else []
+    if base:
+        sm = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        sm += [f"<url><loc>{_attr(u)}</loc><lastmod>{d}</lastmod></url>" for u, d in urls]
+        sm.append("</urlset>")
+        (SITE_DIR / "sitemap.xml").write_text("\n".join(sm) + "\n", encoding="utf-8")
+        (SITE_DIR / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base}/sitemap.xml\n", encoding="utf-8")
+    else:
+        (SITE_DIR / "robots.txt").write_text("User-agent: *\nAllow: /\n", encoding="utf-8")
+    (SITE_DIR / "404.html").write_text(
+        _site_head(f"صفحه پیدا نشد | {SITE_NAME}", "این صفحه وجود ندارد.", "", base, kind="website") + _site_top("./", channel)
+        + '<main><h1>صفحه پیدا نشد</h1><p class="lead">آدرس را بررسی کن یا به صفحهٔ اصلی برگرد.</p>'
+          '<p><a class="btn" href="./">صفحهٔ اصلی</a></p></main>\n' + _site_footer(), encoding="utf-8")
+    (SITE_DIR / ".nojekyll").write_text("", encoding="utf-8")
+    print(f"Website page written: docs/{slug}/ ({len(meta)} page(s) in total).", flush=True)
+    return slug
+
+
 # ---------------------------------------------------------------- main
 def get_book_and_source(posted, rejected):
     """Next novel that has a usable Plot section on Wikipedia. A novel without one is rejected for good
@@ -5739,6 +5999,12 @@ def main():
     posted.append({"title_en": book["title_en"], "title_fa": book.get("title_fa") or "",
                    "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
     save_json(POSTED_FILE, posted)
+    try:                                   # the website page: any problem here is only printed, the video is already posted
+        cover_ = next((j["img"] for j in jobs if not j.get("card") and Path(j["img"]).exists()),
+                      next((j["img"] for j in jobs if Path(j["img"]).exists()), None))
+        publish_site_page(book, src, scenes, cover_)
+    except Exception as e:  # noqa: BLE001
+        print(f"Website page skipped: {e}", flush=True)
     PENDING_FILE.unlink(missing_ok=True)
     shutil.rmtree(SAVE_DIR, ignore_errors=True)
     shutil.rmtree(WORK, ignore_errors=True)
