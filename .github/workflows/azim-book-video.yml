@@ -85,6 +85,9 @@ jobs:
           AZIM_GEMINI_VOICE_FEMALE: ${{ vars.AZIM_GEMINI_VOICE_FEMALE }}  # Sulafat (default)
           AZIM_GEMINI_VOICE_MALE: ${{ vars.AZIM_GEMINI_VOICE_MALE }}      # Charon (default)
           AZIM_GEMINI_TTS_TEXT: ${{ vars.AZIM_GEMINI_TTS_TEXT }}          # plain (default) or spoken
+          # website (docs/ folder, GitHub Pages): all optional, empty = automatic
+          AZIM_GSC_TOKEN: ${{ vars.AZIM_GSC_TOKEN }}                      # Google Search Console verification code
+          AZIM_CHANNEL_URL: ${{ vars.AZIM_CHANNEL_URL }}                  # channel link (empty = found automatically)
         run: python azim_book_video_bot.py
 
       - name: Save the voice report and script (for checking)
@@ -98,15 +101,15 @@ jobs:
             azim_last_source.txt
           if-no-files-found: ignore
 
-      # always (even when the video failed): rejected books and the saved script must not be lost
-      - name: Save posted books, rejected books and the saved script
+      # always (even when the video failed): rejected books, the saved script and the website pages must not be lost
+      - name: Save posted books, rejected books, the saved script and the website
         if: always()
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          for f in azim_posted.json azim_rejected.json azim_pending.json azim_tts_usage.json azim_saved_pics; do
+          for f in azim_posted.json azim_rejected.json azim_pending.json azim_tts_usage.json azim_saved_pics docs; do
             git add -A -- "$f" 2>/dev/null || true
           done
-          git diff --cached --quiet || git commit -m "azim: update posted/rejected books and saved script"
+          git diff --cached --quiet || git commit -m "azim: update posted/rejected books, saved script and website"
           git pull --rebase --autostash origin main || true
           git push || (git pull --rebase --autostash origin main && git push)
