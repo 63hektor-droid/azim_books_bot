@@ -63,8 +63,8 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
 )
 BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 800)   # about 5.5 minutes of narration
-VISUAL_VERSION = 22       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 21       # a saved script of another version is not resumed
+VISUAL_VERSION = 23       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 22       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -1440,8 +1440,8 @@ a term. Names always as in the English text.
 {src['text']}
 {names_txt}
 Return JSON with exactly these keys:
-- "logline": ONE English sentence: who the hero is, what he or she wants, what stands in the way and what it will cost (the heart
-  of the book).
+- "logline": ONE English sentence: who the hero is, what he or she wants and what stands in the way, AT THE START of the story
+  (NEVER an outcome, a death, a result or how it ends: the logline opens the video and must not spoil anything).
 - "heroes": 2 to 4 objects {{"name": "...", "role_en": "..."}}: only the people without whom the story cannot be told.
   "name" is ONLY the FIRST name (or the shortest known name) of the person; "role_en" 6 to 14 English words that introduce this person to a viewer (age or job,
   relation to the other heroes, what he or she wants), only from the source. Say what the hero REALLY is (a person, an
@@ -1692,7 +1692,8 @@ Return JSON with exactly these keys:
 - "scenes": a list of scene objects in EXACTLY this order of "part" ({min_sc} to {max_sc + 2} scenes in all):
     1. ONE scene with part "open": the introduction, 2 or 3 sentences (35 to 60 words): the name of the novel and of its author
        in English letters, when it was published (only if the AUTHOR SENTENCE SOURCE says so), and in one GRIPPING sentence (a hook: the
-       hero, what he or she wants and the problem that threatens it, from the logline). NO SPOILER AND NO JUMP: this scene tells only the situation at
+       hero, what he or she wants and the problem that threatens it, from the logline; NEVER an outcome, a death, a result
+       or anything that happens later: the end of the story is a surprise that only the last scenes reveal). NO SPOILER AND NO JUMP: this scene tells only the situation at
        the START of the story (event 1); it never mentions how the story goes on or ends. Nothing else about the author (no
        biography), no praise.
     2. ONE scene with part "heroes" (only if the spine has 2 or more heroes): 2 to 4 sentences (35 to 65 words) that say who is
@@ -1746,12 +1747,19 @@ Rules for the narration:
   SENTENCE TEST: before you keep a sentence ask "if I delete it, does the viewer lose a hero, a cause, a turning point, the
   climax or the ending?" If not, do not write it. A sentence that only decorates, repeats, describes a mood or names a side
   person is deleted. Better a short, complete, clear summary than a long one.
+- NO SURPRISE PEOPLE: a person is named ONLY if he or she is a hero or acts in an event of the spine; the FIRST time a name is
+  said (after the heroes scene) the same sentence says who that person is (relation or job: «پدرِ ...»، «خدمتکارِ خانه»); a
+  person who is not in the spine is never mentioned, and nobody appears for the first time in the last scenes or the wrap-up.
+- CORRECT, FLOWING PERSIAN (a sentence that is broken or in English word order confuses the listener): every sentence is complete
+  (subject, object, verb at the end) in natural Persian word order, never a word-for-word translation; each sentence is linked to
+  the one before it by a connector (سپس، پس از آن، اما، چون، برای همین، در همان حال) or by its content; one tense (simple past)
+  for the whole story; one idea per sentence, short enough to say in one breath.
 - THE ENDING ONLY AT THE END (the listener gets confused when it comes early): no sentence before the last story scene tells
   or hints at the final outcome (a death, a marriage, an escape, who did it, how it ends); the last event and its result are told
   ONLY in the last story scene, after everything else.
-- THE ESSENCE: the listener must grasp the heart of the book: what the hero wants, what stands in the way, what it costs and
-  what the story finally shows. Every event is told as a step of this one main line, in plain words of cause and effect; never
-  lose the main line in side facts.
+- THE ESSENCE: the listener must grasp the heart of the book: what the hero wants and what stands in the way. Every event is told
+  as a step of this one main line, in plain words of cause and effect; never lose the main line in side facts. What it cost and
+  what the story finally shows come only at the end, never before.
 - ORDER: tell the events exactly in the order of the spine, ONE straight line from the first event to the last. NEVER jump
   ahead to the ending or to a later event and then come back (no teaser, no hint of the end before the wrap-up); never
   mention a later event before its turn; say «قبل از آن» or «سال‌ها پیش» only when the spine marks a flashback.
@@ -3366,7 +3374,12 @@ _VOICE_WORDS = (("در", "دَر"), ("این", "اِین"), ("را", "رَا"), 
 # (رسوا -> رسوا، رسوایی، رسواکننده...). Only the voice text gets the vowel mark: the subtitles stay clean.
 _VOICE_PREFIX = (("رسوا", "رُسوا"), ("دسر", "دِسِر"), ("دلهره", "دلهُره"))
 # «عمو» is read with fatha (عَمو) but «عمومی» keeps its damma: so only these exact word forms are marked.
-_VOICE_REGEX = ((rf"(?<![\u0600-\u06FF])کشنده(?![{_PL}])", "کُوشَنده"),
+def _dtol(word):
+    """A pattern for a word that also matches it WITH vowel marks between the letters (a mark may already be there)."""
+    return "".join(r"[\u200c ]?" if ch in " \u200c" else re.escape(ch) + r"[\u064B-\u0655\u0670]*" for ch in word)
+
+
+_VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُوشَنده"),
                 (rf"(?<![{_PL}])عمو(?=(?:ی|یی|\u200c?ها|\u200c?های|یم|یت|یش|یمان|یتان|یشان)?(?![{_PL}]))", "عَمو"),)
 
 
@@ -3384,8 +3397,13 @@ _FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u06
 # Words with a ZWNJ or a space inside (compounds): matched by a pattern; the lookahead keeps the ending of the word.
 #   جیب‌بری: first ب with sukun, SECOND ب with damma (the voice read it with fatha: بَری)
 #   پاک‌طینت: ک with sukun (no ezafe), «طینت» written with ت so that ط never gets a kasra of its own
-_FORCE_REGEX = ((rf"(?<![{_PL}])جیب[\u200c ]?بر(?=(?:ی|ان|ها|هایی?|ی\u200c?ها)?(?![{_PL}]))", "جیبْ\u200cبُر"),
-                (rf"(?<![{_PL}])پاک[\u200c ]?طینت", "پاکْ\u200cتینَت"))
+#   توطئه: the voice read «توطیه»: written with ع (glottal stop) so that it is said tav-te-e
+#   ورطه: «وَرْطه» (the voice said «وارطه»);  پشیمان: «پَ‌شیمان» (the voice said «پِشیمان»)
+_FORCE_REGEX = ((rf"(?<![{_PL}]){_dtol('جیب‌بر')}(?=(?:ی|ان|ها|هایی?|ی\u200c?ها)?(?![{_PL}]))", "جیبْ\u200cبُر"),
+                (rf"(?<![{_PL}]){_dtol('پاک‌طینت')}", "پاکْ\u200cتینَت"),
+                (rf"(?<![{_PL}]){_dtol('توطئه')}", "تَوْتِعِه"),
+                (rf"(?<![{_PL}]){_dtol('ورطه')}", "وَرْتِه"),
+                (rf"(?<![{_PL}]){_dtol('پشیمان')}", "پَ\u200cشیمان"))
 
 
 def force_marks(t):
@@ -3425,7 +3443,21 @@ def load_pronunciation():
     return words, prefixes, regexes
 
 
+_VOICE_NAMES = {}
+
+
+def spell_names_for_voice(t):
+    """Every English name of the narration is replaced by its ONE Persian spelling (the map of the video), so that the
+    voice says it the same way in every paragraph. A Latin word that is not in the map gets a fixed letter-by-letter spelling."""
+    for k in sorted(_VOICE_NAMES, key=len, reverse=True):
+        v = _VOICE_NAMES[k]
+        if k and v:
+            t = re.sub(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", lambda m, v=v: v, t)
+    return re.sub(r"[A-Za-z][A-Za-z'’\-]*", lambda m: latin_to_fa(m.group(0)), t)
+
+
 def gemini_voice_text(t):
+    t = spell_names_for_voice(t)
     t = fix_numbers(t)
     if not _PRON:
         _PRON["rules"] = load_pronunciation()
@@ -3721,6 +3753,8 @@ def gemini_voice_allowed():
 def make_voice(scenes, kind, names=None):
     """ONE engine and ONE voice for the WHOLE video. If Gemini TTS fails on any paragraph, the whole video is
     read again by Pocket TTS (never one paragraph with one voice and the next with another)."""
+    _VOICE_NAMES.clear()
+    _VOICE_NAMES.update({str(k).strip(): str(v).strip() for k, v in (names or {}).items()})
     if gemini_tts_ready() and gemini_voice_allowed():
         for mdl in GEMINI_TTS_MODELS:
             if mdl in _gtts_dead_models or not gemini_tts_ready():
@@ -3902,7 +3936,12 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     if creatures:
         count = count.replace("nobody else", "no other people")
     if total >= 2:
-        count += "Every person has a different face, hairstyle and clothes (light or dark tones); same natural head size for all. "
+        count += ("Every person has a different face, hairstyle and clothes (light or dark tones); same natural head size for all; "
+                  "people stand apart, bodies never overlap. ")
+    if any(re.search(r"\b(man|boy|male|father|husband|king|prince|gentleman)\b", str(c.get("tag_en") or c.get("look_en") or "")[:60], re.I)
+           and not re.search(r"\b(woman|girl|female|mother|wife|queen|lady)\b", str(c.get("tag_en") or c.get("look_en") or "")[:60], re.I)
+           for c in present):
+        count += "Men wear men's clothes. "
     if (present or others) and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
                                                     + " ".join(map(str, scene.get("must_show") or []))):
         count += "Everybody wears proper day clothes. "
@@ -4087,6 +4126,18 @@ def _cf_log(r, klein, w, h, n_refs, secs):
         print(f"  CF answer headers: {str(hdr)[:700]}", flush=True)
 
 
+def to_gray(path):
+    """Every picture is a black-and-white pencil drawing. Whatever colour a model (klein, klein with references, the old
+    square model) adds is removed here, in code (free): the pictures of one video can never change to coloured ones."""
+    try:
+        tmp = path.with_name(path.stem + "_g" + path.suffix)
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path), "-vf", "hue=s=0", "-q:v", "2", str(tmp)])
+        if tmp.exists() and tmp.stat().st_size > 1000:
+            os.replace(tmp, path)
+    except Exception as e:  # noqa: BLE001
+        print(f"Gray conversion skipped ({str(e)[:80]}).", flush=True)
+
+
 def cf_image(model, prompt, path, seed=None, refs=None, size=None):
     """One Cloudflare Workers AI picture. Returns "ok", "hard" (this way of asking is refused: do not repeat it),
     "flagged" (the safety filter refused this wording: waiting does not help, a gentler wording may) or
@@ -4119,10 +4170,12 @@ def cf_image(model, prompt, path, seed=None, refs=None, size=None):
                 ctype = r.headers.get("content-type", "")
                 if ctype.startswith("image"):
                     path.write_bytes(r.content)
+                    to_gray(path)
                     return "ok"
                 b64 = (r.json().get("result") or {}).get("image")
                 if b64:
                     path.write_bytes(base64.b64decode(b64))
+                    to_gray(path)
                     return "ok"
             print(f"  -> status={r.status_code} body={r.text[:600]!r}", flush=True)
             codes, msg = _cf_errors(r)
@@ -4453,6 +4506,8 @@ For EACH picture return:
     hat or bag, an empty rope above a toppled chair for a hanging); ANY dead, lying or sheet-covered body, or a person hanging
     from a rope or by the hands: at most 2. A ghost or spirit must be a translucent glowing figure with the person's shape and
     clothes; only a halo, light or mist: at most 3;
+  * two bodies that merge under one head, a body with two heads, or a man in a dress or women's clothes (or a woman in men's
+    clothes) against his or her sheet: at most 2;
   * the place and situation must fit the narration (inside/outside, kind of place, time, weather), else at most 5;
   * every character of the sheets must be visible in the picture; one missing: at most 5;
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
@@ -5208,6 +5263,9 @@ def setup_sub_font():
     return "DejaVu Sans"
 
 
+SUB_LEAD = float(os.environ.get("AZIM_SUB_LEAD") or 0.18)      # seconds: a subtitle is shown a little before its words
+
+
 def subtitle_text(text, names=None):
     """Subtitle: no diacritics; English names stay in English (Latin) letters exactly as the voice says them.
     A line that starts with a Latin name gets a right-to-left mark so the Persian line keeps its direction."""
@@ -5300,35 +5358,40 @@ def build_video(scenes, durs, out_path, names=None):
             "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1", clip.name], cwd=WORK)
         clips.append(clip.name)
 
-        # subtitles: always the clean text (no diacritics), cut into sentences
+        # subtitles: always the clean text (no diacritics). EVERY phrase gets its own place on the real pauses of the voice
+        # (one dynamic-programming cut for the whole paragraph), and is shown SUB_LEAD seconds early: the voice is never ahead.
         full_sents = split_sentences(subtitle_text(s["narration_fa"], names))
-        spans = None
-        if len(full_sents) >= 2:
+        phr_all = []
+        for fs in full_sents:
+            ph = chunk_phrases(fs)
+            for k_, x in enumerate(ph):
+                phr_all.append((x, k_ == len(ph) - 1))
+        pspans = None
+        if len(phr_all) >= 2:
             try:
                 vmp3 = WORK / f"voice_{i:02d}.mp3"
                 real = probe_duration(vmp3)
-                cuts = split_by_silence(vmp3, [max(len(x), 1) for x in full_sents], [0.3] * len(full_sents),
-                                        min_gap=0.35, min_sil=0.12, window_min=1.5, win_frac=0.25)
+                extras = [0.3 if end_ else (0.12 if x.rstrip().endswith(("،", ",")) else 0.0) for x, end_ in phr_all]
+                cuts = split_by_silence(vmp3, [max(len(x), 1) for x, _ in phr_all], extras,
+                                        min_gap=0.25, min_sil=0.1, window_min=0.9, win_frac=0.2)
                 k_ = d / real if real > 0 else 1.0
-                spans = [(a * k_, b * k_) for a, b in cuts]
+                pspans = [(a * k_, b * k_) for a, b in cuts]
             except Exception as e:  # noqa: BLE001
                 note(f"  Subtitle timing of paragraph {i} by pauses failed ({str(e)[:80]}): characters are used.")
-        if not spans:
-            spans = [(0.0, d)]
-            full_sents = [" ".join(full_sents)]
-        for si_, (fs, (sa, sb)) in enumerate(zip(full_sents, spans)):
-            phr = chunk_phrases(fs)
-            weights = [max(len(x), 1) for x in phr]
-            total_w = sum(weights)
-            acc = 0
-            for x, w in zip(phr, weights):
-                start = t + sa + (sb - sa) * acc / total_w
-                acc += w
-                end = t + sa + (sb - sa) * acc / total_w
-                if acc == total_w and si_ == len(spans) - 1:
-                    end += PAD * 0.5
-                n += 1
-                srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
+        if not pspans or len(pspans) != len(phr_all):
+            wts = [max(len(x), 1) for x, _ in phr_all] or [1]
+            tot_w, acc = float(sum(wts)), 0.0
+            pspans = []
+            for w_ in wts:
+                pspans.append((d * acc / tot_w, d * (acc + w_) / tot_w))
+                acc += w_
+        for idx_, ((x, end_), (sa, sb)) in enumerate(zip(phr_all, pspans)):
+            start = max(t + sa - SUB_LEAD, 0.0)
+            end = max(t + sb - SUB_LEAD, start + 0.25)
+            if idx_ == len(phr_all) - 1:
+                end += PAD * 0.5
+            n += 1
+            srt.append(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{bidi_wrap(x)}\n")
         t += length
 
     if _dropped_chars:
