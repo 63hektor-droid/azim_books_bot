@@ -71,7 +71,7 @@ SCRIPT_VERSION = 21       # a saved script of another version is not resumed
 # (CC BY-SA). The bot retells it in Persian; it never summarizes the book on its own.
 # The list builder already keeps only novels with a Plot of 350-900 words; these limits are a wider safety net.
 PLOT_MIN_WORDS = int(os.environ.get("AZIM_PLOT_MIN") or 250)
-PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 1100)
+PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 2600)
 
 # ----- narrator engine: "gemini" (Gemini TTS, default; any failure or finished quota -> Pocket TTS for that scene)
 # ----- or "pocket" (offline Pocket TTS only). Switch without editing code: repository variable AZIM_TTS.
@@ -294,7 +294,9 @@ def save_json(path, obj):
 
 
 def rejected_titles(rejected):
-    return [r["title_en"] if isinstance(r, dict) else str(r) for r in rejected]
+    # a book refused only because its Plot was too long/short for the OLD limits is tried again (the limits changed)
+    return [r["title_en"] if isinstance(r, dict) else str(r) for r in rejected
+            if not (isinstance(r, dict) and "no usable Plot section" in str(r.get("reason") or ""))]
 
 
 def reject_book(rejected, book, reason):
@@ -368,8 +370,14 @@ SIG_KEYS = re.compile(r"legacy|influence|reception|critical|significance|impact|
 def wiki_api(lang, params):
     p = dict(params)
     p.update({"format": "json", "formatversion": 2})
-    r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params=p, headers=WIKI_HEADERS, timeout=40)
+    for wait in (0, 4, 12):
+        if wait:
+            time.sleep(wait)
+        r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params=p, headers=WIKI_HEADERS, timeout=40)
+        if r.status_code != 429:
+            break
     r.raise_for_status()
+    time.sleep(0.4)                      # polite pause between Wikipedia requests
     return r.json()
 
 
@@ -485,8 +493,8 @@ PLOT_HEAD_LANG = {
     "es": re.compile(r"^(argumento|sinopsis|resumen|trama)", re.I),
 }
 CHAR_HEAD = re.compile(r"^(characters?|main characters?|principal characters?|major characters?|cast of characters|cast)\b", re.I)
-EXTRA_WORDS_MAX = int(os.environ.get("AZIM_EXTRA_WORDS") or 800)      # words taken from one other-language summary
-EXTRA_SOURCES = int(os.environ.get("AZIM_EXTRA_SOURCES") or 3)       # at most this many other-language summaries
+EXTRA_WORDS_MAX = int(os.environ.get("AZIM_EXTRA_WORDS") or 600)      # words taken from one other-language summary
+EXTRA_SOURCES = int(os.environ.get("AZIM_EXTRA_SOURCES") or 2)       # at most this many other-language summaries
 
 
 THEME_HEAD = re.compile(r"^(themes?|themes and motifs|analysis|interpretation|symbolism|style and themes|major themes|"
@@ -580,6 +588,7 @@ def fetch_source(book):
     parts = ["INTRODUCTION (what the novel is, who wrote it, when):\n" + en["lead"][:900],
              f"PLOT (an editor-reviewed concise summary of the whole story, {pw} words; the ONLY source of "
              "the events):\n" + en["plot"]]
+    n_core = len(parts)
     for name_, txt_ in fetch_extra_plots(en["title"], pw):
         parts.append(f"SECOND SOURCE - PLOT from the {name_} Wikipedia (another editor's summary of the SAME novel: use it to "
                      "confirm events, to fill what the English PLOT skips and to understand a term; when they disagree the "
@@ -593,9 +602,13 @@ def fetch_source(book):
     if en["sig"]:
         parts.append("SIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the "
                      "novel matters):\n" + en["sig"][:1500])
+    core = list(parts[:n_core])
+    if en["sig"]:
+        core.append("SIGNIFICANCE (themes, reception, legacy: use ONLY for the closing wrap-up, to say why the "
+                    "novel matters):\n" + en["sig"][:1500])
     url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(en["title"].replace(" ", "_"))
     print(f"Source: Wikipedia Plot section, {pw} words (+ {len(parts) - 2 - bool(en['sig'])} extra part(s)).", flush=True)
-    return {"text": "\n\n".join(parts), "en_words": pw, "url": url, "title": en["title"],
+    return {"text": "\n\n".join(parts), "text_write": "\n\n".join(core), "en_words": pw, "url": url, "title": en["title"],
             "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"}
 
 
@@ -1506,7 +1519,7 @@ def _norm_wrap(t):
     return t.replace("\u200c", "").replace(" ", "")
 
 
-def tagged_to_scenes(raw, n_ev, strict=True, max_words=None):
+def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text=""):
     """The writer tags EVERY sentence with the story event it tells (or with its part). The program joins the
     sentences of a scene into the narration and DROPS every sentence whose tag is not allowed for its part, so that a
     sentence that serves no event never reaches the video. Returns (scenes, problems)."""
@@ -1603,6 +1616,11 @@ def tagged_to_scenes(raw, n_ev, strict=True, max_words=None):
                        "characters_present": [str(n) for n in (s.get("characters_present") or [])],
                        "setting_en": str(s.get("setting_en") or ""), "action_en": str(s.get("action_en") or ""),
                        "mood_en": str(s.get("mood_en") or "")})
+    if open_text and scenes and not any(x["part"] == "open" for x in scenes):
+        scenes.insert(0, {"part": "open", "narration_fa": open_text, "ev_ids": [], "source_en": "", "characters_present": [],
+                          "setting_en": "", "action_en": "", "mood_en": ""})
+        print("Script check: the opening scene was missing: a plain one was added.", flush=True)
+    scenes.sort(key=lambda x: {"open": 0, "heroes": 1, "story": 2, "wrap": 3}[x["part"]])     # a misplaced part goes to its place
     seq = "".join({"open": "o", "heroes": "h", "story": "s", "wrap": "w"}[x["part"]] for x in scenes)
     if not re.fullmatch(r"oh?s{3,}w{1,3}", seq):
         problems.append(f"the order of the parts is '{seq}' (needed: open, heroes, story..., wrap...)")
@@ -1658,7 +1676,7 @@ with its cause. The viewer never read the book and cannot go back: after this vi
 what they want, what happens in order and why, and how it ends. You tell the spine event by event and NOTHING else.
 
 SOURCE TEXT:
-{src['text']}
+{src.get('text_write') or src['text']}
 
 STORY SPINE (the events to tell, in this order; "id" is the event number used for the tags):
 {spine_json}
@@ -1778,7 +1796,8 @@ Rules for the visuals:
         try:
             hi_words = int(re.findall(r"\d+", words)[-1]) if re.findall(r"\d+", words) else None
             scenes, problems = tagged_to_scenes(data.get("scenes"), n_ev, strict=attempt < 3,
-                                                max_words=int(hi_words * 1.2) if hi_words else None)
+                                                max_words=int(hi_words * 1.2) if hi_words else None,
+                                                open_text=f"در این ویدیو، رمان {book['title_en']}، نوشتهٔ {book['author_en']}، را مرور می‌کنیم.")
         except Exception as e:  # noqa: BLE001
             scenes, problems = [], [f"unreadable script: {e}"]
         if cast:
