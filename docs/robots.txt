@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://63hektor-droid.github.io/azim_books_bot/sitemap.xml

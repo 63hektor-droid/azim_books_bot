@@ -443,5 +443,15 @@
   "date_pt": "2026-11-11",
   "wiki": "The Count of Monte Cristo",
   "date": "2026-11-12"
+ },
+ {
+  "title_en": "The Three Musketeers",
+  "title_fa": "سه تفنگدار",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-13",
+  "wiki": "The Three Musketeers",
+  "date": "2026-11-13"
  }
 ]
