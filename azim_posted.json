@@ -453,5 +453,15 @@
   "date_pt": "2026-11-13",
   "wiki": "The Three Musketeers",
   "date": "2026-11-13"
+ },
+ {
+  "title_en": "Anna Karenina",
+  "title_fa": "آنا کارنینا",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-14",
+  "wiki": "Anna Karenina (1997 film)",
+  "date": "2026-11-14"
  }
 ]
