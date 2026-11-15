@@ -463,5 +463,15 @@
   "date_pt": "2026-11-14",
   "wiki": "Anna Karenina (1997 film)",
   "date": "2026-11-14"
+ },
+ {
+  "title_en": "Great Expectations",
+  "title_fa": "آرزوهای بزرگ",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-14",
+  "wiki": "Great Expectations",
+  "date": "2026-11-15"
  }
 ]

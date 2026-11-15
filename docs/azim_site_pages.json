@@ -16,5 +16,14 @@
   "author_en": "Leo Tolstoy",
   "date": "2026-11-14",
   "cover": true
+ },
+ {
+  "slug": "great-expectations",
+  "title_fa": "آرزوهای بزرگ",
+  "title_en": "Great Expectations",
+  "author_fa": "چارلز دیکنز",
+  "author_en": "Charles Dickens",
+  "date": "2026-11-15",
+  "cover": true
  }
 ]
