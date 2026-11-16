@@ -195,6 +195,9 @@ def parse_json_text(text):
         raise
 
 
+SLOW_COUNT = {}
+
+
 def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, audio=None, images=None):
     parts = [{"text": prompt}]
     if images:                      # several pictures in one call, each one labeled with its number
@@ -271,6 +274,11 @@ def gemini_json(prompt, minutes=12, models=None, image=None, read_timeout=150, a
             except Exception as e:  # noqa: BLE001
                 last = f"{model}: {e}"
                 print(last, flush=True)
+                if "timed out" in str(e).lower():
+                    SLOW_COUNT[model] = SLOW_COUNT.get(model, 0) + 1
+                    if SLOW_COUNT[model] >= 2 and len([m for m in models if m not in DEAD_MODELS and m != model]) >= 1:
+                        DEAD_MODELS.add(model)
+                        print(f"  -> {model} timed out twice (2.5 minutes lost each time): not used again in this run.", flush=True)
             time.sleep(8)
         if not [m for m in models if m not in dead and m not in DEAD_MODELS]:
             continue                      # nothing left to wait for: the loop start decides what to raise
@@ -1421,7 +1429,7 @@ def repair_with_timeline(events, timeline, lo):
     return events
 
 
-def clean_spine(d, lo):
+def clean_spine(d, lo, relax=0):
     """A usable story spine or None. Events are numbered 1..n again, in the order they were given."""
     if not isinstance(d, dict):
         return None
@@ -1436,7 +1444,8 @@ def clean_spine(d, lo):
                            "role_en": " ".join(str(x.get("role_en") or "").split()),
                            "quote_en": " ".join(str(x.get("quote_en") or "").split())[:240],
                            "flashback": bool(x.get("flashback"))})
-    if len(events) < max(5, lo - 1):
+    if len(events) < max(5, lo - 1 - relax):
+        print(f"Story spine rejected: the model gave {len(events)} events, {max(5, lo - 1 - relax)} are needed.", flush=True)
         return None
     heroes = []
     for h in d.get("heroes") or []:
@@ -1509,7 +1518,7 @@ def order_events_by_source(events, text):
     return out, moved
 
 
-def build_spine(book, src, cast):
+def build_spine(book, src, cast, relax=0):
     """Step B1 (ONE Gemini call, English): BEFORE any Persian is written, decide WHAT the viewer must be told: the
     heroes and the few main events in order, each joined to the one before by its cause. The narration is then written
     event by event, so a sentence that serves no event cannot enter the video."""
@@ -1590,7 +1599,7 @@ Return JSON with exactly these keys:
 - "author_en": ONE English sentence: who wrote the novel and when it was published, ONLY from the INTRODUCTION (\"\" if the
   source does not say)."""
     d = gemini_json(prompt, minutes=8, models=WRITE_MODELS)
-    sp = clean_spine(d, lo)
+    sp = clean_spine(d, lo, relax)
     if sp:
         sp["events"], moved = order_events_by_source(sp["events"], src["text"])
         if moved:
@@ -1938,8 +1947,8 @@ def write_scenes(book, src, plan):
     cast = design_cast(book, src)
     cast_block = cast_prompt(cast)
     spine = None
-    for _ in range(3):
-        spine = build_spine(book, src, cast)
+    for att_ in range(3):
+        spine = build_spine(book, src, cast, relax=att_ * 2)
         if spine:
             for k_ in ("title_fa", "author_fa"):
                 if not book.get(k_) and spine.get(k_):
