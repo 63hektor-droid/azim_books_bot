@@ -483,5 +483,15 @@
   "date_pt": "2026-11-15",
   "wiki": "A Tale of Two Cities",
   "date": "2026-11-15"
+ },
+ {
+  "title_en": "Wuthering Heights",
+  "title_fa": "بلندی‌های بادگیر",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-15",
+  "wiki": "Wuthering Heights",
+  "date": "2026-11-16"
  }
 ]
