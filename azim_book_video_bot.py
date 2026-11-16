@@ -1011,7 +1011,7 @@ def enforce_distinct_cast(chars):
     return chars
 
 
-_ACCESSORIES_M = ("a flat cap", "round glasses", "a bow tie", "a long scarf", "a brimmed hat", "a walking cane")
+_ACCESSORIES_M = ("a flat cap", "a bow tie", "a long scarf", "a brimmed hat", "a walking cane")
 _ACCESSORIES_F = ("a headscarf", "a shawl over the shoulders", "a hair ribbon", "a white apron", "a bonnet",
                   "a necklace with a pendant")
 
@@ -1269,7 +1269,7 @@ Return JSON with exactly these keys:
   family name or title), written the same way in every text. "look_en" is ONE look sheet of 55 to 75 English words in
   this fixed order: gender and exact age in years; body build; skin tone; eyes (color and shape);
   eyebrows; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
-  freckles, glasses...); the DAY OUTFIT with colors (see the OUTFIT rule below). It is pasted into EVERY picture of this
+  freckles; never glasses, they are drawn deformed); the DAY OUTFIT with colors (see the OUTFIT rule below). It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
@@ -1871,6 +1871,7 @@ Rules for the narration:
 - The voice engine can fail on very long noun chains: at most TWO consecutive ezafe links in a noun phrase (never
   "noun of noun of noun of noun"); prefer verbs and clauses over long genitive chains.
 - Correct grammar and spelling, proper half-spaces. It will be read aloud: no emojis, no brackets, no abbreviations.
+- YEARS: say a year like «هزار و هفتصد و هشتاد» (for 1780), NEVER «هفده صد و هشتاد»: the style of «seventeen hundred» is wrong in Persian.
 - NUMBERS: write every number as separate Persian words with spaces and a separate «و» («هفتاد و هفت», «بیست و پنج», «صد و بیست»),
   never as one glued word («هفتادوهفت»), and never with digits.
 - Never use English loanwords or words that sound English (for example «پادکست»، «ویدئو»، «آنلاین»، «لایک»،
@@ -2069,6 +2070,7 @@ Return JSON with exactly these keys, in this order:
 - "order_problems": ids of sentences that tell something BEFORE the thing that causes it, or whose time order contradicts the
   rest (a later event or the ending told too early, a jump ahead and then back again, an earlier event told after a later
   one). Empty list if the story runs in one straight line.
+- "spoilers": ids of sentences of the OPENING and HEROES parts (the first scenes) that tell or hint at something that happens LATER in the story (the ending, a death, a result, who wins or loses, how it ends); each {{"id": "0.1"}}. Empty list if none. The opening may only describe the situation at the START.
 - "missing_events": ids (numbers) of those key events of this list that you did NOT clearly hear in the narration:
   {json.dumps(ev_list, ensure_ascii=False)}. Empty list if you heard all of them."""
     try:
@@ -2103,6 +2105,10 @@ Return JSON with exactly these keys, in this order:
             gid = str(g.get("id") if isinstance(g, dict) else g)
             if gid in valid and gid not in protect and gid not in [c["id"] for c in confusing]:
                 confusing.append({"id": gid, "problem": "told in the wrong order: fix the order or the bridge"})
+        for g in (t.get("spoilers") or []):
+            gid = str(g.get("id") if isinstance(g, dict) else g)
+            if gid in valid and gid not in protect and gid not in [c["id"] for c in confusing]:
+                confusing.append({"id": gid, "problem": "it reveals something that happens later (the ending or a result): replace it with a sentence about the START situation only, with no outcome"})
         ev_ids = {e["id"] for e in (spine.get("events") or [])}
         missing = [int(x) for x in (t.get("missing_events") or []) if str(x).lstrip("-").isdigit() and int(x) in ev_ids][:4]
         print(f"Story gate (round {round_}): confusing={len(confusing)} irrelevant={len(irrelevant)} "
@@ -2446,7 +2452,7 @@ _EVENT_LEXICON = [
     (_pw(r"حلق\s*آویز|به\s*دار\s*آویخت|دار\s*زد|خود\s*را\s*آویخت"), ("rope", "noose", "toppled chair"),
      "a thick rope hangs empty from a ceiling beam above a toppled wooden chair in a dim quiet room; nobody hangs from it and "
      "no body is shown anywhere"),
-    (_pw(r"کشته|جان\s*باخت|درگذشت|فوت\s*کرد|به\s*قتل\s*رسید|خودکشی"), ("grief", "mourn", "candle", "bowed"),
+    (_pw(r"کشته|جان\s*باخت|درگذشت|فوت\s*کرد|به\s*قتل\s*رسید|خودکشی"), ("grief", "mourn", "candle", "bowed", "kill", "murder", "stab", "sinking", "falling", "victim"),
      "the people who loved the lost person stand with bowed heads and tears of grief beside a small table with a lit candle "
      "and a single white flower; nobody lies on the ground and no body is shown anywhere"),
     (_pw("سقوط|پرت شد"), ("fall", "fell"), "a person falls through the air"),
@@ -3004,7 +3010,7 @@ Rules:
   child, a small boy, nobody else"). «a mother and her child» is ONE adult and ONE child; when the source says that she has
   one child, a second child is NEVER drawn; a crowd, a family or any other person appears only when the part says so.
   Kind "author": "exactly one person, seen only from behind".
-- "others": a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
+- "others": an EMPTY LIST by default; a person is listed ONLY when the Persian part itself names or clearly implies him or her (a rescuer, a doctor...); NEVER invent a bystander, servant, child, relative or crowd. When there is one: a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
   (a rescuer, a doctor, a neighbour, a soldier, a child of the crowd...): gender, age, hair color, build and clothes (color
   and kind) that fit his or her JOB (a soldier in uniform, a doctor in a dark coat; never a uniform on a non-soldier). Each of them must look completely different from every named character and from each other: another hair
   color, other clothes colors and another age or build (the rescuer never looks like the person who is rescued, a stranger
@@ -3045,6 +3051,7 @@ Rules:
 - FIGURATIVE SENTENCES: when the part says something with a figure of speech (a metaphor, a personification, an idiom, a
   euphemism: for example a ship that «kills itself»), draw the REAL event behind it, judged from "text_en", the SOURCE TEXT and
   the story, never the literal impossible image.
+- SAME AGE EVERYWHERE (very important): every named character is drawn at exactly the age of his or her look sheet in EVERY picture, never as a child in one picture and as a grown person in another. When the narration speaks about the childhood or youth of a character, draw the place, the objects and the other people of that scene, or the adult character remembering (adult age, thoughtful face), NEVER a child version of the named character.
 - AGE FIT: every person is drawn at the age that fits his or her ROLE in THIS moment (parent, bride, groom, worker, child,
   old person); a child is NEVER drawn as a bride, a groom, a lover or in a wedding dress or a wedding scene: a person who
   marries or is engaged is drawn as a young adult of at least 18 years.
@@ -3079,11 +3086,13 @@ Rules:
   creature ITSELF drawn big and clearly visible (roaring, charging, rearing, looming over the place, its whole head and body
   seen), people running, hiding, climbing or behind bars, and fear on the faces. The creature is NEVER reduced to a shadow, a
   far away dot or something outside the picture.
-- NO BODIES (very important): never draw a dead, lying, unconscious or sleeping-on-the-ground person, a body under a cloth or
-  a sheet, or a person hanging. A death, a murder, a suicide or an accident is told by what the LIVING do and see: grief on
-  their faces, a lit candle, a flower, an empty chair or bed, a dropped hat or bag, an empty place; a hanging is shown only by
-  an empty rope above a toppled chair. Everybody in every picture is alive, awake and upright (standing or sitting), except a
-  person who sleeps or is ill in a BED when the sentence says so.
+- KILLING IS PICTURED, VERY GENTLY (very important): when the narration tells a killing, a murder or a death by violence, the
+  picture shows THAT moment in the softest storybook way: the killer and the victim in the same picture, the weapon or the threat
+  visible, the victim falling or sinking down with a shocked face, the killer standing over in shadow, a dark and sad mood; NO
+  blood, NO open wound, NO gore, no explicit body. A death by illness, age, accident or suicide is told by what the LIVING do and
+  see: grief on their faces, a lit candle, a flower, an empty chair or bed, a dropped hat or bag; a hanging is shown ONLY by an
+  empty rope above a toppled chair. Never draw a body under a sheet or a person hanging. Everybody else is alive, awake and upright
+  (standing or sitting), except a person who sleeps or is ill in a BED when the sentence says so.
 - SAME SCALE: all people of one picture are drawn at ONE consistent scale: adults about equally tall at the same distance, a
   child clearly smaller, nobody a giant or a dwarf next to the others; the heads of everybody have the same natural size
   relative to the bodies.
@@ -3561,7 +3570,11 @@ _FORCE_REGEX = ((rf"(?<![{_PL}]){_dtol('جیب‌بر')}(?=(?:ی|ان|ها|ها�
                 (rf"(?<![{_PL}]){_dtol('پشیمان')}", "پَ\u200cشیمان"))
 
 
+_PIP_RE = re.compile(rf"(?<![{_PL}]){_dtol('پیپ')}(?=(?:\u200c?ها|\u200c?های)?(?![{_PL}]))")
+
+
 def force_marks(t):
+    t = _PIP_RE.sub("پیپ\u0652", t)          # «پیپ»: the last «پ» has a sukun (the voice read it with a kasra)
     for pat, marked in _FORCE_REGEX:
         t = re.sub(pat, lambda m, mk=marked: mk, t)
     for plain, marked in _FORCE_MARKS:
@@ -4032,7 +4045,7 @@ MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in on
 ANATOMY = ("Every person has one head, two arms ending in two hands with five fingers each (none missing, none extra) "
            "and two legs; natural human proportions: every head is about one seventh of its body height, never a big head; "
            "limbs of different people never overlap")
-NO_EXTRA = "No other person anywhere, no crowd, no faces in windows"
+NO_EXTRA = "No other person anywhere, no crowd, no faces in windows; every person appears exactly once with exactly one head and one body, never a second copy, twin, reflection or extra head"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
@@ -4052,7 +4065,7 @@ def pick_present(chars, names):
     return [n for n in names if n in humans[:MAX_PEOPLE] or n in others[:1]]
 
 
-def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
+def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_ref=False):
     """What happens (the event) and the detailed place come first, then the people, then the era and the style. The whole
     text stays inside the word limit so that nothing important is cut away: when it is too long, the people's notes are
     made shorter first, the picture description is cut only as the very last step. When a person has a reference picture
@@ -4081,6 +4094,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None):
     head = (f"The picture must clearly show: {fix}. " if fix else "")
     limit = limit or PROMPT_WORDS
     art_s = ", ".join(art.split(", ")[:4])
+    if style_ref:
+        art_s += (f". Draw with exactly the same pencil technique, line weight, shading and paper tone as reference image "
+                  f"{len(ref_names or []) + 1} (copy ONLY its drawing style, never its people, objects or layout)")
 
     others = [" ".join(str(o).split()) for o in (scene.get("others") or []) if str(o).strip()][:3]
     total = len(present) + len(others)
@@ -4258,6 +4274,7 @@ SAFE_SIZE = (432, 768)    # the size that already worked on Cloudflare: used if 
 REF_SIDE = 512            # reference pictures must be at most 512 px (one tile = the same price as 384 px)
 MAX_REFS = int(os.environ.get("AZIM_MAX_REFS") or 3)   # reference pictures sent with ONE picture (each one costs like a picture)
 _STATE = {"refs_ok": True, "klein_ok": True, "refs_fail": 0, "klein_fail": 0, "size_ok": True, "scene_ok": False}
+STYLE_REF = {"path": None}   # the first good picture with people: every later picture copies its drawing style
 CAST_REFS = {}            # {character name: reference picture file}, filled in main() (the image check looks at them too)
 
 
@@ -4665,10 +4682,11 @@ For EACH picture return:
   said just by looking; 0 = unrelated). Strict limits:
   * the EVENT of the narration (a death, a fight, a meeting, a departure, a discovery...) must be recognisable; a calm
     or unrelated picture of a place or a person gets at most 3;
-  * a killing, death or suicide: it is shown by the grief of the living and objects (candle, flower, empty chair or bed, dropped
-    hat or bag, an empty rope above a toppled chair for a hanging); ANY dead, lying or sheet-covered body, or a person hanging
-    from a rope or by the hands: at most 2. A ghost or spirit must be a translucent glowing figure with the person's shape and
-    clothes; only a halo, light or mist: at most 3;
+  * a killing or murder: it is shown GENTLY (killer, weapon or threat and victim in a soft storybook moment); an explicit,
+    bloody or gory scene, a wound or open flesh, a body under a sheet, or a person hanging: at most 2; a killing that cannot be
+    recognised at all (only a calm place or only mourners): at most 4. A death by illness, age or accident: shown by the grief of
+    the living and objects (candle, flower, empty chair or bed); ANY dead lying body: at most 3. A ghost or spirit must be a
+    translucent glowing figure with the person's shape and clothes; only a halo, light or mist: at most 3;
   * two bodies that merge under one head, a body with two heads, or a man in a dress or women's clothes (or a woman in men's
     clothes) against his or her sheet: at most 2;
   * the place and situation must fit the narration (inside/outside, kind of place, time, weather), else at most 5;
@@ -4726,7 +4744,7 @@ For EACH picture return:
   even slightly (it could be another person): at most 5; a face that is blurred, distorted or too small to see: at most 5; several people are
   clearly different from each other in face, body, hair and clothes (with 3 or more people, any two with the same hair
   color or clothes colors: at most 4); clothes and objects fit the era (10 = all correct).
-- "people_count": the NUMBER of people you can see in the picture. Count EVERY person: also small ones, far away, in a
+- "people_count": the NUMBER of people you can see in the picture. Count EVERY person (the same character drawn twice counts as two people): also small ones, far away, in a
   window or doorway, in a painting or a statue, half hidden or cut by the border. Count first, then compare with
   "expected_people" (null = a crowd, do not compare).
 - A character that is NOT human (a shape, an animal, a robot, a creature: its look sheet says so) counts as a person in
@@ -4939,7 +4957,7 @@ def author_library_plan(author=None):
               f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
               f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
               f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
-              f"view), looking down at the open book; the head and the body face the SAME direction, the neck is natural and "
+              f"view), writing in the open book with a pen, one hand holding the pen on the paper and the other resting flat on the table; the head and the body face the SAME direction, the neck is natural and "
               f"the head is never turned around; the face is not visible; exactly one person, one head, two arms, two "
               f"hands; no text anywhere.")
     return {"kind": "author", "visual_en": visual, "event_en": "the writer sits in a library", "cover": False,
@@ -5030,7 +5048,7 @@ def region_spread(img, x, y, rw, rh, w, h):
         return None
 
 
-PAINT_ASPECT = 690 / 402           # height / width of the painting file
+PAINT_ASPECT = 733 / 418           # height / width of the painting file
 PAINT_W_FRAC = float(os.environ.get("AZIM_PAINT_W") or 0.36)       # the painting is this part of the picture width wide
 
 
@@ -5038,6 +5056,9 @@ def painting_file():
     """The ONE samurai painting of the channel: the user's own picture (a samurai kneeling and reading a scroll), used WITHOUT any
     change, with the red signature of the channel (a flowing «SR» monogram, the seal 侍 and the name) painted INTO it. It is the same file in EVERY video, so the painting and the signature never change, never move and are never
     missing. The file is written from the data at the end of this script (no extra file in the repository)."""
+    own = ROOT / "azim_samurai_painting.jpg"
+    if own.is_file() and own.stat().st_size > 5000:
+        return own      # the user's picture, black and white with a red seal
     p = WORK / "azim_samurai_painting.jpg"
     try:
         if not p.exists():
@@ -5048,13 +5069,27 @@ def painting_file():
         return None
 
 
+def _wall_gray(img, x, y, rw, rh):
+    """The grey level (0-255) of the plain wall: the mean of a band of the picture, or None."""
+    try:
+        raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(img), "-vf",
+                                       f"crop={int(rw)}:{int(rh)}:{int(x)}:{int(y)},scale=1:1,format=gray",
+                                       "-f", "rawvideo", "-"], timeout=60)
+        return raw[0] if raw else None
+    except Exception as e:  # noqa: BLE001
+        print(f"Wall colour could not be read ({e}).", flush=True)
+        return None
+
+
 def stamp_painting(jobs):
-    """The library picture of the writer has an EMPTY plain wall area on purpose: the fixed painting (with its signature) is
-    pasted there. The calmest free place of the wall is used, so the painting is never hidden by anything and nothing that
-    stands in front of it can cover its signature (the painting is the front-most thing on the wall)."""
+    """The library picture of the writer has an EMPTY plain wall on purpose. The fixed painting (the user's own picture, black and
+    white, only its seal red) is hung there ON THE WALL: the calmest free place is chosen (a smaller painting is tried when the wall is
+    busy), and everything of the drawing that is NOT plain wall inside the painting's rectangle (a head, a lamp, a shelf) is drawn
+    again IN FRONT of the painting, so a person or thing in front of the painting hides that part of it."""
     pf = painting_file()
     if not pf:
         return
+    pf = str(Path(pf).resolve())
     for k, j in enumerate(jobs):
         sc = j.get("sc") or {}
         if not (sc.get("painting") and sc.get("kind") == "author"):
@@ -5064,31 +5099,50 @@ def stamp_painting(jobs):
             dims = subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                             "stream=width,height", "-of", "csv=p=0:s=x", str(img)], text=True).strip()
             w, h = (int(x) for x in dims.split("x"))
-            pw = int(w * PAINT_W_FRAC)
-            ph = int(pw * PAINT_ASPECT)
-            cands = []
-            for cxf in (0.5, 0.40, 0.60, 0.33, 0.67):
-                for tyf in (0.07, 0.11, 0.15, 0.04):
-                    x, y = int(w * cxf - pw / 2), int(h * tyf)
-                    if x < 4 or x + pw > w - 4 or y + ph > h * 0.62:
-                        continue
-                    sd = region_spread(img, x, y, pw, ph, w, h)
-                    cands.append(((sd if sd is not None else 255.0) + 6 * abs(cxf - 0.5) + 10 * tyf, x, y, sd))
-            if not cands:
-                x, y = max((w - pw) // 2, 0), int(h * 0.06)
-                sd = None
-            else:
-                _, x, y, sd = min(cands)
+            best = None
+            for frac in (PAINT_W_FRAC, 0.30, 0.25, 0.21):
+                pw = int(w * frac)
+                ph = int(pw * PAINT_ASPECT)
+                for cxf in (0.5, 0.40, 0.60, 0.33, 0.67):
+                    for tyf in (0.07, 0.11, 0.15, 0.04):
+                        x, y = int(w * cxf - pw / 2), int(h * tyf)
+                        if x < 4 or x + pw > w - 4 or y + ph > h * 0.62:
+                            continue
+                        sd = region_spread(img, x, y, pw, ph, w, h)
+                        score = (sd if sd is not None else 255.0) + 6 * abs(cxf - 0.5) + 10 * tyf
+                        if best is None or score < best[0]:
+                            best = (score, x, y, pw, ph, sd)
+                if best and best[5] is not None and best[5] <= CALM_MAX:
+                    break                                   # a calm wall place was found at this size
+            if best is None:
+                pw = int(w * 0.25)
+                ph = int(pw * PAINT_ASPECT)
+                best = (0, max((w - pw) // 2, 0), int(h * 0.06), pw, ph, None)
+            _, x, y, pw, ph, sd = best
             tmp = f"painting_tmp_{k}.jpg"
-            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf.name, "-filter_complex",
-                f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v][p]overlay={x}:{y}", "-frames:v", "1", "-q:v", "2", tmp],
-               cwd=WORK)
+            made = False
+            g = _wall_gray(img, x, y, pw, max(int(ph * 0.10), 8))
+            if g is not None:
+                hx = f"0x{g:02x}{g:02x}{g:02x}"
+                fc = (f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v]crop={pw}:{ph}:{x}:{y},split[c1][c2];"
+                      f"[c1]format=rgb24,gblur=sigma=3,colorkey={hx}:0.10:0.04,format=rgba,alphaextract,format=gray,"
+                      f"gblur=sigma=1,format=gray[m];[c2]format=rgb24[c2r];[c2r][m]alphamerge[fg];"
+                      f"[0:v][p]overlay={x}:{y}[b];[b][fg]overlay={x}:{y}")
+                try:
+                    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-filter_complex", fc,
+                        "-frames:v", "1", "-q:v", "2", tmp], cwd=WORK)
+                    made = True
+                except Exception as e:  # noqa: BLE001
+                    print(f"Painting with the wall mask failed ({e}): plain placing is used.", flush=True)
+            if not made:
+                sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-filter_complex",
+                    f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v][p]overlay={x}:{y}", "-frames:v", "1", "-q:v", "2", tmp],
+                   cwd=WORK)
             shutil.move(str(WORK / tmp), str(img))
-            print(f"Samurai painting with its signature placed at {x},{y} ({pw}x{ph}) on the {w}x{h} library picture "
-                  f"(wall spread {sd if sd is None else round(sd, 1)}).", flush=True)
+            print(f"Samurai painting placed at {x},{y} ({pw}x{ph}) on the {w}x{h} library picture "
+                  f"(wall spread {sd if sd is None else round(sd, 1)}, people/things in front hide it: {made}).", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"Samurai painting could not be placed ({e}): the plain picture is used.", flush=True)
-
 
 def make_title_cards(jobs, book):
     """Parts about the author, the book or its message: the picture (a writer at a desk) is drawn and checked like every
@@ -5246,7 +5300,22 @@ _GLUED_NUM = re.compile(
     rf"(?:(?![\u0600-\u06FF])|(?=\u200c?و\u200c?(?:{_NUM_ALL})(?:[^\u0600-\u06FF]|$|\u200c?و)))")
 
 
+_YEAR_WORDS = {"شانزده": "هزار و ششصد", "پانزده": "هزار و پانصد", "هفده": "هزار و هفتصد", "هجده": "هزار و هشتصد",
+               "نوزده": "هزار و نهصد"}
+_YEAR_RE = re.compile(r"(?<![\u0600-\u06FF])(شانزده|پانزده|هفده|هجده|نوزده)[\u200c ]?صد(?![\u0600-\u06FF])")
+
+
+def _fix_year_words(text):
+    """«هفده صد و هشتاد» is not Persian for 1780: it is «هزار و هفتصد و هشتاد» (also for the voice and the subtitles)."""
+    return _YEAR_RE.sub(lambda m: _YEAR_WORDS[m.group(1)], str(text or ""))
+
+
 def fix_numbers(text):
+    text = _fix_year_words(text)
+    return _fix_numbers_core(text)
+
+
+def _fix_numbers_core(text):
     """A number written as ONE glued word («هفتادوهفت», «بیست‌وپنج», «صدوبیست») is read wrongly by the voice («هفتید و هفت»):
     every part of a number becomes its own word with a separate «و»."""
     t = str(text or "")
@@ -6100,7 +6169,9 @@ def main():
                 chars = script.get("characters", [])
                 names = pick_present(chars, [n for n in (sc.get("characters_present") or [])])
                 rn = [n for n in names if n in cast_refs][:MAX_REFS] if use_refs else []
-                return (build_prompt(FIXED_STYLE, chars, sc, fix, ref_names=rn, limit=limit), [cast_refs[n] for n in rn])
+                sref = STYLE_REF["path"] if (use_refs and STYLE_REF["path"] and Path(STYLE_REF["path"]).exists() and sc.get("kind") != "author") else None
+                return (build_prompt(FIXED_STYLE, chars, sc, fix, ref_names=rn, limit=limit, style_ref=bool(sref)),
+                        [cast_refs[n] for n in rn] + ([str(sref)] if sref else []))
 
             def safe_build(level, limit=None, sc=sc):
                 """Gentler wordings for a picture the safety filter refused (positive words only)."""
@@ -6145,6 +6216,12 @@ def main():
             jobs.append({"img": img, "sc": sc, "seed": seed + i * 10 + j, "reused": reused,
                          "build": build, "card": card_kind})
             last_img = img
+            if STYLE_REF["path"] is None and not reused and sc.get("characters_present"):
+                try:
+                    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-vf", f"scale=-2:{REF_SIDE}", "azim_style_ref.jpg"], cwd=WORK)
+                    STYLE_REF["path"] = WORK / "azim_style_ref.jpg"
+                except Exception as e:  # noqa: BLE001
+                    print(f"Style reference not made ({e}).", flush=True)
             done_pics += 1
     if IMAGE_CHECK:
         check_and_fix_images(jobs)
