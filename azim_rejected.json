@@ -103,5 +103,10 @@
   "title_en": "Anna Karenina",
   "reason": "no usable Plot section on Wikipedia",
   "date": "2026-11-14"
+ },
+ {
+  "title_en": "Jane Eyre",
+  "reason": "Gemini blocked the prompt: gemini-3.5-flash-lite: empty answer (blockReason=PROHIBITED_CONTENT, finishReason=-)",
+  "date": "2026-11-16"
  }
 ]
