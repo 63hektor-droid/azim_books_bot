@@ -2313,7 +2313,8 @@ Return JSON with exactly these keys, in this order:
   {json.dumps(ev_list, ensure_ascii=False)}. Empty list if you heard all of them."""
     try:
         t = gemini_json(prompt, minutes=6, models=WRITE_MODELS)
-        retell = [str(x) for x in (t.get("retelling") or [])][:14]
+        rt_ = t.get("retelling") or []
+        retell = [str(x) for x in ([rt_] if isinstance(rt_, str) else rt_)][:14]
         valid = {r["id"]: r for r in rows}
         protect = set()
         for r in rows:
