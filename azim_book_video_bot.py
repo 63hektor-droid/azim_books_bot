@@ -1880,6 +1880,56 @@ matters; the last sentence: short and memorable."""
     return {"characters": [], "scenes": raw}
 
 
+
+def remove_spoilers(data, spine):
+    """ONE cheap Gemini call: sentences of the opening, the heroes scene and the first half of the story that tell or hint at how the
+    story ENDS are deleted (the ending belongs to the last scenes only). The opening is never left empty."""
+    try:
+        evs = spine["events"]
+        n_ev = len(evs)
+        tail = [e for e in evs if e["id"] >= max(n_ev - 2, 2)]
+        items = []
+        for si, sc in enumerate(data["scenes"]):
+            early = sc["part"] in ("open", "heroes") or (sc["part"] == "story" and max(sc.get("ev_ids") or [0]) <= max(1, int(n_ev * 0.6)))
+            if early:
+                for ti, t in enumerate(split_sentences(sc["narration_fa"])):
+                    items.append({"scene": si, "i": ti, "fa": t})
+        if not items:
+            return data
+        prompt = f"""The ENDING of a story: {spine.get('ending_en', '')}
+The last events: {json.dumps([e.get('what_en', '') for e in tail], ensure_ascii=False)}
+Below are Persian sentences from the START of a video about this story. Which of them tell, hint at or foreshadow the ENDING or the last events
+(a death, a marriage, an escape, who wins, how it all turns out, «in the end», «finally», «later he will»)? A sentence that only tells the
+situation at the start or an early event is fine.
+SENTENCES: {json.dumps(items, ensure_ascii=False)}
+Return JSON {{"spoilers": [{{"scene": 0, "i": 0}}]}} (an empty list when there is none)."""
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS)
+        bad = {(int(x["scene"]), int(x["i"])) for x in (out.get("spoilers") or []) if isinstance(x, dict)
+               and str(x.get("scene", "")).isdigit() and str(x.get("i", "")).isdigit()}
+        if not bad:
+            return data
+        new = []
+        for si, sc in enumerate(data["scenes"]):
+            sents = split_sentences(sc["narration_fa"])
+            keep = [t for ti, t in enumerate(sents) if (si, ti) not in bad]
+            if len(keep) != len(sents):
+                print(f"Spoiler check: {len(sents) - len(keep)} sentence(s) of scene {si + 1} ({sc['part']}) told the ending too early: removed.", flush=True)
+            if not keep:
+                if sc["part"] == "story":
+                    keep = sents[:1]
+                else:
+                    continue
+            sc["narration_fa"] = " ".join(keep)
+            new.append(sc)
+        data["scenes"] = new
+        return data
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print(f"Spoiler check skipped: {e}", flush=True)
+        return data
+
+
 def write_scenes(book, src, plan):
     """Step B: first the SPINE (what must be told), then the narration written sentence by sentence from the spine."""
     min_sc, max_sc, words = plan
@@ -2091,6 +2141,10 @@ Rules for the visuals:
             data["outline"] = spine["events"]
             data["subjects"] = spine.get("subjects", [])
             data["spine"] = spine
+            try:
+                data = remove_spoilers(data, spine)       # the opening never tells the ending
+            except (GeminiBlocked, GeminiQuotaExhausted):
+                pass
             data = story_gate(data, book, src)       # blind test with sentence-level repair
             data = scrub_wrap(data, spine)           # the wrap-up never retells the story or names a hero
             data = review_script(data, book, src)    # facts + wording + voice text (last: the voice text must fit the final text)
@@ -3730,7 +3784,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+_FORCE_MARKS = (("وقار", "وَقار"), ("باوقار", "باوَقار"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
@@ -4221,7 +4275,7 @@ KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
 ANATOMY = ("Every person has one head, two arms ending in two hands with five fingers each (none missing, none extra) "
-           "and two legs; natural human proportions: every head is about one seventh of its body height, never a big head; "
+           "and two legs; natural human proportions: every head is small, only about one eighth of its body height (long legs, narrow shoulders), NEVER a big head, never a child-like or chibi head on an adult body; "
            "limbs of different people never overlap")
 NO_EXTRA = "No eyeglasses on anybody, no other person anywhere, no crowd, no faces in windows; every person appears exactly once with exactly one head and one body, never a second copy, twin, reflection or extra head"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
@@ -4343,6 +4397,12 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                 desc = _trim_words(c["look_en"], 42) if full else char_tag(c)
             else:
                 desc = char_tag(c)
+            try:
+                age_n = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
+            except (IndexError, ValueError):
+                age_n = 0
+            if age_n and not c.get("nonhuman") and "years old" not in desc:
+                desc += f", exactly {age_n} years old"
             parts.append(("character " if c.get("nonhuman") else "person ") + f"{k + 1}" + (f" = reference image {ri}" if ri else "") + f": {desc}"
                          + role_txt(c["name"]))
         slots = max(MAX_PEOPLE - len(present), 0)
@@ -4806,7 +4866,7 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
-REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 2)   # a bad picture is drawn again this many times (each costs free neurons)
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 3)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
@@ -4920,6 +4980,7 @@ For EACH picture return:
     half, doing something with writing (desk, typewriter, library table, reading), seen from the side or behind (no
     portrait); outdoors: at most 3; the UPPER 40 percent must be an EMPTY plain wall (a big book is placed there later): any
     object, window, shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4;
+  * kind "author": the writer must be ACTIVELY WRITING (a pen touching paper, or hands on the keys of a typewriter), not reading or idle: at most 4;
   * a head twisted backward, a neck turned unnaturally or a face looking over the shoulder at the viewer (kind "author"): at most 2;
   * AGE FIT: a person who looks like a child but is a bride, a groom, a lover or in a wedding scene: at most 3;
   * kind "author" (and "cover" false): ONE writer of the gender in "exact_people", seen from behind or the side (no portrait),
@@ -4944,8 +5005,8 @@ For EACH picture return:
   the hands of each person (exactly two, never three: look at hands that hold something, at hands near the face and at hands
   between two people, they are often doubled): more or fewer than two legs, two arms, two hands or two feet (a third leg or a doubled leg between two standing people is
   common: check it), a doubled, missing or misplaced head, merged bodies. Otherwise true.
-- "head_ok": false when the head of ANY person is clearly too big for his or her body (a big-head, chibi, bobble-head or toy look; a
-  natural head is about one seventh of the body height), or when the people at the same distance have very different head sizes.
+- "head_ok": false when the head of ANY person is even a little too big for his or her body (a big-head, chibi, bobble-head or toy look; a
+  natural head is about one seventh to one eighth of the body height; when in doubt say false), or when the people at the same distance have very different head sizes.
   Otherwise true.
 - "style_ok": false when the picture is NOT the same detailed black-and-white graphite pencil drawing in manga style as the other
   pictures of this call (it looks colored, 3D, painted, photographic, flat vector or cartoon-like, or its line work and shading differ
@@ -5161,7 +5222,7 @@ def author_library_plan(author=None):
               f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
               f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
               f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
-              f"view), writing in the open book with a pen, one hand holding the pen on the paper and the other resting flat on the table; the head and the body face the SAME direction, the neck is natural and "
+              f"view), ACTIVELY WRITING: the right hand holds a pen whose tip touches a sheet of manuscript paper and the writer's arm and shoulder show the writing movement (an inkwell and a pile of written pages beside it; or the hands on the keys of an old typewriter with a sheet of paper rolled into it); never just reading, never only sitting; the other hand rests flat on the table; the head and the body face the SAME direction, the neck is natural and "
               f"the head is never turned around; the face is not visible; exactly one person, one head, two arms, two "
               f"hands; no text anywhere.")
     return {"kind": "author", "visual_en": visual, "event_en": "the writer sits in a library", "cover": False,
@@ -5284,6 +5345,40 @@ def _wall_gray(img, x, y, rw, rh):
         return None
 
 
+def _fg_mask(img, x, y, pw, ph, out_path):
+    """Writes a raw 8-bit mask (255 = something of the drawing stands IN FRONT of the wall here) for the rectangle of the painting.
+    Foreground = pixels that differ from the plain wall colour (thin hatching and specks are ignored); from the TOP-most foreground
+    pixel of a column down to the bottom of the rectangle everything is foreground, so the inside of a head, a body or a coat
+    (whose colour can equal the wall) hides the painting too. Returns True when the mask was written."""
+    try:
+        import numpy as np
+        from scipy import ndimage as ndi
+        raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(img), "-vf", f"crop={pw}:{ph}:{x}:{y},format=gray",
+                                       "-f", "rawvideo", "-"], timeout=60)
+        if len(raw) != pw * ph:
+            return False
+        a = np.frombuffer(raw, dtype=np.uint8).reshape(ph, pw).astype(np.float32)
+        a = ndi.gaussian_filter(a, 1.5)
+        band = a[: max(int(ph * 0.12), 6)]
+        wall, sd = float(np.median(band)), float(band.std())
+        fg = np.abs(a - wall) > max(28.0, 3.0 * sd)
+        fg = ndi.binary_opening(fg, structure=np.ones((3, 3), bool), iterations=2)
+        lab, n = ndi.label(fg)
+        if n:
+            sizes = ndi.sum(fg, lab, range(1, n + 1))
+            keep = np.zeros(n + 1, bool)
+            keep[1:] = sizes >= 150
+            fg = keep[lab]
+        fg = ndi.binary_dilation(fg, structure=np.ones((3, 3), bool), iterations=3)
+        fg = np.maximum.accumulate(fg, axis=0)               # everything below the top of a thing in front is hidden
+        m = ndi.gaussian_filter(fg.astype(np.float32) * 255.0, 1.2)
+        Path(out_path).write_bytes(np.clip(m, 0, 255).astype(np.uint8).tobytes())
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"Wall mask could not be made ({e}).", flush=True)
+        return False
+
+
 def stamp_painting(jobs):
     """The library picture of the writer has an EMPTY plain wall on purpose. The fixed painting (the user's own picture, black and
     white, only its seal red) is hung there ON THE WALL: the calmest free place is chosen (a smaller painting is tried when the wall is
@@ -5324,15 +5419,14 @@ def stamp_painting(jobs):
             _, x, y, pw, ph, sd = best
             tmp = f"painting_tmp_{k}.jpg"
             made = False
-            g = _wall_gray(img, x, y, pw, max(int(ph * 0.10), 8))
-            if g is not None:
-                hx = f"0x{g:02x}{g:02x}{g:02x}"
-                fc = (f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v]crop={pw}:{ph}:{x}:{y},split[c1][c2];"
-                      f"[c1]format=rgb24,gblur=sigma=3,colorkey={hx}:0.10:0.04,format=rgba,alphaextract,format=gray,"
-                      f"gblur=sigma=1,format=gray[m];[c2]format=rgb24[c2r];[c2r][m]alphamerge[fg];"
-                      f"[0:v][p]overlay={x}:{y}[b];[b][fg]overlay={x}:{y}")
+            maskraw = WORK / f"painting_mask_{k}.raw"
+            if _fg_mask(img, x, y, pw, ph, maskraw):
+                fc = (f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v]split=2[v0][v1];"
+                      f"[v1]crop={pw}:{ph}:{x}:{y},format=rgb24[c];[c][2:v]alphamerge[fg];"
+                      f"[v0][p]overlay={x}:{y}[b];[b][fg]overlay={x}:{y}")
                 try:
-                    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-filter_complex", fc,
+                    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-f", "rawvideo", "-pixel_format", "gray",
+                        "-video_size", f"{pw}x{ph}", "-i", maskraw.name, "-filter_complex", fc,
                         "-frames:v", "1", "-q:v", "2", tmp], cwd=WORK)
                     made = True
                 except Exception as e:  # noqa: BLE001
