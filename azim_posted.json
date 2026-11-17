@@ -513,5 +513,15 @@
   "date_pt": "2026-11-16",
   "wiki": "Brave New World",
   "date": "2026-11-17"
+ },
+ {
+  "title_en": "Frankenstein",
+  "title_fa": "فرانکنشتاین",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-17",
+  "wiki": "Frankenstein",
+  "date": "2026-11-17"
  }
 ]

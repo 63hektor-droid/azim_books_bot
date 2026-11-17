@@ -61,5 +61,14 @@
   "author_en": "Aldous Huxley",
   "date": "2026-11-17",
   "cover": true
+ },
+ {
+  "slug": "frankenstein",
+  "title_fa": "فرانکنشتاین",
+  "title_en": "Frankenstein",
+  "author_fa": "مری شلی",
+  "author_en": "Mary Shelley",
+  "date": "2026-11-17",
+  "cover": true
  }
 ]
