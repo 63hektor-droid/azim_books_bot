@@ -63,7 +63,7 @@ SUB_FONT_URLS = (             # free download, tried in order (the first that wo
     "https://github.com/rastikerdar/vazirmatn/raw/v33.003/fonts/ttf/Vazirmatn-Bold.ttf",
     "https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Bold.ttf",
 )
-BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 24)   # a new picture about every 24 spoken words
+BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture about every 44 spoken words (3-4 sentences): fewer, richer pictures
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
@@ -3097,12 +3097,22 @@ def plan_in_parts(prompt, items, scenes):
         if out is None:
             raise ValueError("the picture plan could not be made")
         return [v if v else _plain_plan(it, scenes) for v, it in zip(out, items)]
+    def ask_split(sub):
+        out_ = ask(sub)
+        if out_ is None and len(sub) >= 6:
+            mid = len(sub) // 2
+            print(f"Picture plan: a piece of {len(sub)} parts failed: it is asked in two halves.", flush=True)
+            a_, b_ = ask_split(sub[:mid]), ask_split(sub[mid:])
+            a_ = a_ if a_ is not None else [None] * mid
+            b_ = b_ if b_ is not None else [None] * (len(sub) - mid)
+            return list(a_) + list(b_)
+        return out_
     result, k = [], 0
     pieces = max(1, round(n_all / PLAN_CHUNK))
     size = -(-n_all // pieces)
     while k < n_all:
         sub = items[k:k + size]
-        out = ask(sub)
+        out = ask_split(sub)
         if out is None:
             print(f"Picture plan: pieces {k}-{k + len(sub) - 1} use plain pictures of their paragraphs.", flush=True)
             out = [_plain_plan(it, scenes) for it in sub]
@@ -3207,9 +3217,11 @@ def align_visuals(data, book, src=None):
     source_block = f"\nSOURCE TEXT (the truth about who is where and when):\n{src['text']}\n" if src else ""
     prompt = f"""You are a film storyboard artist and a production designer. Below are the FINAL Persian narration parts, in
 order, of a video that summarizes the book "{book['title_en']}" by {book['author_en']} (era and place: {data.get('era_en', '')}).
-While each part is read aloud (about 10 seconds), ONE vertical picture is shown. For EACH part write the picture so that
-it illustrates the exact content of THAT part: a viewer who sees only the picture understands what is being said and
-where it happens at that moment.
+While each part is read aloud (about 15 to 20 seconds, 3 to 4 sentences), ONE vertical picture is shown. For EACH part write the
+picture so that it illustrates the exact content of THAT part: a viewer who sees only the picture understands what is being said and
+where it happens. The picture must COVER ALL the sentences of its part: the main event of the part large in the middle, and what the
+other sentences mention (the creatures, objects and places, a visible trace of what happened just before) in the foreground and the
+background, without crowding: a clean, tidy, finished composition with rich details, every figure complete (no cut or doubled parts).
 {source_block}
 PLACES OF THE STORY (fixed, always drawn the same way): {json.dumps(places, ensure_ascii=False)}
 
@@ -3794,7 +3806,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("وقار", "وَقار"), ("باوقار", "باوَقار"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+_FORCE_MARKS = (("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
@@ -4876,7 +4888,7 @@ def make_cast_refs(chars, era, book, seed):
     return refs
 
 
-REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 3)   # a bad picture is drawn again this many times (each costs free neurons)
+REDRAW_ROUNDS = int(os.environ.get("AZIM_REDRAW_ROUNDS") or 1)   # a bad picture is drawn again this many times (each costs free neurons)
 CHECK_BATCH = int(os.environ.get("AZIM_CHECK_BATCH") or 4)    # pictures checked in ONE Gemini call
 MIN_SCORE = int(os.environ.get("AZIM_MIN_SCORE") or 7)
 
@@ -5027,12 +5039,19 @@ For EACH picture return:
 - "glasses": true if ANY person wears eyeglasses (they are always drawn deformed here: no eyeglasses are wanted at all).
 - "age_ok": false when a named character looks clearly younger or older than the age of his or her look sheet (a child instead of an
   adult or an adult instead of a child) or than his or her reference portrait. Otherwise true.
+- "animal_ok": false when ANY animal or creature (pig, dog, horse, bird, dragon...) has a wrong body: not exactly four legs (a bird two)
+  unless its look sheet says otherwise, two heads, a head WITHOUT clearly visible eyes, nose and mouth, a flat or melted face, a tail growing
+  from the belly or the side instead of the rear, a doubled or merged body, extra limbs. Count the legs and the heads of EVERY animal.
+  Otherwise true; when unsure say false.
+- "text_ok": false when the picture does NOT show the main subject and the action of ITS "narration_fa" sentence: the sentence says the
+  animals gather but the picture shows people; another number of subjects; another place; another action. Judge by the sentence first
+  ("intended_picture" is only a help). Otherwise true.
 - "duplicate": true when the SAME person (same face, hair and clothes) appears twice in one picture (a copy, a twin, a reflection
   that looks like a second person, an extra head or a second body of the same person).
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names] + ([style_img] if style_img else []))
@@ -5082,6 +5101,12 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
             if c.get("age_ok") is False:
                 score = min(score, 3)
                 fix = ("every named person at exactly the age of his or her reference image, never a child instead of an adult or the other way round; " + fix)[:200]
+            if c.get("animal_ok") is False:
+                score = min(score, 2)
+                fix = ("every animal has a normal body: four legs, ONE head with two eyes, a nose and a mouth clearly drawn, the tail at the REAR; " + fix)[:220]
+            if c.get("text_ok") is False:
+                score = min(score, 3)
+                fix = ("show EXACTLY what the narration sentence says: its subjects (animals if animals, people if people), its action and its place; " + fix)[:220]
             if c.get("duplicate") is True:
                 score = min(score, 2)
                 fix = ("every person appears exactly ONCE with one head and one body, never a copy or a second version of the same person; " + fix)[:200]
@@ -5231,13 +5256,13 @@ def author_library_plan(author=None):
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and the back wall between the two "
               f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
               f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
-              f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {who}, sits at the table facing the back wall, seen from BEHIND (back "
-              f"view), ACTIVELY WRITING: the right hand holds a pen whose tip touches a sheet of manuscript paper and the writer's arm and shoulder show the writing movement (an inkwell and a pile of written pages beside it; or the hands on the keys of an old typewriter with a sheet of paper rolled into it); never just reading, never only sitting; the other hand rests flat on the table; the head and the body face the SAME direction, the neck is natural and "
-              f"the head is never turned around; the face is not visible; exactly one person, one head, two arms, two "
+              f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {who}, sits at the table, seen from the SIDE or three-quarter back view (the face turned down toward the paper, never toward the viewer), "
+              f"ACTIVELY WRITING, the writing hand, the pen and the paper clearly visible: the right hand holds a pen whose tip touches a sheet of manuscript paper and the writer's arm and shoulder show the writing movement (an inkwell and a pile of written pages beside it; or the hands on the keys of an old typewriter with a sheet of paper rolled into it); never just reading, never only sitting; the other hand rests flat on the table; the head and the body face the SAME direction, the neck is natural and "
+              f"the head is never turned around; exactly one person, one head, two arms, two "
               f"hands; no text anywhere.")
     return {"kind": "author", "visual_en": visual, "event_en": "the writer sits in a library", "cover": False,
             "characters_present": [], "others": [], "roles": {}, "emotion_en": "",
-            "people_en": f"exactly one person: the writer, a {gender}, seen from behind (back view, head and body facing the wall), nobody else",
+            "people_en": f"exactly one person: the writer, a {gender}, seen from the side or three-quarter back view, actively writing, nobody else",
             "painting": True,
             "must_show": [f"one {gender} writer indoors", "a library with bookshelves", "a large empty plain wall area in the upper middle of the picture"]}
 
@@ -5389,6 +5414,15 @@ def _fg_mask(img, x, y, pw, ph, out_path):
         return False
 
 
+def _frame_d(pw):
+    return max(int(pw * 0.055), 5) + max(int(pw * 0.025), 3)
+
+
+def _framed_h(pw):
+    """Height of the painting WITH its frame and mat for a given outer width."""
+    return (int((pw - 2 * _frame_d(pw)) * PAINT_ASPECT) + 2 * _frame_d(pw)) // 2 * 2
+
+
 def stamp_painting(jobs):
     """The library picture of the writer has an EMPTY plain wall on purpose. The fixed painting (the user's own picture, black and
     white, only its seal red) is hung there ON THE WALL: the calmest free place is chosen (a smaller painting is tried when the wall is
@@ -5409,8 +5443,8 @@ def stamp_painting(jobs):
             w, h = (int(x) for x in dims.split("x"))
             best = None
             for frac in (PAINT_W_FRAC, 0.30, 0.25, 0.21):
-                pw = int(w * frac)
-                ph = int(pw * PAINT_ASPECT)
+                pw = int(w * frac) // 2 * 2
+                ph = _framed_h(pw)
                 for cxf in (0.5, 0.40, 0.60, 0.33, 0.67):
                     for tyf in (0.07, 0.11, 0.15, 0.04):
                         x, y = int(w * cxf - pw / 2), int(h * tyf)
@@ -5423,17 +5457,20 @@ def stamp_painting(jobs):
                 if best and best[5] is not None and best[5] <= CALM_MAX:
                     break                                   # a calm wall place was found at this size
             if best is None:
-                pw = int(w * 0.25)
-                ph = int(pw * PAINT_ASPECT)
+                pw = int(w * 0.25) // 2 * 2
+                ph = _framed_h(pw)
                 best = (0, max((w - pw) // 2, 0), int(h * 0.06), pw, ph, None)
             _, x, y, pw, ph, sd = best
             tmp = f"painting_tmp_{k}.jpg"
             made = False
             maskraw = WORK / f"painting_mask_{k}.raw"
             if _fg_mask(img, x, y, pw, ph, maskraw):
-                fc = (f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v]split=2[v0][v1];"
-                      f"[v1]crop={pw}:{ph}:{x}:{y},format=rgb24[c];[c][2:v]alphamerge[fg];"
-                      f"[v0][p]overlay={x}:{y}[b];[b][fg]overlay={x}:{y}")
+                d_, b_, m_ = _frame_d(pw), max(int(pw * 0.055), 5), max(int(pw * 0.025), 3)
+                fc = (f"[1:v]scale={pw - 2 * d_}:{ph - 2 * d_}:flags=lanczos,pad=iw+{2 * m_}:ih+{2 * m_}:{m_}:{m_}:color=0xe6e6e6,"
+                      f"pad=iw+{2 * b_}:ih+{2 * b_}:{b_}:{b_}:color=0x262626,drawbox=x=0:y=0:w=iw:h=ih:color=0x6a6a6a:t=2[p];"
+                      f"[0:v]split=2[v0][v1];[v1]crop={pw}:{ph}:{x}:{y},format=rgb24[c];[c][2:v]alphamerge[fg];"
+                      f"[v0]drawbox=x={x + 6}:y={y + 8}:w={pw}:h={ph}:color=black@0.22:t=fill[v0s];"
+                      f"[v0s][p]overlay={x}:{y}[b];[b][fg]overlay={x}:{y}")
                 try:
                     sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-f", "rawvideo", "-pixel_format", "gray",
                         "-video_size", f"{pw}x{ph}", "-i", maskraw.name, "-filter_complex", fc,
@@ -5443,7 +5480,7 @@ def stamp_painting(jobs):
                     print(f"Painting with the wall mask failed ({e}): plain placing is used.", flush=True)
             if not made:
                 sh(["ffmpeg", "-y", "-loglevel", "error", "-i", img.name, "-i", pf, "-filter_complex",
-                    f"[1:v]scale={pw}:{ph}:flags=lanczos[p];[0:v][p]overlay={x}:{y}", "-frames:v", "1", "-q:v", "2", tmp],
+                    f"[1:v]scale={pw - 2 * _frame_d(pw)}:{ph - 2 * _frame_d(pw)}:flags=lanczos,pad=iw+{2 * max(int(pw * 0.025), 3)}:ih+{2 * max(int(pw * 0.025), 3)}:{max(int(pw * 0.025), 3)}:{max(int(pw * 0.025), 3)}:color=0xe6e6e6,pad=iw+{2 * max(int(pw * 0.055), 5)}:ih+{2 * max(int(pw * 0.055), 5)}:{max(int(pw * 0.055), 5)}:{max(int(pw * 0.055), 5)}:color=0x262626[p];[0:v][p]overlay={x}:{y}", "-frames:v", "1", "-q:v", "2", tmp],
                    cwd=WORK)
             shutil.move(str(WORK / tmp), str(img))
             print(f"Samurai painting placed at {x},{y} ({pw}x{ph}) on the {w}x{h} library picture "
@@ -5482,11 +5519,29 @@ def make_title_cards(jobs, book):
           flush=True)
 
 
+REDRAW_FRAC = float(os.environ.get("AZIM_REDRAW_FRAC") or 0.25)   # at most this share of the pictures is drawn again
+STYLE_REF_GEN = os.environ.get("AZIM_STYLE_REF_GEN") == "1"   # a picture as style reference copies its CONTENT too: off by default
+DUP_SSIM = float(os.environ.get("AZIM_DUP_SSIM") or 0.55)
+
+
+def _ssim_pair(a, b):
+    """Structural similarity of two pictures (0..1) on small gray copies; None when it cannot be measured."""
+    try:
+        out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(a), "-i", str(b), "-lavfi",
+                              "[0:v]scale=90:160,format=gray[x];[1:v]scale=90:160,format=gray[y];[x][y]ssim", "-f", "null", "-"],
+                             capture_output=True, text=True, timeout=60).stderr
+        m = re.search(r"All:([\d.]+)", out)
+        return float(m.group(1)) if m else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def check_and_fix_images(jobs):
     """Every picture is checked (4 per Gemini call). A picture with a low score is drawn again with the missing
     thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
     redraw is not available, the pictures that already exist are kept: the video never fails because of this step."""
     best = {}                                              # picture number -> (score, bytes)
+    redrawn = 0
     todo = list(range(len(jobs)))     # every picture is checked (the writer pictures too); a copied (failed) one as well
     for rnd in range(3):
         results = {}
@@ -5516,6 +5571,21 @@ def check_and_fix_images(jobs):
                     results[k] = r
         if not results:
             break
+        for k in sorted(results):                           # near-copies of one of the 2 pictures before: drawn again, different
+            jk = jobs[k]
+            if k == 0 or jk.get("card") or (jk.get("sc") or {}).get("kind") == "author":
+                continue
+            for back in (1, 2):
+                if k - back < 0 or (jobs[k - back].get("sc") or {}).get("kind") == "author":
+                    continue
+                sim = _ssim_pair(jk["img"], jobs[k - back]["img"])
+                if sim is not None and sim > DUP_SSIM:
+                    r0 = results[k]
+                    results[k] = (min(r0[0], 3), ("a COMPLETELY different picture: another camera angle, another framing, another arrangement, "
+                                                 "other objects; nothing copied from the previous pictures; " + str(r0[1]))[:230],
+                                  r0[2] if len(r0) > 2 else None)
+                    print(f"Picture {k + 1} is almost the same as picture {k + 1 - back} (similarity {sim:.2f}): drawn again.", flush=True)
+                    break
         low = []
         for k, r in sorted(results.items()):
             score, missing = r[0], r[1]
@@ -5530,6 +5600,14 @@ def check_and_fix_images(jobs):
         if rnd >= REDRAW_ROUNDS or not low:
             break
         todo = []
+        # free quota is precious: the total number of redraws of one video is limited and the WORST pictures go first
+        low.sort(key=lambda kv: best[kv[0]][0] if kv[0] in best else 0)
+        budget = max(2, int(len(jobs) * REDRAW_FRAC)) - redrawn
+        low = low[:max(budget, 0)]
+        if not low:
+            print("Redraw budget of this video is used: the best pictures so far are kept.", flush=True)
+            break
+        redrawn += len(low)
         try:
             for k, missing in low:
                 j = jobs[k]
@@ -6476,7 +6554,7 @@ def main():
                 chars = script.get("characters", [])
                 names = pick_present(chars, [n for n in (sc.get("characters_present") or [])])
                 rn = [n for n in names if n in cast_refs][:MAX_REFS] if use_refs else []
-                sref = STYLE_REF["path"] if (use_refs and STYLE_REF["path"] and Path(STYLE_REF["path"]).exists() and sc.get("kind") != "author") else None
+                sref = STYLE_REF["path"] if (STYLE_REF_GEN and use_refs and STYLE_REF["path"] and Path(STYLE_REF["path"]).exists() and sc.get("kind") != "author") else None
                 return (build_prompt(FIXED_STYLE, chars, sc, fix, ref_names=rn, limit=limit, style_ref=bool(sref)),
                         [cast_refs[n] for n in rn] + ([str(sref)] if sref else []))
 
