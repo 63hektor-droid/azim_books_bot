@@ -503,5 +503,15 @@
   "date_pt": "2026-11-16",
   "wiki": "Animal Farm",
   "date": "2026-11-17"
+ },
+ {
+  "title_en": "Brave New World",
+  "title_fa": "دنیای قشنگ نو",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-16",
+  "wiki": "Brave New World",
+  "date": "2026-11-17"
  }
 ]
