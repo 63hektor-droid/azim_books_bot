@@ -1780,6 +1780,13 @@ def write_scenes_chunked(book, src, spine, cast, words, author_src, author_g, so
 - Only the facts given below; never add a fact, name, date or number. Introduce every person with a few words of role at his or her FIRST
   mention; a pronoun always points to the one person named in the sentence before it. Say where and when when the place changes.
 - YEARS: say a year like «هزار و هفتصد و هشتاد» (1780), NEVER «هفده صد و هشتاد». NUMBERS: separate Persian words, a separate «و», never glued, never digits.
+- THE THREAD OF A ROSARY (the most important rule): the story is ONE unbroken chain. Every event follows from the one before it, in the exact given order:
+  nothing is skipped, nothing is moved, nothing is told twice. Before an event, the listener must already know everything it needs: if it
+  needs something not told yet (who somebody is, what a place or a rule is, what happened in between), tell it first in ONE short setup
+  sentence taken from the facts. EVERY person, group, place or thing is introduced the FIRST time it appears with a few words that say who or
+  what it is AND why it is part of the story now; nothing and nobody appears out of the blue.
+- PLAIN WORDS: say plainly WHAT people or animals DO. No poetic, figurative or vague phrases, no idioms translated word by word (never
+  «در میان هیاهو», «پایکوبی مستانه»); when a phrase could be understood in two ways, use simple concrete words.
 - No English loanwords. Everyday words. No emojis, no brackets. At most two ezafe links in a row.
 {MEANING_RULE}
 {TONE_RULES}
@@ -1822,10 +1829,15 @@ published (only if the author sentence source says so), and ONE gripping sentenc
         part_ev = evs[a:a + 3]
         last_chunk = a + 3 >= n_ev
         got = {}
+        told_ = " ".join(" ".join(x["fa"] for x in sc_["sentences"]) for sc_ in raw)
+        introduced = [n for n in names if n and n in told_]
         for attempt in range(2):
             p2 = f"""Write the Persian narration of {len(part_ev)} consecutive events of the novel "{book['title_en']}".
 {rules}
 CHARACTER NAMES (exactly as written): {json.dumps(names, ensure_ascii=False)}
+THE WHOLE STORY IN BRIEF (only to place these events; never tell the later ones): {json.dumps([{'id': e['id'], 'what_en': _soft_text(e.get('what_en'), soft)} for e in evs], ensure_ascii=False)}
+ALREADY INTRODUCED TO THE LISTENER: {json.dumps(introduced, ensure_ascii=False)}
+NOT YET INTRODUCED (introduce each of them with who/what it is and why it is here, the first time it appears): {json.dumps([n for n in names if n not in introduced], ensure_ascii=False)}
 THE EVENT BEFORE THESE (already told; do not tell it again): {_soft_text(prev_en, soft) or '(none: this is the first event after the introduction)'}
 LAST PERSIAN SENTENCE ALREADY SAID: {prev_fa or '(none)'}
 EVENTS TO TELL NOW, in this order: {json.dumps([clean(e) for e in part_ev], ensure_ascii=False)}
@@ -1871,11 +1883,12 @@ Return JSON {{"scenes": [{{"ev": <event id>, "sentences": [{{"fa": "ONE Persian 
     # ---- 3) the closing wrap-up (only the meaning of the book)
     p3 = f"""Write the closing wrap-up of a Persian video about the novel "{book['title_en']}".
 {rules}
-CENTRAL IDEA: {spine.get('idea_en') or '(none: say what the story warns or teaches)'}
-Return JSON {{"wrap": [3 or 4 SHORT Persian sentences, 45 words at most]}}. The first sentence starts with the words «در جمع‌بندی». It is NOT a second
-summary: do NOT retell the story or its ending, name no person, creature, place or object of the plot, use only GENERAL nouns (کتاب, انسان, قدرت,
-آزادی, ترس, امید, جامعه). Sentence 1: the one central idea of the book; sentence 2: the message of the author to the reader; sentence 3: why it
-matters; the last sentence: short and memorable."""
+FACTS: central idea: {spine.get('idea_en') or '(none)'} | how it ends: {spine.get('ending_en') or '(none)'} | situation: {spine.get('logline') or ''}
+Return JSON {{"wrap": [3 or 4 SHORT Persian sentences, 55 words at most]}}. The first sentence starts with the words «در جمع‌بندی». It is NOT a second
+summary: do NOT retell the plot, name no person or place of the plot; use general concrete nouns. Sentence 1: say EXACTLY what the book is about at its
+core, with its real subject in plain concrete words (for example «قدرت و خیانت به آرمان‌ها», never vague words like «زندگی» or «انسانیت» alone);
+sentence 2: what the author wants to warn about or say to the reader, concretely; sentence 3: why it still matters today (a real situation in
+general terms); the last sentence: short and memorable."""
     d3 = gemini_json(p3, minutes=8, models=WRITE_MODELS)
     wr = _fa_sentences(d3.get("wrap"))
     if not wr:
@@ -1888,6 +1901,50 @@ matters; the last sentence: short and memorable."""
         raw.append(scene("wrap", wr))
     return {"characters": [], "scenes": raw}
 
+
+
+
+def plain_sense_pass(data, spine):
+    """ONE Gemini call: sentences that are not plain natural Persian, are figurative filler or a word-by-word translated idiom, could be
+    misread, or are not supported by the facts of their event are rewritten in plain words (same content, same number of sentences)."""
+    try:
+        facts = {e["id"]: e.get("what_en", "") for e in spine["events"]}
+        items = []
+        for si, sc in enumerate(data["scenes"]):
+            for ti, t in enumerate(split_sentences(sc["narration_fa"])):
+                items.append({"scene": si, "i": ti, "events": sc.get("ev_ids") or [], "fa": t})
+        if not items:
+            return data
+        prompt = f"""You are a strict editor of Persian narration for a video that retells a novel to a listener who never read it.
+Find every sentence that: is not natural, clear Persian; says nothing concrete (who does what); is poetic or figurative filler or an idiom translated
+word by word (for example «در میان هیاهو در پایکوبی مستانه شرکت کرد»); has a word that could be misread as something else (an uproar is not a creature);
+or tells something that the FACTS of its events do not support.
+FACTS by event id: {json.dumps(facts, ensure_ascii=False)}
+SENTENCES: {json.dumps(items, ensure_ascii=False)}
+Return JSON {{"bad": [{{"scene": 0, "i": 0, "fa": "the same sentence rewritten in plain, correct, concrete Persian, same content, using only the facts, not longer"}}]}}
+(an empty list when all sentences are fine)."""
+        out = gemini_json(prompt, minutes=6, models=WRITE_MODELS)
+        fixes = {}
+        for x in out.get("bad") or []:
+            if isinstance(x, dict) and str(x.get("scene", "")).isdigit() and str(x.get("i", "")).isdigit() and str(x.get("fa") or "").strip():
+                fixes[(int(x["scene"]), int(x["i"]))] = " ".join(str(x["fa"]).replace("ي", "ی").replace("ك", "ک").split())
+        if not fixes:
+            return data
+        n = 0
+        for si, sc in enumerate(data["scenes"]):
+            sents = split_sentences(sc["narration_fa"])
+            for ti in range(len(sents)):
+                if (si, ti) in fixes and 3 <= len(fixes[(si, ti)].split()) <= max(len(sents[ti].split()) + 6, 12):
+                    sents[ti] = fixes[(si, ti)]
+                    n += 1
+            sc["narration_fa"] = " ".join(sents)
+        print(f"Plain-sense check: {n} unclear sentence(s) rewritten in plain words.", flush=True)
+        return data
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        raise
+    except Exception as e:  # noqa: BLE001
+        print(f"Plain-sense check skipped: {e}", flush=True)
+        return data
 
 
 def remove_spoilers(data, spine):
@@ -1966,7 +2023,7 @@ def write_scenes(book, src, plan):
                              "ending_en": spine["ending_en"]}, ensure_ascii=False)
     author_g = {"woman": "the author is a woman", "man": "the author is a man"}.get(book.get("author_gender"),
                                                                                       "(not known: do not say anything that depends on it)")
-    use_chunks = False
+    use_chunks = os.environ.get("AZIM_ONE_CALL") != "1"      # the story is written event by event (a rosary thread) unless asked otherwise
     for attempt in range(4):
         prompt = f"""You are a gifted Iranian storyteller and radio host. Write the script of a video that summarizes the
 novel "{book['title_en']}" by {book['author_en']} for a Persian-speaking audience.
@@ -2152,6 +2209,7 @@ Rules for the visuals:
             data["spine"] = spine
             try:
                 data = remove_spoilers(data, spine)       # the opening never tells the ending
+                data = plain_sense_pass(data, spine)      # plain, concrete, supported sentences
             except (GeminiBlocked, GeminiQuotaExhausted):
                 pass
             data = story_gate(data, book, src)       # blind test with sentence-level repair
@@ -3219,7 +3277,9 @@ def align_visuals(data, book, src=None):
 order, of a video that summarizes the book "{book['title_en']}" by {book['author_en']} (era and place: {data.get('era_en', '')}).
 While each part is read aloud (about 15 to 20 seconds, 3 to 4 sentences), ONE vertical picture is shown. For EACH part write the
 picture so that it illustrates the exact content of THAT part: a viewer who sees only the picture understands what is being said and
-where it happens. The picture must COVER ALL the sentences of its part: the main event of the part large in the middle, and what the
+where it happens. Every named person is DOING the action of the sentences with the whole body (hands, posture, eyes), never just standing. NEVER invent a monster, ghost,
+demon, creature or person that the story does not have: words like uproar, commotion, noise, fear or chaos are NOT creatures; draw the characters of the story
+doing something instead. The picture must COVER ALL the sentences of its part: the main event of the part large in the middle, and what the
 other sentences mention (the creatures, objects and places, a visible trace of what happened just before) in the foreground and the
 background, without crowding: a clean, tidy, finished composition with rich details, every figure complete (no cut or doubled parts).
 {source_block}
@@ -3806,7 +3866,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+_FORCE_MARKS = (("کتاب", "کِتاب"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
@@ -4305,6 +4365,11 @@ CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
 
 
+_STYLE_DRIFT = re.compile(r"\b(?:photograph(?:ic|y)?|photo-?realistic|photo|realistic|hyper-?realistic|cinematic|3d|render(?:ed|ing)?|"
+                         r"oil paint\w*|water-?colou?r\w*|anime|manga|cartoon\w*|pixar|disney|comic|vector|digital art|colou?rful|"
+                         r"vibrant colou?rs?|neon|painterly)\b", re.I)
+
+
 def _trim_words(t, n):
     w = str(t).split()
     return " ".join(w[:n]).rstrip(",;:- ")
@@ -4339,7 +4404,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     era_full = str(scene.get("era_en") or "").strip()
     era_short = era_full.split(". Clothing of that time")[0]
     if scene.get("visual_en"):
-        main = str(scene["visual_en"]).strip()
+        main = _STYLE_DRIFT.sub("", str(scene["visual_en"])).strip()
         ev = str(scene.get("event_en") or "").strip().rstrip(".")
         if ev and ev.lower()[:30] not in main.lower():
             main = f"{ev}. {main}"
@@ -5039,6 +5104,12 @@ For EACH picture return:
 - "glasses": true if ANY person wears eyeglasses (they are always drawn deformed here: no eyeglasses are wanted at all).
 - "age_ok": false when a named character looks clearly younger or older than the age of his or her look sheet (a child instead of an
   adult or an adult instead of a child) or than his or her reference portrait. Otherwise true.
+- "idle": true when a named person only stands, sits or poses and is NOT visibly DOING the action of ITS "narration_fa" sentence with the
+  hands, the body or the face (the picture should show the action, not a portrait). Otherwise false.
+- "outfit_ok": false when the clothes of a person clearly contradict his or her job or class in the description (a writer in a guard's
+  uniform, a farmer in royal robes, a servant in a general's uniform). Otherwise true.
+- "invented": true when the picture shows a monster, ghost, demon, creature or person that the narration and the cast do NOT have
+  (for example a monster chasing people when the sentence only speaks of noise or excitement). Otherwise false.
 - "animal_ok": false when ANY animal or creature (pig, dog, horse, bird, dragon...) has a wrong body: not exactly four legs (a bird two)
   unless its look sheet says otherwise, two heads, a head WITHOUT clearly visible eyes, nose and mouth, a flat or melted face, a tail growing
   from the belly or the side instead of the rear, a doubled or merged body, extra limbs. Count the legs and the heads of EVERY animal.
@@ -5051,7 +5122,7 @@ For EACH picture return:
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names] + ([style_img] if style_img else []))
@@ -5101,6 +5172,15 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
             if c.get("age_ok") is False:
                 score = min(score, 3)
                 fix = ("every named person at exactly the age of his or her reference image, never a child instead of an adult or the other way round; " + fix)[:200]
+            if c.get("idle") is True:
+                score = min(score, 4)
+                fix = ("the people are BUSY with the action of the sentence (hands, body and face show it), not standing or posing; " + fix)[:220]
+            if c.get("outfit_ok") is False:
+                score = min(score, 3)
+                fix = ("every person wears clothes that fit his or her job and class, never another profession's uniform; " + fix)[:220]
+            if c.get("invented") is True:
+                score = min(score, 2)
+                fix = ("draw ONLY the characters and things of the story and the sentence: no monster, ghost or invented creature; " + fix)[:220]
             if c.get("animal_ok") is False:
                 score = min(score, 2)
                 fix = ("every animal has a normal body: four legs, ONE head with two eyes, a nose and a mouth clearly drawn, the tail at the REAR; " + fix)[:220]
@@ -5247,6 +5327,10 @@ def writer_desk_plan(era, author=None, n=0):
                           "an empty plain wall in the upper part of the picture"]}
 
 
+def _no_uniform(t):
+    return re.sub(r"\b(?:uniform\w*|police\w*|officer\w*|soldier\w*|guard\w*|military|army|navy|armou?r\w*|costume\w*)\b", "", str(t or ""), flags=re.I)
+
+
 def author_library_plan(author=None):
     """The ONE picture about the writer: the first picture of the video. A library; on its wall a framed painting of a samurai."""
     a = author or {}
@@ -5256,7 +5340,7 @@ def author_library_plan(author=None):
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and the back wall between the two "
               f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
               f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
-              f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {who}, sits at the table, seen from the SIDE or three-quarter back view (the face turned down toward the paper, never toward the viewer), "
+              f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {_no_uniform(who)}, in plain ordinary writer's clothes of his or her era (a simple shirt with a waistcoat or jacket; never a uniform, armor, police, military or any other profession's costume), sits at the table, seen from the SIDE or three-quarter back view (the face turned down toward the paper, never toward the viewer), "
               f"ACTIVELY WRITING, the writing hand, the pen and the paper clearly visible: the right hand holds a pen whose tip touches a sheet of manuscript paper and the writer's arm and shoulder show the writing movement (an inkwell and a pile of written pages beside it; or the hands on the keys of an old typewriter with a sheet of paper rolled into it); never just reading, never only sitting; the other hand rests flat on the table; the head and the body face the SAME direction, the neck is natural and "
               f"the head is never turned around; exactly one person, one head, two arms, two "
               f"hands; no text anywhere.")
@@ -5362,6 +5446,18 @@ def painting_file():
         data = base64.b64decode(_PAINTING_B64)
         if not p.exists() or p.read_bytes() != data:
             p.write_bytes(data)
+        sg = WORK / "azim_samurai_painting_signed.jpg"
+        font = next((f for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+                     if Path(f).exists()), None)
+        if font and not sg.exists():
+            try:                    # «Samurai Reader» as a painter's signature INSIDE the painting, small, in the lower left corner
+                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(p), "-vf",
+                                f"drawtext=fontfile={font}:text='Samurai Reader':fontsize=h*0.030:fontcolor=0x303030@0.85:x=w*0.07:y=h*0.935",
+                                "-frames:v", "1", "-q:v", "2", str(sg)], check=True, timeout=60)
+            except Exception as e:  # noqa: BLE001
+                print(f"Painting signature skipped ({e}).", flush=True)
+        if sg.exists():
+            return sg
         return p
     except Exception as e:  # noqa: BLE001
         print(f"Samurai painting file could not be written ({e}).", flush=True)
