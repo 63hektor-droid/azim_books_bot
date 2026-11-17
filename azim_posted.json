@@ -493,5 +493,15 @@
   "date_pt": "2026-11-15",
   "wiki": "Wuthering Heights",
   "date": "2026-11-16"
+ },
+ {
+  "title_en": "Animal Farm",
+  "title_fa": "قلعه حیوانات",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-16",
+  "wiki": "Animal Farm",
+  "date": "2026-11-17"
  }
 ]

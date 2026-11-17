@@ -43,5 +43,14 @@
   "author_en": "Emily Brontë",
   "date": "2026-11-16",
   "cover": true
+ },
+ {
+  "slug": "animal-farm",
+  "title_fa": "قلعه حیوانات",
+  "title_en": "Animal Farm",
+  "author_fa": "جورج اورول",
+  "author_en": "George Orwell",
+  "date": "2026-11-17",
+  "cover": true
  }
 ]
