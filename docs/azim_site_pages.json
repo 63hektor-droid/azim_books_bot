@@ -70,5 +70,14 @@
   "author_en": "Mary Shelley",
   "date": "2026-11-17",
   "cover": true
+ },
+ {
+  "slug": "dracula",
+  "title_fa": "دراکولا",
+  "title_en": "Dracula",
+  "author_fa": "برام استوکر",
+  "author_en": "Bram Stoker",
+  "date": "2026-11-18",
+  "cover": true
  }
 ]
