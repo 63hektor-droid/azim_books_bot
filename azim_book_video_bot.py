@@ -67,7 +67,7 @@ BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture abou
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
-VISUAL_VERSION = 25       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 26       # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 23       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -672,16 +672,16 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    # ONE fixed style for ALL videos (the user's choice, changed Nov 19, 2026): a hand-drawn black pencil + HATCHING picture in the
-    # look of an animated film, with attractive stylized characters. Only the first 4 comma pieces go into most prompts, so
-    # the style, the attractive characters and the natural proportions are all inside those 4 pieces.
-    "storybook": (("hand-drawn black-and-white pencil illustration with cross-hatching and fine hatching, "
-                  "in the look of an animated feature film, "
-                  "attractive stylized characters with large expressive eyes, "
+    # ONE fixed style for ALL videos (the user's choice, Nov 19, 2026, from his 3 sample pictures): a hand-drawn PENCIL SKETCHBOOK
+    # illustration - thin confident contour lines, loose visible sketch strokes, soft graphite shading with light hatching, large
+    # expressive eyes, hair drawn as many fine flowing strands, semi-realistic attractive characters with animated-film appeal, on
+    # white paper. Only the first 4 comma pieces go into most prompts, so the style is inside those 4 pieces.
+    "storybook": (("hand-drawn pencil sketchbook illustration with thin confident contour lines and loose sketch strokes, "
+                  "semi-realistic attractive characters with animated-film appeal, large expressive eyes and hair of many fine flowing strand lines, "
+                  "soft graphite shading with light hatching on white paper, "
                   "natural proportions with a small head and long legs, "
-                  "clean confident pencil linework with soft smooth shading, "
-                  "richly detailed textured clothing, highly detailed pencil-hatched backgrounds, "
-                  "strong contrast from deep black to white paper, whole picture in this one style"),
+                  "lightly sketched detailed backgrounds fading softly into bare paper, "
+                  "gray and black pencil only, whole picture in this one style"),
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -1018,6 +1018,8 @@ def enforce_distinct_cast(chars):
                       + (f"wearing a {top}" if top else "") + \
                       (f" and {bottom}" if (top and bottom) else (f"wearing {bottom}" if bottom else ""))
         c["key_en"] = c["key_en"].strip(" ,")
+        if body_trait(c):
+            c["key_en"] = (c["key_en"] + ", " + body_trait(c)).strip(" ,")
     return chars
 
 
@@ -1051,10 +1053,23 @@ def add_signatures(chars):
     return chars
 
 
+_HUNCH_RX = re.compile(r"hunch|hump|crooked back|bent back|stooped", re.I)
+HUNCH_EN = "a grown ADULT man (not a boy) with a big visible hunchback hump on his back and a stooped body"
+
+
+def body_trait(c):
+    """A visible body trait of the source (a hunchback) is pasted into every picture of the character: the picture model
+    otherwise draws a normal, graceful and even child-like person."""
+    t = " ".join(str(c.get(k) or "") for k in ("look_en", "tag_en", "signature_en"))
+    return HUNCH_EN if _HUNCH_RX.search(t) and not c.get("nonhuman") else ""
+
+
 def char_tag(c):
     """A SHORT face tag (the image model reads only the first ~250 tokens, so long sheets get cut)."""
     t = " ".join(str(c.get("tag_en") or "").split())
-    return t or " ".join(str(c.get("look_en") or "").split()[:26])
+    t = t or " ".join(str(c.get("look_en") or "").split()[:26])
+    tr = body_trait(c)
+    return (t + ", " + tr) if (tr and "hump" not in t.lower()) else t
 
 
 PLACES_SPEC = """- "locations": the 4 to 10 places where the story really happens (one for EVERY different kind of place in which an
@@ -1323,6 +1338,10 @@ Rules:
 - CLOTHES FIT THE JOB: the outfit shows the real job and class of the person (a merchant in a merchant's coat or
   waistcoat, a farmer in work clothes, a priest in a cassock, a nurse in a nurse's dress); uniforms and armor ONLY for
   soldiers, officers or guards. Say the job at the start of "look_en".
+- SIGNATURE BODY TRAIT (very important): a visible body trait that the SOURCE gives a character (a hunchback or hump, a limp, one eye, a
+  giant or very small body) is written FIRST in "look_en" and "tag_en" with the real adult age of the source (a hunchback man is a
+  grown man with a big hump on the back and a stooped body, NEVER a boy and never straight and graceful). This trait overrides
+  the attractive-cast rule below.
 - ATTRACTIVE CAST: every main character is good-looking in the way of an animated feature film: a harmonious, appealing face
   with expressive eyes, well-groomed hair, and a fit or graceful figure that suits the age; write the build in "look_en"
   (slim, athletic, graceful, broad-shouldered...). Keep what the source says (old, ill, ugly, fat, scarred) only when the story
@@ -3886,7 +3905,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("کتاب", "کِتاب"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+_FORCE_MARKS = (("کتاب", "کِتاب"), ("کولی", "کُولی"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
@@ -4365,8 +4384,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, flat 2D hand-drawn black-and-white pencil hatching illustration on white paper, the same style in every picture"
-CLEAN_SHORT = "sharp focus, crisp clean details, flat 2D black-and-white pencil hatching illustration, natural head size"
+CLEAN = "clean crisp image, sharp focus, clear fine lines, hand-drawn pencil sketchbook illustration on white paper, the same style in every picture"
+CLEAN_SHORT = "sharp focus, hand-drawn pencil sketch on white paper, natural head size"
 
 
 def _wc(t):
@@ -4516,6 +4535,8 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                 age_n = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
             except (IndexError, ValueError):
                 age_n = 0
+            if body_trait(c) and "ADULT" not in desc:
+                desc += ", " + body_trait(c)
             if age_n and not c.get("nonhuman") and "years old" not in desc:
                 desc += f", exactly {age_n} years old"
             parts.append(("character " if c.get("nonhuman") else "person ") + f"{k + 1}" + (f" = reference image {ri}" if ri else "") + f": {desc}"
@@ -4613,7 +4634,7 @@ def _cf_errors(r):
     return codes, msg
 
 
-SAFE_PREFIX = ("Detailed black-and-white pencil hatching illustration in the look of a hand-drawn animated film, graceful adult proportions with a "
+SAFE_PREFIX = ("Hand-drawn pencil sketchbook illustration with thin contour lines and soft graphite shading, graceful adult proportions with a "
                "natural head size, soft shading, everyone fully clothed, alive and upright. ")
 
 
@@ -4861,11 +4882,11 @@ def keep_saved(src_file, name):
 
 def _ref_prompt(c, era_short, extra=""):
     if c.get("nonhuman"):
-        return (f"Black-and-white pencil hatching illustration (hand-drawn animated film look), character reference picture of {c.get('species_en') or 'a character'}: "
+        return (f"Hand-drawn pencil sketchbook illustration (thin contour lines, soft graphite shading), character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
                 f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
-    return (f"Black-and-white pencil hatching illustration (hand-drawn animated film look), attractive character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+    return (f"Hand-drawn pencil sketchbook portrait (thin contour lines, fine flowing hair strands, soft graphite shading), attractive character reference portrait. {_trim_words(c['look_en'], 95)}. {(body_trait(c) + '. ') if body_trait(c) else ''}Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
@@ -5060,14 +5081,17 @@ For EACH picture return:
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
-  * STYLE: every picture must be the same hand-drawn black-and-white PENCIL and HATCHING illustration in the look of an animated
-    film (visible cross-hatching, clean pencil lines, soft shading, large expressive eyes, attractive stylized characters, graceful
-    adult proportions, rich detailed clothes and backgrounds).
-    A colored picture, a photo-like, 3D, flat vector or painted look, or characters whose heads are suddenly much bigger (a
-    chibi look) or whose style differs from the other pictures: at most 3;
+  * STYLE: every picture must be the same hand-drawn PENCIL SKETCHBOOK illustration: thin confident contour lines, loose visible sketch
+    strokes, soft graphite shading with light hatching, large expressive eyes, hair drawn as many fine flowing strands, attractive
+    semi-realistic characters on white paper, softly sketched backgrounds. A colored picture, a photo-like, 3D, flat vector, painted,
+    smooth digital or heavy dark look, characters whose heads are suddenly much bigger (a chibi look) or whose style differs from
+    the other pictures: at most 3;
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
+  * SIGNATURE TRAIT: a character whose sheet names a visible body trait (a hunchback, a limp...) must clearly show it and look like
+    the adult of the sheet (a hunchback man has a big visible hump and a stooped body and is never a boy or a straight figure):
+    "trait_ok" false, at most 3 (a hump required by the sheet is NOT a proportion mistake);
   * EXTRA FACE: a second face, an eye, a mouth or any face-like shape on a forehead, hat, hair, shirt, hand, shadow or wall: "extra_face" true, at most 2;
   * PROPORTIONS: legs clearly shorter than the torso, tiny or huge hands or feet, arms too short or too long, a body part out of scale
     with the others of the same person: "proportion_ok" false, at most 2;
@@ -5130,8 +5154,8 @@ For EACH picture return:
 - "head_ok": false when the head of ANY person is even a little too big for his or her body (a big-head, chibi, bobble-head or toy look; a
   natural head is about one seventh to one eighth of the body height; when in doubt say false), or when the people at the same distance have very different head sizes.
   Otherwise true.
-- "style_ok": false when the picture is NOT the same hand-drawn black-and-white pencil and hatching illustration as the other
-  pictures of this call (it looks colored, 3D, painted, photographic, flat vector or smooth digital, or its line work, hatching and shading differ
+- "style_ok": false when the picture is NOT the same hand-drawn pencil sketchbook illustration as the other pictures of this call
+  (it looks colored, 3D, painted, photographic, flat vector, smooth digital or very dark, or its line work and shading differ
   clearly from the other pictures). Otherwise true.
 - "hands_per_person": a list with ONE number for each person you can see: how many HANDS that person has in the picture
   (count them one by one: two is right; three or more is a mistake that must be reported here).
@@ -5141,6 +5165,7 @@ For EACH picture return:
   adult or an adult instead of a child) or than his or her reference portrait. Otherwise true.
 - "idle": true when ANY person (named or not) only stands, sits or poses and is NOT visibly DOING the action of ITS "narration_fa" sentence with the
   whole body (the picture should show the action in a dynamic pose, not a portrait or a straight standing figure). Otherwise false.
+- "trait_ok": false when a character with a visible body trait in its sheet (hunchback...) does not show it or looks like a child. Otherwise true.
 - "extra_face": true when a second face or a face-like shape appears anywhere except on the real head of a person. Otherwise false.
 - "proportion_ok": false when any person has legs shorter than the torso or a body part clearly out of scale. Otherwise true.
 - "vehicle_ok": false when a carriage, coach, cart, wagon or chariot lacks its harnessed horses (true when there is no such vehicle).
@@ -5160,7 +5185,7 @@ For EACH picture return:
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "extra_face": false, "proportion_ok": true, "vehicle_ok": true, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "extra_face": false, "trait_ok": true, "proportion_ok": true, "vehicle_ok": true, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names] + ([style_img] if style_img else []))
@@ -5202,8 +5227,11 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
                        + fix)[:200]
             if c.get("style_ok") is False:
                 score = min(score, 3)
-                fix = ("a hand-drawn black-and-white pencil illustration with visible cross-hatching in the look of an animated film, exactly like the other pictures; "
+                fix = ("a hand-drawn pencil sketchbook illustration with thin contour lines and soft graphite shading on white paper, exactly like the other pictures; "
                        + fix)[:200]
+            if c.get("trait_ok") is False:
+                score = min(score, 3)
+                fix = ("the hunchback man is a grown adult with a big visible hump on his back and a stooped body, never a boy; " + fix)[:200]
             if c.get("extra_face") is True:
                 score = min(score, 2)
                 fix = ("every head has exactly one face; no second face or face-like shape on any forehead, hat, hair, clothes or shadow; " + fix)[:200]
@@ -5363,7 +5391,7 @@ def writer_desk_plan(era, author=None, n=0):
     scenes = a.get("scenes_en") or list(WRITER_SCENES)
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical black-and-white pencil drawing scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
+    visual = (f"Vertical hand-drawn pencil sketchbook scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from behind (back view), the head and the body facing the SAME direction, never a head turned around; exactly "
               f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
               f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
@@ -5383,7 +5411,7 @@ def author_library_plan(author=None):
     a = author or {}
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical black-and-white pencil drawing scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
+    visual = (f"Vertical hand-drawn pencil sketchbook scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
               f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and the back wall between the two "
               f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
               f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
@@ -6711,16 +6739,16 @@ def main():
                     return build_prompt(FIXED_STYLE, script.get("characters", []), sc2, "", ref_names=[],
                                         limit=max((limit or PROMPT_WORDS) - 10, 60))
                 if level == 2 and gentle:    # the same event, wide: the creature stays large, the people are small
-                    return (f"Wide black-and-white pencil hatching illustration, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
+                    return (f"Wide hand-drawn pencil sketchbook illustration, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
                             f"Setting: {_trim_words(str(sc.get('era_en') or ''), 25)}. Style: "
                             f"{', '.join(FIXED_STYLE.split(', ')[:4])}. Vertical 9:16 composition, {CLEAN_SHORT}")
                 art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
                 cr = [soften_violence(x) for x in (sc.get("creatures_en") or []) if str(x).strip()][:2]
                 if cr:           # the creature and the place of the story, no people: a safe picture that still shows the subject
-                    return (f"Detailed black-and-white pencil hatching illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
+                    return (f"Hand-drawn pencil sketchbook illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
                             f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                             f"the creature large in the middle, atmospheric detailed environment, {CLEAN_SHORT}")
-                return (f"Detailed black-and-white pencil hatching illustration of a calm, quiet place in a peaceful moment. "
+                return (f"Hand-drawn pencil sketchbook illustration of a calm, quiet place in a peaceful moment. "
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
