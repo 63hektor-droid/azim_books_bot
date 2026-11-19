@@ -533,5 +533,15 @@
   "date_pt": "2026-11-18",
   "wiki": "Dracula",
   "date": "2026-11-18"
+ },
+ {
+  "title_en": "The Hunchback of Notre-Dame",
+  "title_fa": "گوژپشت نوتردام",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-19",
+  "wiki": "The Hunchback of Notre-Dame",
+  "date": "2026-11-19"
  }
 ]
