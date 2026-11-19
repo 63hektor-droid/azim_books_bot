@@ -67,7 +67,7 @@ BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture abou
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
-VISUAL_VERSION = 24       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 25       # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 23       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -672,14 +672,16 @@ def plan_length(src):
 # The picture styles. The robot only CHOOSES a key (by the rules below); the exact style words are fixed here, so
 # the robot can never invent a wrong or mixed style.
 STYLES = {
-    # ONE fixed style for ALL videos (the user's choice, changed Nov 12, 2026 to the 3 sample pictures): a detailed
-    # black-and-white graphite PENCIL drawing in manga / anime style - fine hatching, soft smooth shading, large expressive
-    # eyes, attractive faces, rich detailed clothes and backgrounds. Only the first 4 comma pieces go into most prompts.
-    "storybook": ("detailed black-and-white graphite pencil drawing in manga-anime style, fine hatching and soft smooth "
-                  "shading, realistic adult body proportions with a natural small head (about one seventh of the body height) "
-                  "and never a big head or chibi look, expressive eyes and elegant attractive detailed faces, "
-                  "richly detailed textured clothing, highly detailed atmospheric backgrounds drawn in pencil, "
-                  "strong contrast from deep black to white paper, whole picture in this one style",
+    # ONE fixed style for ALL videos (the user's choice, changed Nov 19, 2026): a hand-drawn black pencil + HATCHING picture in the
+    # look of an animated film, with attractive stylized characters. Only the first 4 comma pieces go into most prompts, so
+    # the style, the attractive characters and the natural proportions are all inside those 4 pieces.
+    "storybook": (("hand-drawn black-and-white pencil illustration with cross-hatching and fine hatching, "
+                  "in the look of an animated feature film, "
+                  "attractive stylized characters with large expressive eyes, "
+                  "natural proportions with a small head and long legs, "
+                  "clean confident pencil linework with soft smooth shading, "
+                  "richly detailed textured clothing, highly detailed pencil-hatched backgrounds, "
+                  "strong contrast from deep black to white paper, whole picture in this one style"),
                   "every book (this is the only style)"),
 }
 FIXED_STYLE = STYLES["storybook"][0]
@@ -2736,6 +2738,7 @@ _THING_LEXICON = [
     (_pw("ربات"), "a metal robot with clear arms and legs, clearly visible", ("robot",)),
     (_pw("عقاب|شاهین"), "a big eagle with wide wings, clearly visible", ("eagle", "hawk")),
     (_pw("اسب"), "a strong horse, clearly visible", ("horse",)),
+    (_pw("کالسکه|درشکه|گاری|ارابه|عرابه|فایتون"), "a horse-drawn carriage with two strong harnessed horses in front of it, both whole horses clearly visible with four legs each, the wheels turning on the road", ("horse",)),
     (rf"(?<![{_PERS}])(?:مار|افعی)(?:ها)?(?![{_PERS}])", "a long snake, clearly visible", ("snake",)),
     (_pw("کشتی بزرگ|ناو", False), "a large ship on the water, clearly visible", ("ship",)),
 ]
@@ -3044,6 +3047,12 @@ Check EVERY plan:
 10. KILLING AND GHOSTS: a death by a knife shows the knife and a small red stain at the wound (not gory), never a person who
    just sleeps; a ghost or spirit is a translucent glowing figure shaped like the person, not a halo or a light.
 8. BODIES: every person has one head, two arms, two hands; nothing is planned that could show a missing head or an extra hand.
+18. ACTION: every person in \"visual_en\" does a concrete body action of the narration (a body verb: running, pulling, reaching,
+   kneeling, turning...), never only stands, sits or poses; rewrite a plan where people just stand.
+19. VEHICLE ANIMALS: a carriage, coach, cart, wagon, chariot or sleigh in the plan always has its horses (or other animals)
+   harnessed in front of it, written in \"visual_en\", \"must_show\" and \"creatures_en\"; add them when they are missing.
+20. ONE FACE, NATURAL BODY: no second face or face-like shape on any head, hat, clothes or wall; natural proportions (long legs,
+   small head, normal hands).
 For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
 "problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
 (English, 90 to 110 words, starts with the shot type, written again completely whenever the people or the event change),
@@ -3353,6 +3362,17 @@ Rules:
   background) and the light and atmosphere come last in a few words. NO unnamed people in
   the background unless the part itself names them (a crowd, soldiers, villagers...); then they are counted in
   \"people_en\". Otherwise \"visual_en\" ends with: no other person anywhere in the picture. Everything belongs to the era of the story; nothing modern in an old story.
+- ACTION POSES (very important): every person is caught IN THE MIDDLE of a concrete body action of THIS sentence, never standing or
+  posing: write for each person a body verb in "visual_en" and in "roles" (running, fleeing, climbing, pulling, pushing, reaching,
+  gripping, kneeling, turning, bending, leaning, pointing, carrying, hiding, falling, embracing...), with the whole body, the head
+  and the eyes turned toward what happens; an emotion-only or talking sentence is shown by a leaning, turning, stepping or
+  gesturing body, never a straight standing pose.
+- VEHICLES AND ANIMALS THAT MOVE THEM (very important): a carriage, coach, cart, wagon, chariot or sleigh is ALWAYS drawn with its
+  horses (or other animals) harnessed in FRONT of it, whole and clearly visible with four legs each, and they are listed in
+  "creatures_en" and "must_show"; a moving carriage never has no horse. A ship has its sails or smoke, a car its wheels.
+- ONE FACE PER HEAD AND NATURAL PROPORTIONS: "visual_en" never has a second face, a face-like shape, a mask or a portrait on a
+  forehead, hat, shirt, shadow or wall; every person has natural proportions (long legs about half of the body height, a small
+  head, normal hands and feet), and a character is never described with short legs or oversized parts.
 - MOMENT MATCH (very important): the picture shows the ONE most important moment of the part: the event told by its main verb,
   at the instant when it is easiest to see (the door opening, the hand pushing, the ship exploding), and the RESULT of the action
   is visible (an open door, a fallen cup, smoke, a broken window). Every concrete thing that the Persian part names (people and
@@ -4345,8 +4365,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, hand-drawn black-and-white graphite pencil drawing, not a photo, not colored, not 3D, not chibi"
-CLEAN_SHORT = "sharp focus, crisp clean details, black-and-white graphite pencil drawing, natural head size, not a photo, not colored"
+CLEAN = "clean crisp image, sharp focus, fine sharp details, clear clean edges, high clarity, flat 2D hand-drawn black-and-white pencil hatching illustration on white paper, the same style in every picture"
+CLEAN_SHORT = "sharp focus, crisp clean details, flat 2D black-and-white pencil hatching illustration, natural head size"
 
 
 def _wc(t):
@@ -4356,10 +4376,9 @@ def _wc(t):
 KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square model
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
-ANATOMY = ("Every person has one head, two arms ending in two hands with five fingers each (none missing, none extra) "
-           "and two legs; natural human proportions: every head is small, only about one eighth of its body height (long legs, narrow shoulders), NEVER a big head, never a child-like or chibi head on an adult body; "
-           "limbs of different people never overlap")
-NO_EXTRA = "No eyeglasses on anybody, no other person anywhere, no crowd, no faces in windows; every person appears exactly once with exactly one head and one body, never a second copy, twin, reflection or extra head"
+ANATOMY = ("Each person: one head with exactly one face (no extra face or face-like shape anywhere), two arms, two hands with five fingers, "
+           "two long legs (legs about half of the body height), small head (one eighth of the height), normal hands and feet, no overlapping limbs")
+NO_EXTRA = "No eyeglasses, no other person anywhere, no crowd, no faces in windows, no second copy, twin, reflection or extra head"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
@@ -4382,6 +4401,11 @@ def pick_present(chars, names):
     humans = [n for n in names if not (byname.get(n) or {}).get("nonhuman")]
     others = [n for n in names if (byname.get(n) or {}).get("nonhuman")]
     return [n for n in names if n in humans[:MAX_PEOPLE] or n in others[:1]]
+
+
+VEHICLE_RX = re.compile(r"\b(?:carriage|stagecoach|coach and (?:four|six|horses)|wagon|waggon|chariot|sleigh|sledge|hansom|buggy|phaeton|landau|brougham)\b", re.I)
+HORSELESS_RX = re.compile(r"\b(?:railway|railroad|train|tram|locomotive|motor|automobile|horseless|truck|tractor|engine|abandoned|broken|wrecked|empty stable|toy)\b", re.I)
+HORSE_VEHICLE_EN = "a carriage pulled by two harnessed horses in front of it, both whole horses fully visible, four legs each"
 
 
 def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_ref=False):
@@ -4421,7 +4445,10 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     total = len(present) + len(others)
     people_en = " ".join(str(scene.get("people_en") or "").split()).rstrip(". ")
     creatures = [" ".join(str(x).split()) for x in (scene.get("creatures_en") or []) if str(x).strip()][:2]
-    subject = ("Main subject, drawn large and clearly visible: " + "; ".join(_trim_words(x, 28) for x in creatures) + ". "
+    _vt = " ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " " + " ".join(map(str, scene.get("must_show") or [])) + " " + " ".join(creatures)
+    if (VEHICLE_RX.search(_vt) and not HORSELESS_RX.search(_vt) and "horse" not in _vt.lower()):
+        creatures = ([HORSE_VEHICLE_EN] + creatures)[:2]          # a carriage is never drawn without its horses
+    subject = ("Main subject, drawn large: " + "; ".join(_trim_words(x, 28) for x in creatures) + ". "
                if creatures else "")
     if creatures:                    # "nobody else" must not forbid the creature of the event
         people_en = re.sub(r"\bnobody else\b", "no other people", people_en, flags=re.I)
@@ -4434,8 +4461,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     if creatures:
         count = count.replace("nobody else", "no other people")
     if total >= 2:
-        count += ("Every person has a different face, hairstyle and clothes (light or dark tones); same natural head size for all; "
-                  "people stand apart, bodies never overlap. ")
+        count += "Different faces, hairstyles and clothes; same head size; bodies never overlap. "
     if any(re.search(r"\b(man|boy|male|father|husband|king|prince|gentleman)\b", str(c.get("tag_en") or c.get("look_en") or "")[:60], re.I)
            and not re.search(r"\b(woman|girl|female|mother|wife|queen|lady)\b", str(c.get("tag_en") or c.get("look_en") or "")[:60], re.I)
            for c in present):
@@ -4455,12 +4481,14 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                     if nh_all else ANATOMY + " (humans only). ")) if nh_any else ANATOMY + ". ")
         if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
             count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else NO_EXTRA) + ". "
+    if has_people:
+        count += "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. "
     if total > MAX_PEOPLE:
         count += f"Only {MAX_PEOPLE} people have large clear faces; the others are small, far away or from behind. "
     if has_people and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en"))):
         count += "Everybody alive and upright. "
     if not creatures:
-        count += "Only the listed people, no animals. "
+        count += "No animals. "
 
     def people(full):
         if not (present or others):
@@ -4511,7 +4539,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
 
     emo = " ".join(str(scene.get("emotion_en") or "").split())
     if emo and has_people:
-        count += f"{'Expressions' if nh_all else 'Facial expressions'} that show the feeling: {_trim_words(emo, 28)}. "
+        count += f"{'Expressions' if nh_all else 'Faces'} showing the feeling: {_trim_words(emo, 28)}. "
     non_event = (str(scene.get("kind") or "event") != "event") or people_en.lower().startswith("no people")
 
     def compose(main_t, full, era, tail):
@@ -4526,18 +4554,18 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                     f"the lower fifth only floor or ground; {tail}")
         if creatures:
             return (f"{head}{art_s}. {subject}{count}{main_t} {people(full)}{era_part}"
-                    f"Vertical 9:16 medium-wide shot: the creature and the people large and fully visible, whole bodies inside "
-                    f"the picture, the EVENT happening right now with clear action, clear carefully drawn faces, not looking at "
-                    f"the camera; detailed environment; the lower fifth only floor or ground; {tail}")
+                    f"Vertical 9:16 medium-wide shot: the creature and the people large, whole bodies inside the picture, the EVENT "
+                    f"happening right now, clear attractive faces, not looking at the camera; detailed environment; "
+                    f"lower fifth only floor or ground; {tail}")
         if nh_all:
             return (f"{head}{art_s}. {subject}{count}{main_t} {people(full)}{era_part}"
                     f"Vertical 9:16 medium-wide shot: the characters large (half of the picture height), their whole bodies "
                     f"inside the picture, clear shapes and expressive eyes, busy with the action, not looking at the camera; "
                     f"detailed environment; the lower fifth only floor or ground; {tail}")
         return (f"{head}{art_s}. {subject}{count}{main_t} {people(full)}{era_part}"
-                f"Vertical 9:16 medium-wide shot: all people at the same scale (adults equally tall, about half of the picture "
-                f"height) with attractive, clear, carefully drawn faces, whole heads and bodies inside the picture, busy with the action, not looking at the camera; "
-                f"detailed environment; the lower fifth only floor or ground; {tail}")
+                f"Vertical 9:16 medium-wide shot: all people at the same scale (about half of the picture height), clear attractive "
+                f"faces, whole bodies inside the picture, busy with the action, not looking at the camera; detailed environment; "
+                f"lower fifth only floor or ground; {tail}")
 
     for full, era, tail, n_role in ((True, era_full, CLEAN, 10), (True, era_short, CLEAN, 8),
                                     (True, era_short, CLEAN_SHORT, 6), (False, era_short, CLEAN_SHORT, 0)):
@@ -4585,7 +4613,7 @@ def _cf_errors(r):
     return codes, msg
 
 
-SAFE_PREFIX = ("Detailed black-and-white graphite pencil drawing in manga-anime style, graceful adult proportions with a "
+SAFE_PREFIX = ("Detailed black-and-white pencil hatching illustration in the look of a hand-drawn animated film, graceful adult proportions with a "
                "natural head size, soft shading, everyone fully clothed, alive and upright. ")
 
 
@@ -4754,7 +4782,8 @@ def make_image(build, path, seed, scenes_left, fix="", safe_build=None):
             if _STATE["refs_ok"]:
                 plans.append((CF_MODEL, True))
             plans.append((CF_MODEL, False))
-        plans.append((CF_FALLBACK_MODEL, False))
+        else:
+            plans.append((CF_FALLBACK_MODEL, False))      # the old square model only when klein itself is refused for good: its style differs
         tried = flagged = 0
         for model, use_refs in plans:
             prompt, refs = build(fix, use_refs, KLEIN_WORDS if model == CF_MODEL else PROMPT_WORDS)
@@ -4832,11 +4861,11 @@ def keep_saved(src_file, name):
 
 def _ref_prompt(c, era_short, extra=""):
     if c.get("nonhuman"):
-        return (f"Black-and-white graphite pencil drawing, manga-anime character reference picture of {c.get('species_en') or 'a character'}: "
+        return (f"Black-and-white pencil hatching illustration (hand-drawn animated film look), character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
                 f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
-    return (f"Black-and-white graphite pencil drawing, manga-anime character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
+    return (f"Black-and-white pencil hatching illustration (hand-drawn animated film look), attractive character reference portrait. {_trim_words(c['look_en'], 95)}. Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
@@ -5031,13 +5060,19 @@ For EACH picture return:
   * who does what to whom must match the narration (for example the mother nurses the daughter, not the other way
     round); roles swapped between the people: at most 3;
   * people who just stand and face the viewer or look into the camera with no action of the narration: at most 5;
-  * STYLE: every picture must be the same detailed black-and-white graphite PENCIL drawing in manga-anime style (fine hatching,
-    soft shading, large expressive eyes, attractive faces, graceful adult proportions, rich detailed clothes and backgrounds).
+  * STYLE: every picture must be the same hand-drawn black-and-white PENCIL and HATCHING illustration in the look of an animated
+    film (visible cross-hatching, clean pencil lines, soft shading, large expressive eyes, attractive stylized characters, graceful
+    adult proportions, rich detailed clothes and backgrounds).
     A colored picture, a photo-like, 3D, flat vector or painted look, or characters whose heads are suddenly much bigger (a
     chibi look) or whose style differs from the other pictures: at most 3;
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
+  * EXTRA FACE: a second face, an eye, a mouth or any face-like shape on a forehead, hat, hair, shirt, hand, shadow or wall: "extra_face" true, at most 2;
+  * PROPORTIONS: legs clearly shorter than the torso, tiny or huge hands or feet, arms too short or too long, a body part out of scale
+    with the others of the same person: "proportion_ok" false, at most 2;
+  * VEHICLE: a carriage, coach, cart, wagon or chariot without its horses (or other pulling animals) in front of it, or horses that are
+    not attached to it: "vehicle_ok" false, at most 3;
   * CLOTHES FIT THE JOB: every person wears what his or her job, class and the era say (a merchant in a merchant's coat,
     a servant in plain work clothes, a soldier in uniform ONLY if he is a soldier); a wrong costume: at most 4;
   * CLOTHES FIT THE SITUATION: a person who wears pajamas, a nightgown or a bathrobe while the narration is NOT about
@@ -5095,8 +5130,8 @@ For EACH picture return:
 - "head_ok": false when the head of ANY person is even a little too big for his or her body (a big-head, chibi, bobble-head or toy look; a
   natural head is about one seventh to one eighth of the body height; when in doubt say false), or when the people at the same distance have very different head sizes.
   Otherwise true.
-- "style_ok": false when the picture is NOT the same detailed black-and-white graphite pencil drawing in manga style as the other
-  pictures of this call (it looks colored, 3D, painted, photographic, flat vector or cartoon-like, or its line work and shading differ
+- "style_ok": false when the picture is NOT the same hand-drawn black-and-white pencil and hatching illustration as the other
+  pictures of this call (it looks colored, 3D, painted, photographic, flat vector or smooth digital, or its line work, hatching and shading differ
   clearly from the other pictures). Otherwise true.
 - "hands_per_person": a list with ONE number for each person you can see: how many HANDS that person has in the picture
   (count them one by one: two is right; three or more is a mistake that must be reported here).
@@ -5104,8 +5139,11 @@ For EACH picture return:
 - "glasses": true if ANY person wears eyeglasses (they are always drawn deformed here: no eyeglasses are wanted at all).
 - "age_ok": false when a named character looks clearly younger or older than the age of his or her look sheet (a child instead of an
   adult or an adult instead of a child) or than his or her reference portrait. Otherwise true.
-- "idle": true when a named person only stands, sits or poses and is NOT visibly DOING the action of ITS "narration_fa" sentence with the
-  hands, the body or the face (the picture should show the action, not a portrait). Otherwise false.
+- "idle": true when ANY person (named or not) only stands, sits or poses and is NOT visibly DOING the action of ITS "narration_fa" sentence with the
+  whole body (the picture should show the action in a dynamic pose, not a portrait or a straight standing figure). Otherwise false.
+- "extra_face": true when a second face or a face-like shape appears anywhere except on the real head of a person. Otherwise false.
+- "proportion_ok": false when any person has legs shorter than the torso or a body part clearly out of scale. Otherwise true.
+- "vehicle_ok": false when a carriage, coach, cart, wagon or chariot lacks its harnessed horses (true when there is no such vehicle).
 - "outfit_ok": false when the clothes of a person clearly contradict his or her job or class in the description (a writer in a guard's
   uniform, a farmer in royal robes, a servant in a general's uniform). Otherwise true.
 - "invented": true when the picture shows a monster, ghost, demon, creature or person that the narration and the cast do NOT have
@@ -5122,7 +5160,7 @@ For EACH picture return:
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "extra_face": false, "proportion_ok": true, "vehicle_ok": true, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names] + ([style_img] if style_img else []))
@@ -5164,8 +5202,17 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
                        + fix)[:200]
             if c.get("style_ok") is False:
                 score = min(score, 3)
-                fix = ("a detailed black-and-white graphite pencil drawing in manga style with fine hatching, exactly like the other pictures; "
+                fix = ("a hand-drawn black-and-white pencil illustration with visible cross-hatching in the look of an animated film, exactly like the other pictures; "
                        + fix)[:200]
+            if c.get("extra_face") is True:
+                score = min(score, 2)
+                fix = ("every head has exactly one face; no second face or face-like shape on any forehead, hat, hair, clothes or shadow; " + fix)[:200]
+            if c.get("proportion_ok") is False:
+                score = min(score, 2)
+                fix = ("natural body proportions: long legs about half of the body height, small head, normal hands and feet; " + fix)[:200]
+            if c.get("vehicle_ok") is False:
+                score = min(score, 3)
+                fix = ("the carriage is pulled by two harnessed horses fully visible in front of it; " + fix)[:200]
             if c.get("glasses") is True:
                 score = min(score, 4)
                 fix = ("nobody wears eyeglasses, clean natural eyes; " + fix)[:200]
@@ -5174,7 +5221,7 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
                 fix = ("every named person at exactly the age of his or her reference image, never a child instead of an adult or the other way round; " + fix)[:200]
             if c.get("idle") is True:
                 score = min(score, 4)
-                fix = ("the people are BUSY with the action of the sentence (hands, body and face show it), not standing or posing; " + fix)[:220]
+                fix = ("every person in a dynamic full-body pose in the middle of the action of the sentence, never standing or posing; " + fix)[:220]
             if c.get("outfit_ok") is False:
                 score = min(score, 3)
                 fix = ("every person wears clothes that fit his or her job and class, never another profession's uniform; " + fix)[:220]
@@ -6664,16 +6711,16 @@ def main():
                     return build_prompt(FIXED_STYLE, script.get("characters", []), sc2, "", ref_names=[],
                                         limit=max((limit or PROMPT_WORDS) - 10, 60))
                 if level == 2 and gentle:    # the same event, wide: the creature stays large, the people are small
-                    return (f"Wide black-and-white graphite pencil drawing, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
+                    return (f"Wide black-and-white pencil hatching illustration, the creature large and the people small, natural head size: {_trim_words(gentle, 45)}. "
                             f"Setting: {_trim_words(str(sc.get('era_en') or ''), 25)}. Style: "
                             f"{', '.join(FIXED_STYLE.split(', ')[:4])}. Vertical 9:16 composition, {CLEAN_SHORT}")
                 art_s = ", ".join(FIXED_STYLE.split(", ")[:4])
                 cr = [soften_violence(x) for x in (sc.get("creatures_en") or []) if str(x).strip()][:2]
                 if cr:           # the creature and the place of the story, no people: a safe picture that still shows the subject
-                    return (f"Detailed black-and-white graphite pencil drawing, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
+                    return (f"Detailed black-and-white pencil hatching illustration, no people: {'; '.join(_trim_words(x, 30) for x in cr)}. "
                             f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                             f"the creature large in the middle, atmospheric detailed environment, {CLEAN_SHORT}")
-                return (f"Detailed black-and-white graphite pencil drawing of a calm, quiet place in a peaceful moment. "
+                return (f"Detailed black-and-white pencil hatching illustration of a calm, quiet place in a peaceful moment. "
                         f"Setting: {_trim_words(era, 40)}. Style: {art_s}. Vertical 9:16 composition, wide framing, "
                         f"soft warm light, {CLEAN_SHORT}")
 
