@@ -543,5 +543,15 @@
   "date_pt": "2026-11-19",
   "wiki": "The Hunchback of Notre-Dame",
   "date": "2026-11-19"
+ },
+ {
+  "title_en": "Madame Bovary",
+  "title_fa": "مادام بوواری",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-19",
+  "wiki": "Madame Bovary",
+  "date": "2026-11-19"
  }
 ]

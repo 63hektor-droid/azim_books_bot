@@ -88,5 +88,14 @@
   "author_en": "Victor Hugo",
   "date": "2026-11-19",
   "cover": true
+ },
+ {
+  "slug": "madame-bovary",
+  "title_fa": "مادام بوواری",
+  "title_en": "Madame Bovary",
+  "author_fa": "گوستاو فلوبر",
+  "author_en": "Gustave Flaubert",
+  "date": "2026-11-19",
+  "cover": true
  }
 ]
