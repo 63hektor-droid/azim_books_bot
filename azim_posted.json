@@ -553,5 +553,15 @@
   "date_pt": "2026-11-19",
   "wiki": "Madame Bovary",
   "date": "2026-11-19"
+ },
+ {
+  "title_en": "The Trial",
+  "title_fa": "محاکمه",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-20",
+  "wiki": "The Trial",
+  "date": "2026-11-20"
  }
 ]

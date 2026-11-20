@@ -97,5 +97,14 @@
   "author_en": "Gustave Flaubert",
   "date": "2026-11-19",
   "cover": true
+ },
+ {
+  "slug": "the-trial",
+  "title_fa": "محاکمه",
+  "title_en": "The Trial",
+  "author_fa": "فرانتس کافکا",
+  "author_en": "Franz Kafka",
+  "date": "2026-11-20",
+  "cover": true
  }
 ]
