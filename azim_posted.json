@@ -563,5 +563,15 @@
   "date_pt": "2026-11-20",
   "wiki": "The Trial",
   "date": "2026-11-20"
+ },
+ {
+  "title_en": "The Metamorphosis",
+  "title_fa": "مسخ",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-21",
+  "wiki": "The Metamorphosis",
+  "date": "2026-11-21"
  }
 ]
