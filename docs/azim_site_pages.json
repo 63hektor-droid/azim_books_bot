@@ -115,5 +115,14 @@
   "author_en": "Franz Kafka",
   "date": "2026-11-21",
   "cover": true
+ },
+ {
+  "slug": "the-stranger",
+  "title_fa": "بیگانه",
+  "title_en": "The Stranger",
+  "author_fa": "آلبر کامو",
+  "author_en": "Albert Camus",
+  "date": "2026-11-22",
+  "cover": true
  }
 ]
