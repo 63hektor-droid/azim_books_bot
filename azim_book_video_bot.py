@@ -587,7 +587,8 @@ def fetch_extra_plots(title_en, en_words):
             if len(words) < max(150, int(en_words * 0.5)):          # a thin section adds nothing
                 continue
             lead_w = " ".join(lead.split()[:180])
-            out.append((name, (f"INTRODUCTION ({name}): {lead_w}\n\nPLOT: " if lead_w else "") + " ".join(words[:EXTRA_WORDS_MAX])))
+            out.append((name, (f"INTRODUCTION ({name}): {lead_w}\n\nPLOT: " if lead_w else "") + " ".join(words[:EXTRA_WORDS_MAX]),
+                        f"https://{lang}.wikipedia.org/wiki/" + urllib.parse.quote(t.replace(" ", "_"))))
             print(f"Extra source: {name} Wikipedia plot, {len(words)} words (using {min(len(words), EXTRA_WORDS_MAX)}).", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"Extra source {lang} skipped ({e}).", flush=True)
@@ -620,6 +621,23 @@ def fetch_wiki(book):
             "themes": pick_themes(text)}
 
 
+def attribution_text(src):
+    """The credit under every video: what the text is made from (the Wikipedia article, with a link), who wrote it (the page
+    history), the licence with its link, that the text was changed (summarised and rewritten) and that this video text is shared
+    under the same licence (CC BY-SA 4.0 asks for exactly this)."""
+    url = str(src.get("url") or "").strip()
+    title = str(src.get("title") or "").strip()
+    lines = [f"منبع: این خلاصه برگرفته از بخش داستانِ مقالهٔ ویکی‌پدیا «{title}» است و برای این ویدیو خلاصه و بازنویسی شده است.", url]
+    for u in (src.get("extra_urls") or [])[:3]:
+        lines.append(str(u))
+    if url and "/wiki/" in url:
+        base, name = url.split("/wiki/", 1)
+        lines.append(f"نویسندگان مقاله: {base}/w/index.php?title={name}&action=history")
+    lines.append("مجوز: CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/deed.fa")
+    lines.append("متن این ویدیو هم با همان مجوز CC BY-SA 4.0 منتشر می‌شود.")
+    return "\n".join(lines)
+
+
 def fetch_source(book):
     """Facts for the video: ONLY the Plot section of the English Wikipedia article (+ its introduction and a short
     significance text for the closing wrap-up). Nothing comes from memory. None if the novel has no usable Plot."""
@@ -636,7 +654,9 @@ def fetch_source(book):
              f"PLOT (an editor-reviewed concise summary of the whole story, {pw} words; the ONLY source of "
              "the events):\n" + en["plot"]]
     n_core = len(parts)
-    for name_, txt_ in fetch_extra_plots(en["title"], pw):
+    extra_urls = []
+    for name_, txt_, url_ in fetch_extra_plots(en["title"], pw):
+        extra_urls.append(url_)
         parts.append(f"SECOND SOURCE - PLOT from the {name_} Wikipedia (another editor's summary of the SAME novel: use it to "
                      "confirm events, to fill what the English PLOT skips and to understand a term; when they disagree the "
                      "English PLOT wins; write every name as in the English text):\n" + txt_)
@@ -656,7 +676,7 @@ def fetch_source(book):
     url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(en["title"].replace(" ", "_"))
     print(f"Source: Wikipedia Plot section, {pw} words (+ {len(parts) - 2 - bool(en['sig'])} extra part(s)).", flush=True)
     return {"text": "\n\n".join(parts), "text_write": "\n\n".join(core), "en_words": pw, "url": url, "title": en["title"],
-            "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)"}
+            "credit": "منبع خلاصه: ویکی‌پدیا (CC BY-SA)", "extra_urls": extra_urls}
 
 
 def plan_length(src):
@@ -700,8 +720,8 @@ TONE_RULES = """- TONE AND FLOW: a warm storyteller who tells the story to ONE l
   such as «نمود»، «گردید»، «می‌باشد»، «لذا»، «مذکور»; no advertising tone.
   Punctuation guides the voice: commas for breath, «…» for suspense, «؟» for a real question (rare), «!» only for
   strong emotion.
-  MAKE THE LISTENER CURIOUS AND MOVED (a retelling that is only correct is boring): the video opens with a HOOK from the START
-  situation of the story (the strange, gripping problem the hero faces), never a dry announcement; the WANT and the FEAR of
+  MAKE THE LISTENER CURIOUS AND MOVED (a retelling that is only correct is boring): the video opens with ONLY the name of the book
+  and its author (NO summary, NO hook, NO teaser: nothing of the story is told before its turn); the WANT and the FEAR of
   each hero (what he or she risks) are said in plain words the first time he or she matters; every turning point, loss,
   betrayal, discovery and the ending gets weight: a short sentence of its own and ONE concrete detail from the source (an
   object, a place, a spoken line, a gesture) that makes the moment memorable; a scene ends on the question or the tension that
@@ -1559,7 +1579,7 @@ a term. Names always as in the English text.
 {names_txt}
 Return JSON with exactly these keys:
 - "logline": ONE English sentence: who the hero is, what he or she wants and what stands in the way, AT THE START of the story
-  (NEVER an outcome, a death, a result or how it ends: the logline opens the video and must not spoil anything).
+  (NEVER an outcome, a death, a result or how it ends; it is only a note for the program and is NEVER said in the video).
 - "heroes": 2 to 4 objects {{"name": "...", "role_en": "..."}}: only the people without whom the story cannot be told.
   "name" is ONLY the FIRST name (or the shortest known name) of the person; "role_en" 6 to 14 English words that introduce this person to a viewer (age or job,
   relation to the other heroes, what he or she wants), only from the source. Say what the hero REALLY is (a person, an
@@ -1610,7 +1630,7 @@ Return JSON with exactly these keys:
     point, the climax or the change of the hero. Episodes, side characters, trips, descriptions and details are NOT events.
   * COMPLETE FIRST: the list of events must let a viewer understand the WHOLE story, with every important event told (all
     weight 5 and 4 points). When there are more heavy points than {hi} events, merge neighbouring points into one event; do
-    NOT throw a heavy point away. Only after that, if there is still room, add weight 3 points; never weight 1 or 2 points.
+    NOT throw a heavy point away. Never add a weight 3, 2 or 1 point as an event of its own (a lighter point appears only inside the "because_en" of the heavier event that needs it): a short, complete story that tells only what matters is the goal; an unimportant event is NEVER told.
   * Every event follows from the one before it (a real cause, not just \"then\"). Together they tell the whole story from
     the beginning to the end, with nothing important missing.
   * Only facts of the PLOT in the source text.
@@ -1818,14 +1838,12 @@ def write_scenes_chunked(book, src, spine, cast, words, author_src, author_g, so
     heroes = spine["heroes"]
     p1 = f"""Write the opening of a Persian video that summarizes the novel "{book['title_en']}" by {book['author_en']}.
 {rules}
-FACTS: logline (the situation at the START only): {_soft_text(spine['logline'], soft)}
 AUTHOR SENTENCE SOURCE: {author_src}
 AUTHOR GENDER: {author_g}
 HEROES: {json.dumps([{'name': h['name'], 'role_en': _soft_text(h.get('role_en'), soft)} for h in heroes], ensure_ascii=False)}
 {('WORLD: ' + spine['world_en']) if spine.get('world_en') else ''}
-Return JSON {{"open": [2 or 3 Persian sentences, 35 to 60 words in all: the name of the novel and of its author in English letters, when it was
-published (only if the author sentence source says so), and ONE gripping sentence: the hero, what he or she wants and the problem
-(the situation at the START only; NO outcome, NO death, NO later event)],
+Return JSON {{"open": [1 or 2 short Persian sentences, 12 to 30 words in all: ONLY the name of the novel and of its author in English letters and,
+only if the author sentence source says so, when it was published; NOTHING about the story: no summary, no hook, no hero, no problem, no teaser],
 "heroes": [{'2 to 4 Persian sentences (35 to 65 words) that say who is who: each hero by name with a few words of role and relation to the others; no fate, no ending' if len(heroes) >= 2 else '[]'}]}}"""
     d1 = gemini_json(p1, minutes=8, models=WRITE_MODELS)
     open_s, heroes_s = _fa_sentences(d1.get("open")), _fa_sentences(d1.get("heroes"))
@@ -2069,12 +2087,10 @@ Return JSON with exactly these keys:
   exact age, face, skin tone, eyes, hair, one distinctive feature, usual clothes with colors). If CHARACTERS are given
   above, copy them unchanged. Empty list if there are no characters.
 - "scenes": a list of scene objects in EXACTLY this order of "part" ({min_sc} to {max_sc + 2} scenes in all):
-    1. ONE scene with part "open": the introduction, 2 or 3 sentences (35 to 60 words): the name of the novel and of its author
-       in English letters, when it was published (only if the AUTHOR SENTENCE SOURCE says so), and in one GRIPPING sentence (a hook: the
-       hero, what he or she wants and the problem that threatens it, from the logline; NEVER an outcome, a death, a result
-       or anything that happens later: the end of the story is a surprise that only the last scenes reveal). NO SPOILER AND NO JUMP: this scene tells only the situation at
-       the START of the story (event 1); it never mentions how the story goes on or ends. Nothing else about the author (no
-       biography), no praise.
+    1. ONE scene with part "open": the introduction, 1 or 2 short sentences (12 to 30 words): ONLY the name of the novel and of its
+       author in English letters and, only if the AUTHOR SENTENCE SOURCE says so, when it was published. NOTHING about the story: no
+       summary, no hook, no situation, no hero, no problem, no teaser and no question about the plot (the story starts only after
+       the introduction). Nothing else about the author (no biography), no praise.
     2. ONE scene with part "heroes" (only if the spine has 2 or more heroes): 2 to 4 sentences (35 to 65 words) that say who is
        who: for each hero of the spine his or her name and a few words of role and relation to the others (from "role_en").
        Flowing text, not a list. Nothing about what happens to them later (no fate, no ending).
@@ -3349,13 +3365,13 @@ Rules:
   child, a small boy, nobody else"). «a mother and her child» is ONE adult and ONE child; when the source says that she has
   one child, a second child is NEVER drawn; a crowd, a family or any other person appears only when the part says so.
   Kind "author": "exactly one person, seen only from behind".
-- "others": an EMPTY LIST by default; a person is listed ONLY when the Persian part itself names or clearly implies him or her (a rescuer, a doctor...); NEVER invent a bystander, servant, child, relative or crowd. When there is one: a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
+- "others": (when two or more unnamed people share a picture, each gets his OWN description with a different age, hair, build and clothes colors: they must never look alike); an EMPTY LIST by default; a person is listed ONLY when the Persian part itself names or clearly implies him or her (a rescuer, a doctor...); NEVER invent a bystander, servant, child, relative or crowd. When there is one: a list with ONE short English description for EVERY person of the picture who is NOT in "characters_present"
   (a rescuer, a doctor, a neighbour, a soldier, a child of the crowd...): gender, age, hair color, build and clothes (color
   and kind) that fit his or her JOB (a soldier in uniform, a doctor in a dark coat; never a uniform on a non-soldier). Each of them must look completely different from every named character and from each other: another hair
   color, other clothes colors and another age or build (the rescuer never looks like the person who is rescued, a stranger
   never looks like the hero). Empty list when there is nobody else.
 - PICTURE BY KIND. "event": as described above (also for the opening, the heroes part and the wrap-up). "author": the world of
-  the WRITER in the time when the book was written (not the time of the story): a writing desk with an inkwell, a pen and
+  the WRITER in the time when the book was written (not the time of the story): a writing desk with a pen and
   manuscript pages, a lamp, a window that shows the writer's town and country, the writer seen ONLY from behind or as a
   silhouette (never a face, never a portrait of a real person); write that time and place in "time_en". "time_en" is empty
   for "event".
@@ -3905,7 +3921,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   کندوکاو  -> first letter with fatha (کَندوکاو)
 #   نورزیده  -> «ن» and «و» with fatha (نَوَرزیده), also نورزید / نورزیدند
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
-_FORCE_MARKS = (("کتاب", "کِتاب"), ("کولی", "کُولی"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
+_FORCE_MARKS = (("کتاب", "کِتاب"), ("کولی", "کُولی"), ("رشوه", "رِشوه"), ("زیرشیروانی", "زیرشِیرْوانی"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
@@ -4384,8 +4400,8 @@ def _make_voice(scenes, kind, names, use_gemini):
 
 # ---------------------------------------------------------------- images
 # Positive wording only: FLUX has no negative prompt, so "no ..." words could even add those things.
-CLEAN = "clean crisp image, sharp focus, clear fine lines, hand-drawn pencil sketchbook illustration on white paper, the same style in every picture"
-CLEAN_SHORT = "sharp focus, hand-drawn pencil sketch on white paper, natural head size"
+CLEAN = "clean clear pencil linework with visible pencil strokes, hand-drawn pencil sketchbook illustration on light paper, bright paper tone, the same drawing style in every picture"
+CLEAN_SHORT = "visible pencil strokes, hand-drawn pencil sketch on light paper, natural head size"
 
 
 def _wc(t):
@@ -4427,6 +4443,26 @@ HORSELESS_RX = re.compile(r"\b(?:railway|railroad|train|tram|locomotive|motor|au
 HORSE_VEHICLE_EN = "a carriage pulled by two harnessed horses in front of it, both whole horses fully visible, four legs each"
 
 
+STRANGER_MARKS = ("with gray hair and a long dark coat", "with a bald head, a mustache and a brown vest",
+                  "with long black curly hair and a green coat", "with short blond hair, clean-shaven, in a light shirt",
+                  "with a white beard and a brown hat", "with red hair, a beard and a gray jacket")
+
+
+def _plural_marks(o, j):
+    """«two agents» or «three men» in ONE description: every one of them gets his own look (they were drawn as identical twins)."""
+    if " of the two " in str(o):          # already split into two separate people (each with his own look) by build_prompt
+        return ""
+    m = re.search(r"\b(two|both|pair|three|2|3)\b", str(o), re.I)
+    if not m:
+        return ""
+    n = 3 if m.group(1).lower() in ("three", "3") else 2
+    marks = [STRANGER_MARKS[(j * 2 + k * 2 + 1 + int(_VARIETY.get("n", 0))) % len(STRANGER_MARKS)] for k in range(n)]
+    return "; they are different people, the first " + marks[0] + ", the second " + marks[1] + (", the third " + marks[2] if n == 3 else "")
+
+
+_INSECT_RX = re.compile(r"\b(?:giant |huge |big |enormous )?(?:beetles?|insects?|bugs?|cockroach(?:es)?|vermin|scarabs?|spiders?)\b", re.I)
+
+
 def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_ref=False):
     """What happens (the event) and the detailed place come first, then the people, then the era and the style. The whole
     text stays inside the word limit so that nothing important is cut away: when it is too long, the people's notes are
@@ -4463,6 +4499,12 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     others = [" ".join(str(o).split()) for o in (scene.get("others") or []) if str(o).strip()][:3]
     total = len(present) + len(others)
     people_en = " ".join(str(scene.get("people_en") or "").split()).rstrip(". ")
+    if scene.get("kind") in ("author", "book", "theme"):        # a writer / book picture never shows a beetle or another creature of the story
+        scene = dict(scene)
+        scene["creatures_en"] = []
+        for k_ in ("visual_en", "event_en"):
+            scene[k_] = _INSECT_RX.sub("object", str(scene.get(k_) or ""))
+        scene["must_show"] = [x for x in (scene.get("must_show") or []) if not _INSECT_RX.search(str(x))]
     creatures = [" ".join(str(x).split()) for x in (scene.get("creatures_en") or []) if str(x).strip()][:2]
     _vt = " ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " " + " ".join(map(str, scene.get("must_show") or [])) + " " + " ".join(creatures)
     if (VEHICLE_RX.search(_vt) and not HORSELESS_RX.search(_vt) and "horse" not in _vt.lower()):
@@ -4495,12 +4537,12 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                               "Every character is clearly different in shape, size and color. ").replace(
                               "Everybody wears proper day clothes. ", "")
     has_people = bool(present or others) or bool(people_en and not people_en.lower().startswith("no people"))
-    if has_people:
+    if has_people and scene.get("kind") != "author":        # the writer picture has its own short body rule (its prompt is already long)
         count += ((("Every character keeps exactly the body described in its sheet, with no extra parts and no extra limbs. "
                     if nh_all else ANATOMY + " (humans only). ")) if nh_any else ANATOMY + ". ")
         if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
             count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else NO_EXTRA) + ". "
-    if has_people:
+    if has_people and scene.get("kind") in (None, "", "event"):
         count += "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. "
     if total > MAX_PEOPLE:
         count += f"Only {MAX_PEOPLE} people have large clear faces; the others are small, far away or from behind. "
@@ -4519,8 +4561,8 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
                         f"and mouth ({_trim_words(c.get('key_en') or char_tag(c), 14)}), but NOT its pose or direction"
                         f"{role_txt(c['name'])}. ")
             return (f"The person is the SAME person as reference image 1: identical face, eyes, nose, mouth, hair, age, "
-                    f"body and clothes ({_trim_words(c.get('key_en') or char_tag(c), 14)}), but NOT its pose or head "
-                    f"direction{role_txt(c['name'])}. ")
+                    f"body and clothes ({_trim_words(c.get('key_en') or char_tag(c), 14)}), but NOT its pose, head "
+                    f"direction or close-up size (here the head is small, one eighth of the body){role_txt(c['name'])}. ")
         parts = []
         for k, c in enumerate(present):
             ri = ref_idx.get(c["name"])
@@ -4542,17 +4584,28 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
             parts.append(("character " if c.get("nonhuman") else "person ") + f"{k + 1}" + (f" = reference image {ri}" if ri else "") + f": {desc}"
                          + role_txt(c["name"]))
         slots = max(MAX_PEOPLE - len(present), 0)
-        for j, o in enumerate(others):
+        duo = []
+        for o in others:                      # «two agents» is two DIFFERENT people: the picture model would draw one face twice
+            m = re.match(r"(?i)\s*(?:the\s+)?(?:two|both|a pair of|2)\s+(.*)", str(o))
+            if m:
+                rest_ = _trim_words(m.group(1), 7)
+                duo += [f"one of the two {rest_}: tall, thin, long face, blond",
+                        f"the other of the two {rest_}: short, stocky, round face, dark mustache"]
+            else:
+                duo.append(o)
+        oth = duo[:3]
+        for j, o in enumerate(oth):
             if j >= slots:        # only MAX_PEOPLE faces are large and clear: everybody else is small, far away or from behind
                 parts.append(f"person {len(present) + j + 1} (a small figure far in the background or seen from behind, "
-                             f"no clear face): {_trim_words(o, 14)}")
-            elif present or len(others) > 1:
+                             f"no clear face): {_trim_words(o, 20 if ' of the two ' in o else 14)}")
+            elif present or len(oth) > 1:
+                mark = (", " + STRANGER_MARKS[(j * 2 + int(_VARIETY.get("n", 0))) % len(STRANGER_MARKS)]) if len(oth) > 1 and " of the two " not in o else ""
                 parts.append(f"person {len(present) + j + 1} (a stranger, in no reference image, a completely different "
-                             f"face): {_trim_words(o, 30)}")
+                             f"face): {_trim_words(o, 22)}{mark}{_plural_marks(o, j)}")
             else:
-                parts.append(_trim_words(o, 30))
+                parts.append(_trim_words(o, 24) + _plural_marks(o, j))
         lead = (("Copy each character's look from the reference image with the same number, not its pose; "
-                 if nh_all else "Copy each face, hair and clothes from the reference image with the same number, not its pose; ")
+                 if nh_all else "Copy each face, hair and clothes from the reference image with the same number, not its pose or close-up size (every head stays small); ")
                 + "a stranger copies no reference. " if (ref_idx and present) else "")
         who = "characters" if nh_all else "people"
         return lead + (f"Clearly different {who}: " if len(parts) > 1 else ("The character: " if nh_all else "The person: ")) \
@@ -4600,6 +4653,13 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     while len(out) > 1850 and len(main.split()) > 25:                   # the character limit of the service
         main = _trim_words(main, len(main.split()) - 4)
         out = compose(main, False, era_short, CLEAN_SHORT)
+    if len(out) > 1850:        # still too long (many people with references): the general rules get shorter, the end of the prompt (era, shot, style) must not be cut
+        for old_, new_ in ((NO_EXTRA + ". ", ""), ("Everybody alive and upright. ", ""), ("Everybody wears proper day clothes. ", ""),
+                           ("No animals. ", ""), (ANATOMY, "Each person: one head with one face, two arms, two hands, two long legs, small head")):
+            count = count.replace(old_, new_)
+            out = compose(main, False, era_short, CLEAN_SHORT)
+            if len(out) <= 1850:
+                break
     return out
 
 
@@ -4885,13 +4945,13 @@ def _ref_prompt(c, era_short, extra=""):
         return (f"Hand-drawn pencil sketchbook illustration (thin contour lines, soft graphite shading), character reference picture of {c.get('species_en') or 'a character'}: "
                 f"{_trim_words(c['look_en'], 70)}. The whole character from one end to the other, large, in the middle, "
                 f"facing the viewer, a clear simple outline, plain soft light-gray background, nothing else. {extra}"
-                f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Sharp focus, crisp clean details.")
+                f"Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. Clean visible pencil strokes on light paper, bright paper tone.")
     return (f"Hand-drawn pencil sketchbook portrait (thin contour lines, fine flowing hair strands, soft graphite shading), attractive character reference portrait. {_trim_words(c['look_en'], 95)}. {(body_trait(c) + '. ') if body_trait(c) else ''}Dressed in {DAY_CLOTHES_RULE}. "
             f"From the head down to the "
             f"waist, the face large and carefully drawn with clear eyes, eyebrows, nose and mouth, facing the viewer with a "
             f"calm neutral expression, the whole head and both shoulders inside the picture, plain soft light-gray "
             f"background, nothing else. {extra}Setting: {era_short}. Style: {_trim_words(FIXED_STYLE, 24)}. "
-            f"Sharp focus, crisp clean details.")
+            f"Clean visible pencil strokes on light paper, bright paper tone.")
 
 
 def _draw_ref(c, k, prompt, cseed):
@@ -4918,7 +4978,7 @@ IMAGE {len(names)}. Items: {json.dumps(blocks, ensure_ascii=False)}
 For EACH image answer: "ok": true only if (a) the face is drawn cleanly and naturally (two eyes, one nose, one mouth,
 natural proportions, nothing melted, doubled or cut off), (b) gender, age, hair, build and clothes fit the look sheet,
 (c) the whole head is inside the picture, (d) this person looks clearly DIFFERENT from every other image (face shape, hair,
-age, clothes), (e) no text or letters, (f) the person wears real day or work clothes of the story's world, NOT pajamas,
+age, clothes), (e) no text or letters, (e2) it is a hand-drawn PENCIL drawing with visible strokes: a photograph, a realistic render or a dark cinematic picture is NOT ok (say in "fix_en": a hand-drawn pencil sketch on light paper), (f) the person wears real day or work clothes of the story's world, NOT pajamas,
 nightwear or a bathrobe (when the clothes look like sleepwear, set "ok" to false and say in "fix_en" which day clothes to
 draw). Otherwise "ok": false and "fix_en": what the new portrait must clearly show, in
 positive words, at most 25 words.
@@ -5085,7 +5145,8 @@ For EACH picture return:
     strokes, soft graphite shading with light hatching, large expressive eyes, hair drawn as many fine flowing strands, attractive
     semi-realistic characters on white paper, softly sketched backgrounds. A colored picture, a photo-like, 3D, flat vector, painted,
     smooth digital or heavy dark look, characters whose heads are suddenly much bigger (a chibi look) or whose style differs from
-    the other pictures: at most 3;
+    the other pictures: at most 3; a picture that looks like a PHOTOGRAPH, a film still, a realistic render or a dark cinematic picture
+    (real skin, real fabric, deep black background, no visible pencil strokes) is ALWAYS wrong, even when all the pictures look like that: at most 2;
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
@@ -5126,6 +5187,7 @@ For EACH picture return:
     half, doing something with writing (desk, typewriter, library table, reading), seen from the side or behind (no
     portrait); outdoors: at most 3; the UPPER 40 percent must be an EMPTY plain wall (a big book is placed there later): any
     object, window, shelf full of books, text or person in that upper wall, a second person, or no writer: at most 4;
+  * any insect, beetle or other animal on the table or anywhere (kind "author"), or a ceiling, ceiling beam or ceiling lamp visible in the picture: at most 4;
   * kind "author": the writer must be ACTIVELY WRITING (a pen touching paper, or hands on the keys of a typewriter), not reading or idle: at most 4;
   * a head twisted backward, a neck turned unnaturally or a face looking over the shoulder at the viewer (kind "author"): at most 2;
   * AGE FIT: a person who looks like a child but is a bride, a groom, a lover or in a wedding scene: at most 3;
@@ -5133,7 +5195,7 @@ For EACH picture return:
     INDOORS in a library with bookshelves and a large EMPTY plain wall area in the upper middle (nothing hangs there: the program
     adds a painting later); any object, frame, shelf, lamp, window or plant in that upper-middle wall area, or a writer whose
     head reaches it: at most 4; a wrong gender: at most 3; any other person: at most 3. Kind
-    "book": the book as an object with readers and ONE sign of THIS story; kind "theme": a symbolic scene made of things of
+    "book": the book as an object with readers and ONE sign of THIS story (never an insect, beetle, animal or creature; one on the desk or on the book: at most 3); kind "theme": a symbolic scene made of things of
     THIS story; an unrelated landscape or a random scene for these kinds: at most 3.
 - "look_score" 0-10, only when sheets are given: each person looks like his or her sheet and like his or her reference
   portrait (same face shape, eyes, nose, hair, age, build, clothes); a person whose face, hair or age is clearly different
@@ -5154,7 +5216,7 @@ For EACH picture return:
 - "head_ok": false when the head of ANY person is even a little too big for his or her body (a big-head, chibi, bobble-head or toy look; a
   natural head is about one seventh to one eighth of the body height; when in doubt say false), or when the people at the same distance have very different head sizes.
   Otherwise true.
-- "style_ok": false when the picture is NOT the same hand-drawn pencil sketchbook illustration as the other pictures of this call
+- "style_ok": false when the picture looks like a photograph, a film still or a realistic render (always, whatever the other pictures look like), or when it is NOT the same hand-drawn pencil sketchbook illustration as the other pictures of this call
   (it looks colored, 3D, painted, photographic, flat vector, smooth digital or very dark, or its line work and shading differ
   clearly from the other pictures). Otherwise true.
 - "hands_per_person": a list with ONE number for each person you can see: how many HANDS that person has in the picture
@@ -5212,7 +5274,7 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
                 pass
             exp, pc = expected_people(j["sc"]), c.get("people_count")
             if isinstance(exp, int) and isinstance(pc, (int, float)) and not isinstance(pc, bool) and int(pc) != exp:
-                score = min(score, 3 if int(pc) > exp else 4)         # counted by the judge, enforced by the program
+                score = min(score, 2 if int(pc) > exp else 4)         # counted by the judge, enforced by the program
                 fix = (f"exactly {exp} {'person' if exp == 1 else 'people'} in the whole picture, nobody else anywhere; "
                        + fix)[:200]
             hp = c.get("hands_per_person")
@@ -5306,7 +5368,7 @@ def _judge_groups(todo, jobs):
     return out
 
 
-WRITER_SCENES = ("the writer sits at a wooden writing desk and writes in a thick open book with a pen, an inkwell, a lamp and "
+WRITER_SCENES = ("the writer sits at a wooden writing desk and writes in a thick open book with a pen, a lamp and "
                  "manuscript pages on the desk",
                  "the writer sits at a long reading table in a quiet library, a notebook and a pen in front, tall stacks of books "
                  "and a reading lamp on the table",
@@ -5388,12 +5450,13 @@ def writer_desk_plan(era, author=None, n=0):
     person, always indoors) works in a writing-related place in the lower half; the upper part stays an empty wall,
     where the big book with the English names is laid later (make_title_cards)."""
     a = author or {}
-    scenes = a.get("scenes_en") or list(WRITER_SCENES)
+    scenes = [x for x in (a.get("scenes_en") or []) if not re.search(r"insect|beetle|bug|cockroach|animal|creature|spider", str(x), re.I)] \
+        or list(WRITER_SCENES)
     who = writer_look(a)
     gender = a.get("gender") or "person"
     visual = (f"Vertical hand-drawn pencil sketchbook scene in two parts, INDOORS in a room, never outdoors. LOWER half: {scenes[n % len(scenes)]}. "
               f"The writer is {who}; seen from behind (back view), the head and the body facing the SAME direction, never a head turned around; exactly "
-              f"one head, two arms and two hands. UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
+              f"one head, two arms and two hands. On the desk only paper, a pen and a lamp (no insects, no animals, no creatures anywhere). UPPER 45 percent of the picture: a completely empty plain warm-toned wall with "
               f"a faint soft shadow, no objects, no window, no shelves, no people, no text.")
     return {"kind": "author", "visual_en": visual, "event_en": "the writer works on a book", "cover": True,
             "characters_present": [], "others": [], "roles": {},
@@ -5406,19 +5469,42 @@ def _no_uniform(t):
     return re.sub(r"\b(?:uniform\w*|police\w*|officer\w*|soldier\w*|guard\w*|military|army|navy|armou?r\w*|costume\w*)\b", "", str(t or ""), flags=re.I)
 
 
+LIBRARY_ROOMS = (
+    "a grand old university library hall with tall wooden bookshelves on both sides, a rolling wooden ladder and a long reading table",
+    "a cozy private home study with a stone fireplace at the right side, a leather armchair at the left side and a small round writing table",
+    "a quiet stone library with tall arched windows at the sides letting in daylight, dark wooden shelves and a heavy oak table",
+    "a library with a wooden gallery balcony at the sides and a spiral iron staircase at the left side, and a green-shaded desk lamp on the table",
+    "a bright modern minimal library with white shelves full of books at both sides, a light wooden table and a large floor plant at the right side",
+    "an old monastery library with rounded stone arches at the sides, rows of heavy leather-bound books and a simple wooden writing table with a candle",
+    "a small cozy library of an old house with warm rugs, stacks of books on the floor, a round globe at the left side and a brass desk lamp",
+    "a long narrow library with book-filled shelves on both sides and a long table lit by two hanging lamps",
+    "a library of a seaside house with shelves of books at both sides, a small model ship on a low shelf and a wooden writing table",
+    "a library with dark red side walls beside the shelves, a velvet chair and a polished desk with a green lamp",
+    "a wide public reading room with long tables, tall shelves at the sides and green reading lamps",
+    "a library in an old castle with thick stone side walls, wooden shelves, a heavy oak table and a standing iron candle holder at the right side",
+)
+
+
+def library_room(author=None):
+    """A different library for every video (the number of videos already posted moves the choice on, so two videos in a row
+    never get the same room)."""
+    import zlib
+    name = str((author or {}).get("name") or (author or {}).get("author_en") or "")
+    return LIBRARY_ROOMS[(int(_VARIETY.get("n", 0)) * 5 + zlib.crc32(name.encode("utf-8"))) % len(LIBRARY_ROOMS)]
+
+
 def author_library_plan(author=None):
     """The ONE picture about the writer: the first picture of the video. A library; on its wall a framed painting of a samurai."""
     a = author or {}
     who = writer_look(a)
     gender = a.get("gender") or "person"
-    visual = (f"Vertical hand-drawn pencil sketchbook scene INDOORS in a quiet old library: tall wooden bookshelves full of books on both sides, "
-              f"a wooden reading table in the lower part with an open book, a pen and a warm lamp, and the back wall between the two "
-              f"bookshelves, in the upper middle of the picture, is a large completely EMPTY plain smooth wall area (nothing hangs on it: "
-              f"no frame, no picture, no shelf, no lamp, no window, no plant, no clock, no text), about 36 percent of the picture width "
-              f"and 36 percent of its height, with the writer's head and shoulders far BELOW it. A {gender} writer, {_no_uniform(who)}, in plain ordinary writer's clothes of his or her era (a simple shirt with a waistcoat or jacket; never a uniform, armor, police, military or any other profession's costume), sits at the table, seen from the SIDE or three-quarter back view (the face turned down toward the paper, never toward the viewer), "
-              f"ACTIVELY WRITING, the writing hand, the pen and the paper clearly visible: the right hand holds a pen whose tip touches a sheet of manuscript paper and the writer's arm and shoulder show the writing movement (an inkwell and a pile of written pages beside it; or the hands on the keys of an old typewriter with a sheet of paper rolled into it); never just reading, never only sitting; the other hand rests flat on the table; the head and the body face the SAME direction, the neck is natural and "
-              f"the head is never turned around; exactly one person, one head, two arms, two "
-              f"hands; no text anywhere.")
+    visual = (f"Vertical pencil sketchbook scene INDOORS in {library_room(a)}. The back wall rises to the very top edge of the picture "
+              f"(NO ceiling, NO beams visible) and its upper middle is a large completely EMPTY plain smooth wall area, about 36 percent of the "
+              f"picture width and height (nothing hangs on it: no frame, picture, shelf, lamp, window, plant or text). "
+              f"A {gender} writer, {_no_uniform(who)}, in plain ordinary clothes of his or her era, sits low at a table in the lower part, seen from the "
+              f"SIDE (face turned down to the paper, never toward the viewer), ACTIVELY WRITING: the pen tip touches a manuscript page, the arm "
+              f"and shoulder show the writing movement, the other hand rests flat. On the table only a notebook, paper and a lamp "
+              f"(no insects, no animals). One head, two arms, two hands.")
     return {"kind": "author", "visual_en": visual, "event_en": "the writer sits in a library", "cover": False,
             "characters_present": [], "others": [], "roles": {}, "emotion_en": "",
             "people_en": f"exactly one person: the writer, a {gender}, seen from the side or three-quarter back view, actively writing, nobody else",
@@ -5617,12 +5703,12 @@ def stamp_painting(jobs):
                 pw = int(w * frac) // 2 * 2
                 ph = _framed_h(pw)
                 for cxf in (0.5, 0.40, 0.60, 0.33, 0.67):
-                    for tyf in (0.07, 0.11, 0.15, 0.04):
+                    for tyf in (0.17, 0.13, 0.21, 0.10):
                         x, y = int(w * cxf - pw / 2), int(h * tyf)
                         if x < 4 or x + pw > w - 4 or y + ph > h * 0.62:
                             continue
                         sd = region_spread(img, x, y, pw, ph, w, h)
-                        score = (sd if sd is not None else 255.0) + 6 * abs(cxf - 0.5) + 10 * tyf
+                        score = (sd if sd is not None else 255.0) + 6 * abs(cxf - 0.5) + 14 * abs(tyf - 0.17)
                         if best is None or score < best[0]:
                             best = (score, x, y, pw, ph, sd)
                 if best and best[5] is not None and best[5] <= CALM_MAX:
@@ -5707,6 +5793,26 @@ def _ssim_pair(a, b):
         return None
 
 
+PHOTO_FIX = ("a LIGHT hand-drawn pencil sketch on bright WHITE paper: thin gray pencil lines and light hatching, a white paper "
+             "background, NOT a photograph and NOT a dark cinematic picture")
+
+
+def photo_like(path):
+    """Free check in code: the style of the channel is a pencil sketch on WHITE paper. A picture that is mostly dark with almost no
+    white paper (a photo-like or cinematic picture) is not that style. Measured on the pictures of a real video: the pencil
+    pictures have 26 % white pixels and a mean brightness of 106; the photo-like ones 1-2 % white and a mean of 23-43."""
+    try:
+        raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(path), "-vf", "scale=54:96,format=gray", "-f", "rawvideo", "-"],
+                                      timeout=60)
+        if len(raw) < 500:
+            return False
+        mean = sum(raw) / len(raw)
+        white = sum(1 for b in raw if b > 200) / len(raw)
+        return mean < 75 and white < 0.08
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def check_and_fix_images(jobs):
     """Every picture is checked (4 per Gemini call). A picture with a low score is drawn again with the missing
     thing at the START of the prompt, up to 2 times; the best picture of all tries is kept. If the check or the
@@ -5740,6 +5846,12 @@ def check_and_fix_images(jobs):
             for k, r in zip(grp, res):
                 if r is not None:
                     results[k] = r
+        for k in todo:                                      # photo-like pictures: found by code (no Gemini call), drawn again
+            if jobs[k].get("card") or not photo_like(jobs[k]["img"]):
+                continue
+            r0 = results.get(k) or (10, "", None)
+            results[k] = (min(r0[0], 3), (PHOTO_FIX + "; " + str(r0[1]))[:230], r0[2] if len(r0) > 2 else None)
+            print(f"Picture {k + 1} is a dark, photo-like picture (not a pencil sketch on white paper): drawn again.", flush=True)
         if not results:
             break
         for k in sorted(results):                           # near-copies of one of the 2 pictures before: drawn again, different
@@ -6086,7 +6198,11 @@ Names: {json.dumps(missing, ensure_ascii=False)}"""
     return data
 
 
+SENT_ENDS = []        # the time (seconds in the finished video) at which every spoken sentence ends: used to cut the Instagram version
+
+
 def build_video(scenes, durs, out_path, names=None):
+    SENT_ENDS.clear()
     clips = []
     srt = []
     n = 0
@@ -6163,6 +6279,8 @@ def build_video(scenes, durs, out_path, names=None):
                 pspans.append((d * acc / tot_w, d * (acc + w_) / tot_w))
                 acc += w_
         for idx_, ((x, end_), (sa, sb)) in enumerate(zip(phr_all, pspans)):
+            if end_:
+                SENT_ENDS.append(t + sb)
             start = max(t + sa - SUB_LEAD, 0.0)
             end = max(t + sb - SUB_LEAD, start + 0.25)
             if idx_ == len(phr_all) - 1:
@@ -6252,6 +6370,7 @@ def wait_for_publish_time():
 
 
 def send_video(path, caption):
+    """Posts the video; returns the message id (the full credit is sent as a reply under it)."""
     with open(path, "rb") as f:
         r = requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo",
@@ -6260,6 +6379,181 @@ def send_video(path, caption):
             files={"video": f}, timeout=1200)
     if r.status_code != 200:
         raise RuntimeError(f"Telegram error: {r.status_code} {r.text[:300]}")
+    try:
+        return r.json()["result"]["message_id"]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def send_credit_reply(message_id, text):
+    """The full credit (source link, authors, licence, changes) as a reply under the video: the video caption stays short, because
+    Telegram lays a long caption over the lower part of the picture, on top of the subtitles. Never raises."""
+    try:
+        data = {"chat_id": CHANNEL_ID, "text": text[:4000], "disable_web_page_preview": "true"}
+        if message_id:
+            data["reply_to_message_id"] = message_id
+            data["allow_sending_without_reply"] = "true"
+        r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data, timeout=120)
+        if r.status_code != 200:
+            print(f"Credit reply not sent: {r.status_code} {r.text[:200]}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"Credit reply not sent ({e}).", flush=True)
+
+
+# ---------------------------------------------------------------- Instagram (official Graph API, free)
+# After the video is posted in the Telegram channel it is also published as a Reel on Instagram. Needs an Instagram Business or
+# Creator account linked to a Facebook Page and two secrets: IG_USER_ID (the Instagram account id) and IG_ACCESS_TOKEN (a long-lived
+# Page access token). Without both secrets nothing happens. A failure here NEVER stops a video or the Telegram post.
+IG_USER_ID = os.environ.get("IG_USER_ID", "").strip()
+IG_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
+IG_API = "https://graph.facebook.com/" + (os.environ.get("IG_API_VERSION") or "v25.0").strip()
+IG_WAIT = int(os.environ.get("AZIM_IG_WAIT") or 15) * 60        # minutes Instagram may need to process the video
+
+
+IG_MAX_SECONDS = float(os.environ.get("AZIM_IG_MAX") or 177)      # the whole Instagram Reel stays under 3 minutes
+IG_END_TEXT = os.environ.get("AZIM_IG_END_TEXT") or "ادامه کتاب در کانال یوتیوب"   # said AND shown at the end of the Reel ("" = none)
+
+
+def instagram_outro_voice(kind):
+    """The closing sentence read by the SAME voice (same engine, same speaker) as the video: (mp3 path, seconds) or None.
+    Gemini voice: one extra request (only if the free quota still has one); Pocket voice: free and offline. Never raises."""
+    text = IG_END_TEXT.strip()
+    if not text or kind not in ("female", "male"):
+        return None
+    try:
+        wav = WORK / "azim_ig_end.wav"
+        mp3 = WORK / "azim_ig_end.mp3"
+        if VOICE_USED.get("engine") == "gemini":
+            mdl = _gtts.get("model") or GEMINI_TTS_MODEL
+            if tts_left(mdl) < 1:
+                print("Instagram closing sentence: no free Gemini voice request left, so it is only shown, not said.", flush=True)
+                return None
+            _gtts["model"] = mdl
+            gemini_tts(gemini_voice_text(text), kind, wav, GEMINI_TTS_STYLE)
+        else:
+            tts_text(text, kind, wav)
+        trimmed = WORK / "azim_ig_end_trim.wav"
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-af", TRIM, str(trimmed)])
+        src = trimmed if trimmed.exists() and probe_duration(trimmed) > 0.4 else wav
+        sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-af", CLEAN_AF, "-ac", "1", "-ar", "44100",
+            "-c:a", "libmp3lame", "-q:a", "4", str(mp3)])
+        return mp3, probe_duration(mp3)
+    except Exception as e:  # noqa: BLE001
+        print(f"Instagram closing sentence not spoken ({str(e)[:120]}).", flush=True)
+        return None
+
+
+def instagram_cut(final, kind=None):
+    """The channel keeps the full video. For Instagram a copy that ends at the last spoken SENTENCE (never in the middle of a
+    word); then the same voice says the closing sentence (IG_END_TEXT) while the last picture stays and the sentence is shown in
+    the subtitle style. The whole Reel is under IG_MAX_SECONDS. A video already under 3 minutes is used as it is."""
+    total = probe_duration(final)
+    if total and total < 180:
+        return final
+    outro = instagram_outro_voice(kind) if IG_END_TEXT.strip() else None
+    gap = 0.15
+    tail = (outro[1] + gap + 0.7) if outro else (3.5 if IG_END_TEXT.strip() else 0.0)
+    ends = [e for e in SENT_ENDS if 30 <= e <= IG_MAX_SECONDS - tail - 0.8]
+    cut = (max(ends) + 0.35) if ends else (IG_MAX_SECONDS - tail)
+    out = Path(final).with_name("azim_instagram.mp4")
+    fade = f"afade=t=out:st={max(cut - 0.5, 0):.2f}:d=0.5"
+    if tail:
+        try:
+            fam = setup_sub_font()
+            bold = 1 if _sub_bold else 0
+            txt = re.sub(r"[{}\\]", "", IG_END_TEXT.strip())
+            (WORK / "azim_ig_end.ass").write_text(
+                "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
+                "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+                "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+                "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+                f"Style: END,{fam},{SUB_FONT_SIZE},&H00FFFFFF,&H00FFFFFF,&H8C141414,&H8C141414,{bold},0,0,0,100,100,0,0,3,2,0,2,12,12,62,1\n\n"
+                "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+                f"Dialogue: 0,{_ass_time(cut + gap * 0.5)},{_ass_time(cut + tail)},END,,0,0,0,,{txt}\n", encoding="utf-8")
+            vchain = (f"[0:v]trim=0:{cut:.2f},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={tail:.2f},"
+                      "subtitles=azim_ig_end.ass:fontsdir=azim_fonts[v]")
+            if outro:
+                achain = (f"[0:a]atrim=0:{cut:.2f},asetpts=PTS-STARTPTS,{fade},aresample=44100,aformat=channel_layouts=mono[a0];"
+                          f"[1:a]aresample=44100,aformat=channel_layouts=mono,adelay={int(gap * 1000)}:all=1,apad=pad_dur=0.7[a1];"
+                          "[a0][a1]concat=n=2:v=0:a=1[a]")
+                inputs = ["-i", str(final), "-i", str(outro[0])]
+            else:
+                achain = (f"[0:a]atrim=0:{cut:.2f},asetpts=PTS-STARTPTS,{fade},apad=pad_dur={tail:.2f},"
+                          "aresample=44100,aformat=channel_layouts=mono[a]")
+                inputs = ["-i", str(final)]
+            sh(["ffmpeg", "-y", "-loglevel", "error"] + inputs +
+               ["-filter_complex", vchain + ";" + achain, "-map", "[v]", "-map", "[a]", "-t", f"{cut + tail:.2f}",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-maxrate", "1500k", "-bufsize", "3000k",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1",
+                "-movflags", "+faststart", str(out)], cwd=WORK)
+            print(f"Instagram version: {probe_duration(out):.1f} s of {total:.1f} s (cut after a finished sentence + closing "
+                  f"sentence{' said' if outro else ' shown'}).", flush=True)
+            return out
+        except Exception as e:  # noqa: BLE001
+            print(f"Closing sentence not added ({str(e)[:120]}): the Reel is cut without it.", flush=True)
+            cut = (max(ends) + 0.35) if ends else (IG_MAX_SECONDS - 0.4)
+    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-t", f"{cut:.2f}", "-c:v", "copy",
+        "-af", fade, "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1", "-movflags", "+faststart", str(out)])
+    print(f"Instagram version: {probe_duration(out):.1f} s of {total:.1f} s (cut after a finished sentence).", flush=True)
+    return out
+
+
+def _ass_time(t):
+    return f"{int(t // 3600)}:{int(t % 3600 // 60):02}:{t % 60:05.2f}"
+
+
+def _ig_json(r, what):
+    try:
+        d = r.json()
+    except ValueError:
+        d = {}
+    if r.status_code != 200 or d.get("error"):
+        err = d.get("error") if isinstance(d.get("error"), dict) else d
+        raise RuntimeError(f"Instagram {what}: {r.status_code} {str(err)[:300]}".replace(IG_TOKEN, "***"))
+    return d
+
+
+def post_instagram(path, caption):
+    """The finished video as an Instagram Reel: container (resumable) -> upload the file -> wait for FINISHED -> publish."""
+    if not (IG_USER_ID and IG_TOKEN):
+        return False
+    size = os.path.getsize(path)
+    d = _ig_json(requests.post(f"{IG_API}/{IG_USER_ID}/media", timeout=120,
+                               data={"media_type": "REELS", "upload_type": "resumable", "share_to_feed": "true",
+                                     "caption": caption[:2200], "access_token": IG_TOKEN}), "container")
+    cid = d["id"]
+    uri = d.get("uri") or f"https://rupload.facebook.com/ig-api-upload/{IG_API.rsplit('/', 1)[-1]}/{cid}"
+    for attempt in (1, 2):
+        try:
+            with open(path, "rb") as f:
+                r = requests.post(uri, timeout=1800, data=f,
+                                  headers={"Authorization": f"OAuth {IG_TOKEN}", "offset": "0", "file_size": str(size)})
+            up = _ig_json(r, "upload")
+            if up.get("success") is False:
+                raise RuntimeError(f"Instagram upload: {str(up)[:300]}")
+            break
+        except Exception as e:  # noqa: BLE001
+            if attempt == 2:
+                raise
+            print(f"Instagram upload failed once ({e}); trying again.", flush=True)
+            time.sleep(20)
+    end = time.time() + IG_WAIT
+    status = ""
+    while time.time() < end:
+        st = _ig_json(requests.get(f"{IG_API}/{cid}", timeout=60,
+                                   params={"fields": "status_code,status", "access_token": IG_TOKEN}), "status")
+        status = str(st.get("status_code") or "")
+        if status == "FINISHED":
+            break
+        if status in ("ERROR", "EXPIRED"):
+            raise RuntimeError(f"Instagram could not process the video: {str(st)[:300]}")
+        time.sleep(30)
+    if status != "FINISHED":
+        raise RuntimeError("Instagram did not finish processing the video in time.")
+    m = _ig_json(requests.post(f"{IG_API}/{IG_USER_ID}/media_publish", timeout=120,
+                               data={"creation_id": cid, "access_token": IG_TOKEN}), "publish")
+    print(f"Instagram: Reel published (media id {m.get('id')}).", flush=True)
+    return True
 
 
 # ---------------------------------------------------------------- the website (GitHub Pages, free)
@@ -6493,7 +6787,7 @@ def publish_site_page(book, src, scenes, cover_img=None, site_dir=None):
     credit = (f'<p>این متن بازنویسی و خلاصه‌ای از بخش داستان مقالهٔ <a href="{wiki}" rel="noopener" target="_blank">ویکی‌پدیا دربارهٔ '
               f'<bdi>{_fa_html(title_en)}</bdi></a> است و مانند آن با مجوز '
               '<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fa" rel="license noopener" target="_blank">CC BY-SA 4.0</a> '
-              'منتشر می‌شود.</p>') if wiki else ""
+              'منتشر می‌شود. فهرست نویسندگان مقاله در <a href="' + wiki.replace("/wiki/", "/w/index.php?title=", 1) + '&amp;action=history" rel="noopener" target="_blank">تاریخچهٔ صفحه</a> است.</p>') if wiki else ""
     html_ = (_site_head(page_title, desc, url, base, image=img_abs, extra_ld=ld)
              + _site_top("../", channel)
              + f'<main>\n<div class="hero">{hero_img}<div class="t"><h1>خلاصهٔ رمان «{_fa_html(title_fa)}»</h1>'
@@ -6788,10 +7082,17 @@ def main():
     total = build_video(scenes, durs, final, script.get("names") or {})
     print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
 
-    caption = (f"{book.get('title_fa') or book['title_en']}\n{book.get('author_fa') or book['author_en']}\n\n"
-               f"{src.get('credit') or 'منبع خلاصه: ویکی‌پدیا (CC BY-SA)'}\n{src['url']}")
+    head_ = f"{book.get('title_fa') or book['title_en']}\n{book.get('author_fa') or book['author_en']}"
+    caption = f"{head_}\n\nمنبع: ویکی‌پدیا · CC BY-SA 4.0 (جزئیات در پاسخ زیر همین پست)"[:1000]     # short: Telegram lays it over the picture
+    caption_full = f"{head_}\n\n{attribution_text(src)}"[:2200]                                         # Instagram: no overlay problem
     wait_for_publish_time()
-    send_video(final, caption)
+    msg_id = send_video(final, caption)
+    send_credit_reply(msg_id, f"{head_}\n\n{attribution_text(src)}")
+    try:                                   # Instagram: any problem here is only printed, the video is already in the channel
+        if IG_USER_ID and IG_TOKEN:
+            post_instagram(instagram_cut(final, kind), caption_full)
+    except Exception as e:  # noqa: BLE001
+        print(f"Instagram skipped: {e}", flush=True)
 
     posted.append({"title_en": book["title_en"], "title_fa": book.get("title_fa") or "",
                    "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
