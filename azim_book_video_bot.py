@@ -74,7 +74,7 @@ SCRIPT_VERSION = 23       # a saved script of another version is not resumed
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
 # (CC BY-SA). The bot retells it in Persian; it never summarizes the book on its own.
 # The list builder already keeps only novels with a Plot of 350-900 words; these limits are a wider safety net.
-PLOT_MIN_WORDS = int(os.environ.get("AZIM_PLOT_MIN") or 420)
+PLOT_MIN_WORDS = int(os.environ.get("AZIM_PLOT_MIN") or 370)
 PLOT_MAX_WORDS = int(os.environ.get("AZIM_PLOT_MAX") or 2600)
 
 # ----- narrator engine: "gemini" (Gemini TTS, default; any failure or finished quota -> Pocket TTS for that scene)
@@ -311,8 +311,10 @@ def save_json(path, obj):
 
 def rejected_titles(rejected):
     # a book refused only because its Plot was too long/short for the OLD limits is tried again (the limits changed)
+    tag = f"[{PLOT_MIN_WORDS}-{PLOT_MAX_WORDS}]"
     return [r["title_en"] if isinstance(r, dict) else str(r) for r in rejected
-            if not (isinstance(r, dict) and "no usable Plot section" in str(r.get("reason") or ""))]
+            if not (isinstance(r, dict) and "no usable Plot section" in str(r.get("reason") or "")
+                    and tag not in str(r.get("reason") or ""))]
 
 
 def reject_book(rejected, book, reason):
@@ -322,9 +324,10 @@ def reject_book(rejected, book, reason):
     print(f"Book rejected for good: {book['title_en']} ({str(reason)[:120]})", flush=True)
 
 
-def pick_book(posted, rejected):
-    """Step A: the next novel of azim_books_list.json (ordered by fame). Without that file Gemini picks a novel."""
-    used = {norm(p["title_en"]) for p in posted} | {norm(x) for x in rejected_titles(rejected)}
+def pick_book(posted, rejected, skip=()):
+    """Step A: the next novel of azim_books_list.json (ordered by fame). Without that file Gemini picks a novel.
+    skip = titles already tried in THIS run (a book refused for its Plot length came back again and again, 60 times)."""
+    used = {norm(p["title_en"]) for p in posted} | {norm(x) for x in rejected_titles(rejected)} | {norm(x) for x in skip}
     used_fa = {norm_fa(p["title_fa"]) for p in posted if p.get("title_fa")}
     listed = load_json(BOOKS_FILE, [])
     if isinstance(listed, dict):
@@ -343,7 +346,7 @@ def pick_book(posted, rejected):
                 continue
         raise RuntimeError("Every novel of azim_books_list.json is used or rejected")
     print("azim_books_list.json not found: Gemini picks the novel (slower, uses quota).", flush=True)
-    all_titles = [p["title_en"] for p in posted] + rejected_titles(rejected)
+    all_titles = [p["title_en"] for p in posted] + rejected_titles(rejected) + list(skip)
     number = len(posted) + 1
     for _ in range(4):
         prompt = f"""You are the editor of a Persian channel that summarizes the most famous novels in the world.
@@ -375,7 +378,8 @@ Return JSON with exactly these keys:
     raise RuntimeError("Could not get a valid new novel from Gemini")
 
 
-WIKI_HEADERS = {"User-Agent": "azim-book-video-bot/1.0 (educational book summaries; GitHub Actions)"}
+WIKI_HEADERS = {"User-Agent": "azim-book-video-bot/1.0 (https://github.com/63hektor-droid/azim_books_bot; educational book summaries; GitHub Actions)"}
+WIKI_ERRORS = {"n": 0}      # Wikipedia requests that failed for good (rate limit 429, network): then a book is NOT at fault
 HEAD = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.M)
 # level-2 headings that hold the story: "Plot", "Plot summary", "Plot introduction", "Synopsis", "Summary", "Story"
 PLOT_HEAD = re.compile(r"^(plot|synopsis|summary|story|storyline)\b", re.I)
@@ -386,15 +390,19 @@ SIG_KEYS = re.compile(r"legacy|influence|reception|critical|significance|impact|
 def wiki_api(lang, params):
     p = dict(params)
     p.update({"format": "json", "formatversion": 2})
-    for wait in (0, 4, 12):
-        if wait:
-            time.sleep(wait)
-        r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params=p, headers=WIKI_HEADERS, timeout=40)
-        if r.status_code != 429:
-            break
-    r.raise_for_status()
-    time.sleep(0.4)                      # polite pause between Wikipedia requests
-    return r.json()
+    try:
+        for wait in (0, 6, 20, 45):
+            if wait:
+                time.sleep(wait)
+            r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params=p, headers=WIKI_HEADERS, timeout=40)
+            if r.status_code != 429:
+                break
+        r.raise_for_status()
+        time.sleep(0.6)                  # polite pause between Wikipedia requests
+        return r.json()
+    except Exception:
+        WIKI_ERRORS["n"] += 1
+        raise
 
 
 def wiki_fulltext(lang, title):
@@ -682,7 +690,9 @@ def fetch_source(book):
 def plan_length(src):
     """The narration is about as long as the Plot summary itself: short, dense, nothing added."""
     # every video must last more than 3 and less than 7 minutes: never fewer than MIN_WORDS, never more than MAX_WORDS
-    target = int(max(MIN_WORDS, min(MAX_WORDS, src["en_words"] * 0.95)))
+    w_ = src["en_words"]
+    floor_ = MIN_WORDS if w_ >= 450 else min(MIN_WORDS, max(470, int(w_ * 1.3)))   # a SHORT Plot is not stretched far beyond its source (but stays above 3 minutes)
+    target = int(max(floor_, min(MAX_WORDS, w_ * 0.95)))
     n = max(8, round(target / 58))
     lo, hi = max(5, n - 1), n + 1
     return lo, hi, f"{int(target * 0.9)} to {int(target * 1.1)}"
@@ -2035,6 +2045,81 @@ Return JSON {{"spoilers": [{{"scene": 0, "i": 0}}]}} (an empty list when there i
         return data
 
 
+RUN_STATUS = {"icon": "", "text": "", "lines": []}
+
+
+def set_status(icon, text):
+    RUN_STATUS["icon"], RUN_STATUS["text"] = icon, text
+
+
+def status_line(text):
+    RUN_STATUS["lines"].append(text)
+
+
+def write_run_summary():
+    """One short summary on the page of the GitHub run (Summary tab): what this run did, or why it made no video. Never raises."""
+    try:
+        path = os.environ.get("GITHUB_STEP_SUMMARY")
+        if not path:
+            return
+        icon = RUN_STATUS["icon"] or "ℹ️"
+        text = RUN_STATUS["text"] or "اجرا تمام شد و ویدئویی ساخته نشد (دلیل در لاگ)."
+        body = [f"## {icon} {text}", ""] + [f"- {x}" for x in RUN_STATUS["lines"]]
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(body) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+DRAFT_SAVER = {}                 # set by main(): saves the draft script (book, source, draft) as the pending script
+MAX_DEFERS = int(os.environ.get("AZIM_MAX_DEFERS") or 1)       # a video waits for a clean story check at most this many runs
+
+
+def recheck_story(data, book, src):
+    """The viewer test on a finished script again. A paragraph that changed loses its diacritized voice text (the voice then
+    reads the subtitle text itself), so the subtitles and the voice always say the same words."""
+    before = [s_.get("narration_fa") for s_ in data["scenes"]]
+    data = story_gate(data, book, src)
+    for s_, b_ in zip(data["scenes"], before):
+        if s_.get("narration_fa") != b_:
+            s_["spoken_fa"] = s_["narration_fa"]
+    return data
+
+
+def polish_script(data, book, src):
+    """All the steps after the draft: viewer test with repair, wrap-up scrub, fact check + voice text, a second connection check
+    when the fact check cut a link, cast scene, sanitize, pictures. Gemini quota problems pass up (the draft is already saved)."""
+    spine = data.get("spine") or {}
+    data = story_gate(data, book, src)       # blind test with sentence-level repair
+    data = scrub_wrap(data, spine)           # the wrap-up never retells the story or names a hero
+    data = review_script(data, book, src)    # facts + wording + voice text (last: the voice text must fit the final text)
+    if len(unlinked_sentences(data["scenes"])) > 3:      # the review may have cut a link: one more look
+        print("Connection check after the review: several sentences do not follow from the one before: viewer test again.", flush=True)
+        data = recheck_story(data, book, src)
+    if CAST_SCENE:
+        data = add_cast_scene(data)
+    data = sanitize_narration(data, book)
+    data["polished"] = True
+    return align_visuals(data, book, src)
+
+
+def story_verdict(script):
+    """(clean?, reason). A story is NOT clean when the viewer test did not run, or when it still found a key event that the viewer
+    did not hear, or more than 5 confusing / more than 5 unnecessary sentences. A script of an older version (no notes) is clean."""
+    g = script.get("gate_notes") or {}
+    if not g:
+        return True, ""
+    if g.get("skipped"):
+        return False, "the viewer test did not run (" + str(g["skipped"])[:80] + ")"
+    if g.get("missing"):
+        return False, f"key events the viewer did not hear: {g['missing']}"
+    if len(g.get("confusing") or []) > 5:
+        return False, f"{len(g['confusing'])} confusing sentences"
+    if len(g.get("irrelevant") or []) > 5:
+        return False, f"{len(g['irrelevant'])} sentences the story does not need"
+    return True, ""
+
+
 def write_scenes(book, src, plan):
     """Step B: first the SPINE (what must be told), then the narration written sentence by sentence from the spine."""
     min_sc, max_sc, words = plan
@@ -2249,13 +2334,13 @@ Rules for the visuals:
                 data = plain_sense_pass(data, spine)      # plain, concrete, supported sentences
             except (GeminiBlocked, GeminiQuotaExhausted):
                 pass
-            data = story_gate(data, book, src)       # blind test with sentence-level repair
-            data = scrub_wrap(data, spine)           # the wrap-up never retells the story or names a hero
-            data = review_script(data, book, src)    # facts + wording + voice text (last: the voice text must fit the final text)
-            if CAST_SCENE:
-                data = add_cast_scene(data)
-            data = sanitize_narration(data, book)
-            return align_visuals(data, book, src)
+            data["polished"] = False
+            if DRAFT_SAVER.get("fn"):                # the draft is saved now: if the Gemini quota ends in a later step, the next run continues from here
+                try:
+                    DRAFT_SAVER["fn"](data)
+                except Exception as e:  # noqa: BLE001
+                    print("Draft not saved:", e, flush=True)
+            return polish_script(data, book, src)
         print(f"Script attempt {attempt + 1} rejected: {problems or 'too few or too many scenes / no wrap-up'}", flush=True)
         time.sleep(5)
     raise RuntimeError("Could not get a valid script (spine and closing wrap-up) from Gemini")
@@ -2368,6 +2453,38 @@ def sentence_table(scenes):
     return rows
 
 
+_LINK_START = re.compile(
+    r"^[«\"“\s]*(?:و\s|چون|زیرا|اما|ولی|پس\b|سپس|بعد\b|بعدها|آنگاه|ناگهان|همان|همین|این\b|آن\b|او\b|وی\b|آنها|آن‌ها|"
+    r"در همین|در این|در آن|با این|با آن|برای همین|به همین|به این|به آن|به او|برای او|برای آن|از آن|از این|در نتیجه|تا اینکه|تا این‌که|"
+    r"اکنون|حالا|همچنین|هنوز|سرانجام|در پایان|وقتی|هنگامی|پس از|بعد از|قبل از|پیش از|کمی بعد|اندکی بعد|هرچند|اگرچه|"
+    r"یک روز|روزی|شبی|فردا|دیگر|بدین|بدان|اینجا|آنجا|هیچ|همه|هر دو|هر کدام|نتیجه|به‌زودی|به زودی|در عوض|در حالی|با وجود|"
+    r"به‌جای|به جای|از همان|از همین|تنها|فقط|حتی|هم\b)")
+
+
+def unlinked_sentences(scenes, max_total=8):
+    """The rosary-thread rule, checked in CODE (no Gemini call): in a story paragraph of 3 or more sentences, a sentence that does
+    not begin with a connector (because, but, then, after that...), a pronoun that points back, or the name that the sentence
+    before it was about, does not follow from the one before it. A paragraph where fewer than 40 percent of the sentences are
+    linked gets its unlinked sentences (at most 3 per paragraph) reported as [(id, text)]."""
+    out = []
+    for i, sc in enumerate(scenes):
+        if sc.get("part") != "story":
+            continue
+        sents = split_sentences(sc["narration_fa"])
+        if len(sents) < 3:
+            continue
+        linked = [True]                                              # the first sentence of a paragraph opens it
+        for k in range(1, len(sents)):
+            t = sents[k]
+            first = t.split()[0] if t.split() else ""
+            prev_names = set(re.findall(r"[A-Za-z][A-Za-z'’-]{2,}", sents[k - 1]))
+            ok = bool(_LINK_START.match(t)) or (bool(re.match(r"[A-Za-z]", first)) and re.sub(r"[^A-Za-z'’-]", "", first) in prev_names)
+            linked.append(ok)
+        if sum(linked[1:]) / max(1, len(linked) - 1) < 0.4:
+            out += [(f"{i}.{k}", sents[k]) for k in range(1, len(sents)) if not linked[k]][:3]
+    return out[:max_total]
+
+
 def story_gate(data, book, src, round_=1):
     """Step C (1 to 4 Gemini calls): a viewer who NEVER read the book hears ONLY the narration, retells the story and says
     after which sentence he got lost, which sentences do not belong to the story and which key event he did not hear.
@@ -2443,10 +2560,16 @@ Return JSON with exactly these keys, in this order:
             gid = str(g.get("id") if isinstance(g, dict) else g)
             if gid in valid and gid not in protect and gid not in [c["id"] for c in confusing]:
                 confusing.append({"id": gid, "problem": "it reveals something that happens later (the ending or a result): replace it with a sentence about the START situation only, with no outcome"})
+        for gid, _txt in unlinked_sentences(scenes):          # the rosary-thread rule, found by code
+            if gid in valid and gid not in protect and gid not in [c["id"] for c in confusing] and gid not in irrelevant:
+                confusing.append({"id": gid, "problem": "it does not follow from the sentence before it: join it with a natural "
+                                                        "connector (چون، برای همین، اما، سپس، در نتیجه) or the pronoun that points back"})
+        confusing = confusing[:14]
         ev_ids = {e["id"] for e in (spine.get("events") or [])}
         missing = [int(x) for x in (t.get("missing_events") or []) if str(x).lstrip("-").isdigit() and int(x) in ev_ids][:4]
         print(f"Story gate (round {round_}): confusing={len(confusing)} irrelevant={len(irrelevant)} "
               f"missing_events={missing}", flush=True)
+        data["gate_notes"] = {"round": round_, "retelling": retell, "confusing": confusing, "irrelevant": irrelevant, "missing": missing}
         for line in retell[:14]:
             print("  viewer understood:", line[:150], flush=True)
         if not (confusing or irrelevant or missing):
@@ -2530,7 +2653,50 @@ Persian sentence of 8 to 24 words that continues the story smoothly.
         raise
     except Exception as e:  # noqa: BLE001
         print("Story gate skipped:", e, flush=True)
+        data["gate_notes"] = {"skipped": str(e)[:200]}
     return data
+
+
+def story_report(script, book):
+    """A short report to check the story in one minute: every key event of the plan with the sentences that tell it, whether the
+    order runs straight, the viewer test and every sentence that does not connect to the one before. Written into
+    azim_voice_report.txt (the workflow already uploads it)."""
+    lines = ["", "=== STORY REPORT / گزارش داستان ===", f"Book: {book['title_en']}"]
+    try:
+        scenes = script.get("scenes") or []
+        events = {e["id"]: e for e in ((script.get("spine") or {}).get("events") or [])}
+        seen, back = [], []
+        for i, sc in enumerate(scenes):
+            if sc.get("part") != "story":
+                continue
+            for ev in (sc.get("ev_ids") or []):
+                if seen and ev < max(seen):
+                    back.append(f"scene {i}: event {ev} comes after event {max(seen)}")
+                seen.append(ev)
+        lines.append(f"CHECK RUNS WAITED: {script.get('story_defers', 0)} of {MAX_DEFERS}")
+        lines.append("ORDER: " + ("every event is told in the order of the plan." if not back else "BACKWARDS STEP(S): " + "; ".join(back[:6])))
+        for i, sc in enumerate(scenes):
+            evs = ", ".join(f"#{e}: {str((events.get(e) or {}).get('what_en') or '')[:90]}" for e in (sc.get("ev_ids") or []))
+            lines.append(f"[{i}] ({sc.get('part')}) {evs}")
+            lines.append("    " + str(sc.get("narration_fa") or ""))
+        un = unlinked_sentences(scenes, 20)
+        lines.append(f"NOT CONNECTED to the sentence before ({len(un)}): " + " | ".join(f"{g}: {t[:60]}" for g, t in un) if un else
+                     "CONNECTIONS: every story paragraph flows (no sentence without a link found).")
+        g = script.get("gate_notes") or {}
+        if g.get("skipped"):
+            lines.append("VIEWER TEST: SKIPPED (" + g["skipped"] + ") - this narration was NOT checked by the viewer test.")
+        elif g:
+            lines.append(f"VIEWER TEST (last round {g.get('round')}): confusing={len(g.get('confusing') or [])}, "
+                         f"irrelevant={len(g.get('irrelevant') or [])}, missing events={g.get('missing')}")
+            for x in (g.get("retelling") or [])[:14]:
+                lines.append("  viewer understood: " + str(x)[:160])
+            for c in (g.get("confusing") or [])[:14]:
+                lines.append(f"  confusing {c.get('id')}: {str(c.get('problem'))[:110]}")
+        else:
+            lines.append("VIEWER TEST: not run for this script.")
+    except Exception as e:  # noqa: BLE001
+        lines.append(f"(report could not be completed: {e})")
+    return "\n".join(lines) + "\n"
 
 
 def review_script(data, book, src):
@@ -6818,16 +6984,27 @@ def publish_site_page(book, src, scenes, cover_img=None, site_dir=None):
 
 # ---------------------------------------------------------------- main
 def get_book_and_source(posted, rejected):
-    """Next novel that has a usable Plot section on Wikipedia. A novel without one is rejected for good
-    (never summarized from memory, never tried again)."""
+    """Next novel that has a usable Plot section on Wikipedia. A novel without one is rejected (never summarized from memory) and
+    NEVER offered again in this run. When Wikipedia itself does not answer (rate limit, network) the book is NOT rejected: the
+    run waits and tries the same book again, and stops without rejecting anything if Wikipedia stays silent."""
     tries = 60 if BOOKS_FILE.exists() else 6
+    skip, silent = set(), 0
     for _ in range(tries):
-        book = fix_author_fa(fix_title_fa(pick_book(posted, rejected)))
+        book = fix_author_fa(fix_title_fa(pick_book(posted, rejected, skip)))
         print("Book candidate:", book["title_en"], "|", book["book_type"], flush=True)
+        errors_before = WIKI_ERRORS["n"]
         src = fetch_source(book)
         if src:
             return book, src
-        reject_book(rejected, book, "no usable Plot section on Wikipedia")
+        if WIKI_ERRORS["n"] > errors_before:
+            silent += 1
+            if silent >= 4:
+                raise RuntimeError("Wikipedia does not answer now (too many requests). No book was rejected: the next run tries again.")
+            print(f"Wikipedia did not answer (rate limit or network): '{book['title_en']}' is NOT rejected; waiting {90 * silent} s.", flush=True)
+            time.sleep(90 * silent)
+            continue
+        skip.add(book["title_en"])
+        reject_book(rejected, book, f"no usable Plot section on Wikipedia [{PLOT_MIN_WORDS}-{PLOT_MAX_WORDS}]")
     raise RuntimeError("Could not find a novel with a usable Plot section on Wikipedia")
 
 
@@ -6847,12 +7024,14 @@ def main():
     if cf_quota_finished_today():
         print("The free Cloudflare picture quota was already finished earlier today (it resets at 00:00 UTC, "
               "03:30 Iran time). Nothing is started now, so no Gemini quota is wasted. The next run continues.", flush=True)
+        set_status("⏸️", "سهمیهٔ رایگان تصویر Cloudflare امروز تمام شده است؛ این اجرا ویدئویی نساخت و اجرای بعدی ادامه می‌دهد.")
         return
     posted = load_json(POSTED_FILE, [])
     rejected = load_json(REJECTED_FILE, [])
     _VARIETY["n"] = len(posted)
     if len(posted) >= TOTAL_BOOKS:
         print("All books are done.")
+        set_status("🏁", "همهٔ کتاب‌ها منتشر شده‌اند.")
         return
 
     if WORK.exists():
@@ -6868,6 +7047,8 @@ def main():
     # a script that was finished in an earlier run which failed later (voice/images/video): resume it,
     # so the Gemini quota is not spent twice. After 3 failed resumes the book is rejected.
     book = src = script = None
+    defers = 0
+    rechecked_now = False
     pending = load_json(PENDING_FILE, None)
     if pending and pending.get("version") != SCRIPT_VERSION:
         print("Saved script is from an older version of the bot: ignored.", flush=True)
@@ -6887,7 +7068,28 @@ def main():
                     pending["attempts"] = attempts
                     save_json(PENDING_FILE, pending)
                     book, src, script = pending["book"], pending["src"], pending["script"]
+                    defers = int(pending.get("defers", 0))
                     print(f"Resuming the saved script of '{book['title_en']}' (resume {attempts} of 3).", flush=True)
+                    if not script.get("polished", True):                 # a draft: the checking and polishing steps are still to do
+                        print("It is a draft: the viewer test, the fact check and the voice text are done now.", flush=True)
+                        script = polish_script(script, book, src)
+                        rechecked_now = True
+                        pending["script"] = script
+                        save_json(PENDING_FILE, pending)
+                    elif defers > 0:                                      # it waited for a clean story check: the viewer test again
+                        print(f"The story check is repeated (wait {defers} of {MAX_DEFERS}).", flush=True)
+                        rechecked_now = True
+                        words_before = " ".join(s_.get("narration_fa", "") for s_ in script["scenes"])
+                        script = recheck_story(script, book, src)
+                        if " ".join(s_.get("narration_fa", "") for s_ in script["scenes"]) != words_before:
+                            script = align_visuals(script, book, src)     # the sentences changed: the pictures are planned again
+                        pending["script"] = script
+                        save_json(PENDING_FILE, pending)
+        except GeminiQuotaExhausted:
+            raise                       # the quota ended in a step of the saved script: it STAYS saved, the next run continues
+        except GeminiBlocked as e:
+            reject_book(rejected, pending["book"], f"Gemini blocked the prompt: {e}")
+            pending = None
         except Exception as e:  # noqa: BLE001
             print("Saved script ignored:", e, flush=True)
             pending = None
@@ -6901,10 +7103,14 @@ def main():
             plan = plan_length(src)
             print(f"Plan: {plan[0]}-{plan[1]} scenes, {plan[2]} words (from a {src['en_words']}-word Plot)",
                   flush=True)
+            DRAFT_SAVER["fn"] = (lambda draft, _b=book, _s=src: save_json(
+                PENDING_FILE, {"book": _b, "src": _s, "script": draft, "attempts": 0, "defers": 0,
+                               "version": SCRIPT_VERSION, "date": date.today().isoformat()}))
             try:
                 script = write_scenes(book, src, plan)
                 break
             except GeminiBlocked as e:
+                PENDING_FILE.unlink(missing_ok=True)          # the draft of a rejected book is not kept
                 reject_book(rejected, book, f"Gemini blocked the prompt: {e}")
         else:
             raise RuntimeError("Gemini blocked 4 books in a row")
@@ -6931,7 +7137,44 @@ def main():
     (WORK / "azim_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
     (ROOT / "azim_last_script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
     (ROOT / "azim_last_source.txt").write_text(src["text"], encoding="utf-8")
+    script["story_defers"] = defers
     REPORT_FILE.write_text(f"Book: {book['title_en']}\nSource: {src['url']}\n", encoding="utf-8")
+    try:
+        with open(REPORT_FILE, "a", encoding="utf-8") as f_:
+            f_.write(story_report(script, book))
+    except OSError:
+        pass
+
+    clean_, why_ = story_verdict(script)
+    if not clean_ and defers < MAX_DEFERS and not rechecked_now:
+        print(f"The story check is not clean ({why_}): one more viewer test right now (a wait costs a whole run).", flush=True)
+        time.sleep(30)
+        words_before = " ".join(s_.get("narration_fa", "") for s_ in script["scenes"])
+        script = recheck_story(script, book, src)
+        if " ".join(s_.get("narration_fa", "") for s_ in script["scenes"]) != words_before:
+            script = align_visuals(script, book, src)
+        script["story_defers"] = defers
+        pend_now = load_json(PENDING_FILE, None)
+        if pend_now:
+            pend_now["script"] = script
+            save_json(PENDING_FILE, pend_now)
+        clean_, why_ = story_verdict(script)
+    if not clean_ and defers < MAX_DEFERS:
+        pend_ = load_json(PENDING_FILE, None) or {"book": book, "src": src, "attempts": 0, "version": SCRIPT_VERSION,
+                                                  "date": date.today().isoformat()}
+        pend_["script"] = script
+        pend_["defers"] = defers + 1
+        pend_["attempts"] = max(0, int(pend_.get("attempts", 0)) - 1)          # waiting is not a failure
+        save_json(PENDING_FILE, pend_)
+        print(f"The story check is not clean ({why_}): NO video is made now (no pictures, no voice are spent). The saved script is "
+              f"checked again in the next run (wait {defers + 1} of {MAX_DEFERS}); after that it is posted as it is.", flush=True)
+        set_status("⏳", f"ویدئو عمداً ساخته نشد: کنترل کیفیت داستان تمیز نبود ({why_}). فیلمنامهٔ «{book['title_en']}» ذخیره شد و "
+                         "اجرای بعدی دوباره کنترلش می‌کند؛ بعد از آن در هر حال ساخته می‌شود.")
+        status_line("گزارش کامل داستان در فایل azim_voice_report.txt (Artifacts پایین همین صفحه) است.")
+        return
+    if not clean_:
+        print(f"The story check is still not clean ({why_}), but it waited {defers} runs: the video is made now.", flush=True)
+    status_line("بررسی داستان: " + ("تمیز." if clean_ else f"هنوز ناتمیز ({why_}) ولی بعد از {defers} بار انتظار ساخته شد."))
 
     # the voice alternates: female, male, female, male...
     last_voice = posted[-1].get("voice") if posted else None
@@ -7091,8 +7334,12 @@ def main():
     try:                                   # Instagram: any problem here is only printed, the video is already in the channel
         if IG_USER_ID and IG_TOKEN:
             post_instagram(instagram_cut(final, kind), caption_full)
+            status_line("اینستاگرام: ریلز منتشر شد.")
+        else:
+            status_line("اینستاگرام: غیرفعال است (Secretهای IG_USER_ID و IG_ACCESS_TOKEN تنظیم نشده‌اند).")
     except Exception as e:  # noqa: BLE001
         print(f"Instagram skipped: {e}", flush=True)
+        status_line(f"اینستاگرام: منتشر نشد ({str(e)[:140]}).")
 
     posted.append({"title_en": book["title_en"], "title_fa": book.get("title_fa") or "",
                    "type": "novel", "voice": kind, "engine": VOICE_USED["engine"], "date_pt": pacific_today(), "wiki": src["title"], "date": date.today().isoformat()})
@@ -7106,6 +7353,9 @@ def main():
     PENDING_FILE.unlink(missing_ok=True)
     shutil.rmtree(SAVE_DIR, ignore_errors=True)
     shutil.rmtree(WORK, ignore_errors=True)
+    set_status("✅", f"ویدئوی «{book.get('title_fa') or book['title_en']}» ({book['title_en']}) در کانال منتشر شد.")
+    status_line(f"صدا: {kind} / موتور {VOICE_USED.get('engine')}")
+    status_line(f"منبع: {src['url'].splitlines()[0]}")
     print("Done.")
 
 
@@ -8132,19 +8382,33 @@ _PAINTING_B64 = (
 
 if __name__ == "__main__":
     try:
-        main()
-    except GeminiQuotaExhausted as exc:
-        print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
-              "No video now; the next run continues.", flush=True)
-        sys.exit(1)
-    except ImageServiceUnavailable as exc:
-        print(f"STOP: no good picture can be made now ({exc}). No video is posted with bad pictures; "
-              "the finished script is saved and the next run continues with it.", flush=True)
-        if "daily free quota" in str(exc):
-            SAVE_DIR.mkdir(parents=True, exist_ok=True)
-            save_json(CF_STATE_FILE, {"exhausted_utc_date": datetime.now(timezone.utc).date().isoformat()})
-        pend = load_json(PENDING_FILE, None)
-        if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
-            pend["attempts"] = int(pend["attempts"]) - 1
-            save_json(PENDING_FILE, pend)
-        sys.exit(1)
+        try:
+            main()
+        except GeminiQuotaExhausted as exc:
+            print(f"STOP: the daily Gemini quota is finished for every model ({exc}). "
+                  "No video now; the next run continues.", flush=True)
+            set_status("⏸️", "سهمیهٔ روزانهٔ رایگان Gemini تمام شد؛ ویدئویی ساخته نشد. فیلمنامهٔ نیمه‌کاره (اگر نوشته شده) ذخیره است و اجرای بعدی ادامه می‌دهد.")
+            pend = load_json(PENDING_FILE, None)
+            if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
+                pend["attempts"] = int(pend["attempts"]) - 1
+                save_json(PENDING_FILE, pend)
+            sys.exit(1)
+        except ImageServiceUnavailable as exc:
+            print(f"STOP: no good picture can be made now ({exc}). No video is posted with bad pictures; "
+                  "the finished script is saved and the next run continues with it.", flush=True)
+            set_status("⏸️", f"تصویر خوب ساخته نشد ({str(exc)[:160]}). ویدئوی بد منتشر نمی‌شود؛ فیلمنامه ذخیره است و اجرای بعدی ادامه می‌دهد.")
+            if "daily free quota" in str(exc):
+                SAVE_DIR.mkdir(parents=True, exist_ok=True)
+                save_json(CF_STATE_FILE, {"exhausted_utc_date": datetime.now(timezone.utc).date().isoformat()})
+            pend = load_json(PENDING_FILE, None)
+            if pend and int(pend.get("attempts", 0)) > 0:      # this stop is not the book's fault
+                pend["attempts"] = int(pend["attempts"]) - 1
+                save_json(PENDING_FILE, pend)
+            sys.exit(1)
+        except SystemExit:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            set_status("❌", f"اجرا با خطا تمام شد: {type(exc).__name__}: {str(exc)[:200]}")
+            raise
+    finally:
+        write_run_summary()
