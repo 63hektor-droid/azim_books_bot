@@ -593,5 +593,15 @@
   "date_pt": "2026-11-22",
   "wiki": "The Old Man and the Sea",
   "date": "2026-11-23"
+ },
+ {
+  "title_en": "Of Mice and Men",
+  "title_fa": "موش‌ها و آدم‌ها",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-23",
+  "wiki": "Of Mice and Men",
+  "date": "2026-11-23"
  }
 ]
