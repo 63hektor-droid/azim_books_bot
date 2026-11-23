@@ -583,5 +583,15 @@
   "date_pt": "2026-11-22",
   "wiki": "The Stranger (Camus novel)",
   "date": "2026-11-22"
+ },
+ {
+  "title_en": "The Old Man and the Sea",
+  "title_fa": "پیرمرد و دریا",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-22",
+  "wiki": "The Old Man and the Sea",
+  "date": "2026-11-23"
  }
 ]
