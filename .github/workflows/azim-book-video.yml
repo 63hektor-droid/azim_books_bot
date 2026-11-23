@@ -88,6 +88,8 @@ jobs:
           # website (docs/ folder, GitHub Pages): all optional, empty = automatic
           AZIM_GSC_TOKEN: ${{ vars.AZIM_GSC_TOKEN }}                      # Google Search Console verification code
           AZIM_CHANNEL_URL: ${{ vars.AZIM_CHANNEL_URL }}                  # channel link (empty = found automatically)
+          # share of the pictures that may be drawn again when the image check finds a flaw (0.4 = 40 percent; change it in Variables)
+          AZIM_REDRAW_FRAC: ${{ vars.AZIM_REDRAW_FRAC || '0.4' }}
           # Instagram (optional; empty = off): the same video, cut under 3 minutes, is also published as a Reel
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
