@@ -2111,6 +2111,8 @@ def story_verdict(script):
         return True, ""
     if g.get("skipped"):
         return False, "the viewer test did not run (" + str(g["skipped"])[:80] + ")"
+    if g.get("repair_failed") and (g.get("missing") or g.get("confusing") or g.get("irrelevant")):
+        return False, "the repair of the found problems failed (" + str(g["repair_failed"])[:60] + ")"
     if g.get("missing"):
         return False, f"key events the viewer did not hear: {g['missing']}"
     if len(g.get("confusing") or []) > 5:
@@ -2653,7 +2655,10 @@ Persian sentence of 8 to 24 words that continues the story smoothly.
         raise
     except Exception as e:  # noqa: BLE001
         print("Story gate skipped:", e, flush=True)
-        data["gate_notes"] = {"skipped": str(e)[:200]}
+        if (data.get("gate_notes") or {}).get("round"):          # the viewer test ran; only the repair failed
+            data["gate_notes"]["repair_failed"] = str(e)[:120]
+        else:
+            data["gate_notes"] = {"skipped": str(e)[:200]}
     return data
 
 
