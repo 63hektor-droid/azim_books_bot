@@ -603,5 +603,15 @@
   "date_pt": "2026-11-23",
   "wiki": "Of Mice and Men",
   "date": "2026-11-23"
+ },
+ {
+  "title_en": "The Grapes of Wrath",
+  "title_fa": "خوشه‌های خشم",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-24",
+  "wiki": "The Grapes of Wrath",
+  "date": "2026-11-24"
  }
 ]
