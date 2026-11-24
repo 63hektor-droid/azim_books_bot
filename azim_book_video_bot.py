@@ -67,8 +67,8 @@ BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture abou
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
-VISUAL_VERSION = 26       # pictures of a saved script written by an older version are planned again (1 Gemini call)
-SCRIPT_VERSION = 23       # a saved script of another version is not resumed
+VISUAL_VERSION = 27       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+SCRIPT_VERSION = 24       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
 # It is an editor-reviewed, concise summary (the Wikipedia guideline asks for about 400-700 words), free to reuse
@@ -634,15 +634,11 @@ def attribution_text(src):
     history), the licence with its link, that the text was changed (summarised and rewritten) and that this video text is shared
     under the same licence (CC BY-SA 4.0 asks for exactly this)."""
     url = str(src.get("url") or "").strip()
-    title = str(src.get("title") or "").strip()
-    lines = [f"منبع: این خلاصه برگرفته از بخش داستانِ مقالهٔ ویکی‌پدیا «{title}» است و برای این ویدیو خلاصه و بازنویسی شده است.", url]
-    for u in (src.get("extra_urls") or [])[:3]:
-        lines.append(str(u))
-    if url and "/wiki/" in url:
-        base, name = url.split("/wiki/", 1)
-        lines.append(f"نویسندگان مقاله: {base}/w/index.php?title={name}&action=history")
-    lines.append("مجوز: CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/deed.fa")
-    lines.append("متن این ویدیو هم با همان مجوز CC BY-SA 4.0 منتشر می‌شود.")
+    # VERY SHORT (user's decision, Nov 24, 2026): two lines, all inside the caption (no reply under the video any more).
+    # CC BY-SA 4.0 still gets what it needs: the source (with its link), that the text was summarised, and the licence name.
+    lines = ["منبع: ویکی‌پدیا (خلاصه‌شده) · مجوز CC BY-SA 4.0"]
+    if url:
+        lines.append(url)
     return "\n".join(lines)
 
 
@@ -760,7 +756,9 @@ NAMES_RULE = """- NAMES: write the names of people, places, the novel and its au
   A long place name is shortened to its main word. The title of the novel and the name of its author stay complete. A voice reads them in English. Everything else is
   Persian: never write any other English word and never write digits (numbers as Persian words). Put a space between a
   Persian word and a name, never glue Persian letters to a Latin name (no «Holden‌ی»). If grammar needs a suffix on a name,
-  rephrase so that the name stands alone."""
+  rephrase so that the name stands alone. ANIMALS AND THINGS ARE NEVER NAMES: a shark, a fish, a marlin, a boat, a sea, a
+  harpoon... are written in PERSIAN (کوسه، ماهی، مارلین، قایق، دریا، نیزه), also at the start of a sentence, never in English
+  letters and never with a capital letter."""
 
 
 # Starting points that guarantee VARIETY (the source, the place, the era and the age always win over them).
@@ -1053,7 +1051,7 @@ def enforce_distinct_cast(chars):
     return chars
 
 
-_ACCESSORIES_M = ("a flat cap", "a bow tie", "a long scarf", "a brimmed hat", "a walking cane")
+_ACCESSORIES_M = ("a flat cap", "a bow tie", "a long scarf", "a brimmed hat", "a pocket watch chain")   # no walking cane: a made-up cane confuses (a boy with a cane like the old man)
 _ACCESSORIES_F = ("a headscarf", "a shawl over the shoulders", "a hair ribbon", "a white apron", "a bonnet",
                   "a necklace with a pendant")
 
@@ -1080,6 +1078,23 @@ def add_signatures(chars):
                 c["signature_en"] = acc
                 c["key_en"] = (str(c.get("key_en") or "") + f", with {acc}").strip(" ,")
                 break
+    return chars
+
+
+_CANE_RX = re.compile(r"(?:,\s*|\s+)?(?:and\s+|with\s+|holding\s+|leaning on\s+|carrying\s+)?(?:an?\s+|his\s+|her\s+)?(?:[\w-]+\s+)?"
+                      r"(?:walking cane|walking stick|cane)\b", re.I)
+
+
+def drop_unsupported_cane(chars, source_text=""):
+    """A walking cane is drawn ONLY when the source itself speaks of one (a cane that nobody wrote made the young helper look
+    like the old man). Free check in code."""
+    if re.search(r"\b(?:cane|walking stick|crutch)\b", str(source_text or ""), re.I):
+        return chars
+    for c in chars:
+        for k_ in ("look_en", "tag_en", "key_en", "signature_en"):
+            v = str(c.get(k_) or "")
+            if v and _CANE_RX.search(v):
+                c[k_] = " ".join(_CANE_RX.sub("", v).split()).strip(" ,")
     return chars
 
 
@@ -1418,6 +1433,7 @@ Rules:
         chars = apply_age_gaps(chars, d.get("relations"))
         chars = fix_nightwear(chars, src["text"], era)
         chars = add_signatures(enforce_distinct_cast(enforce_distinct_faces(chars, picks)))
+        chars = drop_unsupported_cane(chars, src["text"])
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -1721,6 +1737,9 @@ def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text=""):
         if part not in PARTS:
             problems.append(f"unknown part '{part}'")
             continue
+        if part == "heroes":                 # no overview of the heroes before the story (user's decision, Nov 24, 2026)
+            print("Script check: a 'heroes' overview scene was removed: the story starts right after the title line.", flush=True)
+            continue
         keep, ev_ids = [], []
         for x in s.get("sentences") or []:
             if not isinstance(x, dict):
@@ -1764,6 +1783,10 @@ def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text=""):
                        "characters_present": [str(n) for n in (s.get("characters_present") or [])],
                        "setting_en": str(s.get("setting_en") or ""), "action_en": str(s.get("action_en") or ""),
                        "mood_en": str(s.get("mood_en") or "")})
+    for x in scenes:                         # the opening is ONLY the title line: a longer one hides a summary or a teaser
+        if x["part"] == "open" and open_text and len(x["narration_fa"].split()) > 30:
+            print("Script check: the opening was longer than a title line: replaced by the plain title line.", flush=True)
+            x["narration_fa"] = open_text
     if open_text and scenes and not any(x["part"] == "open" for x in scenes):
         scenes.insert(0, {"part": "open", "narration_fa": open_text, "ev_ids": [], "source_en": "", "characters_present": [],
                           "setting_en": "", "action_en": "", "mood_en": ""})
@@ -1853,10 +1876,10 @@ AUTHOR GENDER: {author_g}
 HEROES: {json.dumps([{'name': h['name'], 'role_en': _soft_text(h.get('role_en'), soft)} for h in heroes], ensure_ascii=False)}
 {('WORLD: ' + spine['world_en']) if spine.get('world_en') else ''}
 Return JSON {{"open": [1 or 2 short Persian sentences, 12 to 30 words in all: ONLY the name of the novel and of its author in English letters and,
-only if the author sentence source says so, when it was published; NOTHING about the story: no summary, no hook, no hero, no problem, no teaser],
-"heroes": [{'2 to 4 Persian sentences (35 to 65 words) that say who is who: each hero by name with a few words of role and relation to the others; no fate, no ending' if len(heroes) >= 2 else '[]'}]}}"""
+only if the author sentence source says so, when it was published; NOTHING about the story: no summary, no hook, no hero, no problem, no teaser, no situation],
+"heroes": []}}"""
     d1 = gemini_json(p1, minutes=8, models=WRITE_MODELS)
-    open_s, heroes_s = _fa_sentences(d1.get("open")), _fa_sentences(d1.get("heroes"))
+    open_s, heroes_s = _fa_sentences(d1.get("open")), []       # no "heroes" overview any more: the story starts right after the title line
     if not open_s:
         raise RuntimeError("no opening from the event-by-event writer")
 
@@ -2178,9 +2201,8 @@ Return JSON with exactly these keys:
        author in English letters and, only if the AUTHOR SENTENCE SOURCE says so, when it was published. NOTHING about the story: no
        summary, no hook, no situation, no hero, no problem, no teaser and no question about the plot (the story starts only after
        the introduction). Nothing else about the author (no biography), no praise.
-    2. ONE scene with part "heroes" (only if the spine has 2 or more heroes): 2 to 4 sentences (35 to 65 words) that say who is
-       who: for each hero of the spine his or her name and a few words of role and relation to the others (from "role_en").
-       Flowing text, not a list. Nothing about what happens to them later (no fate, no ending).
+    2. NO "heroes" scene and NO summary of any kind: right after the introduction the first "story" scene starts telling the
+       first event of the spine (direct narration). Every hero is introduced inside the story, at his or her FIRST appearance.
     3. The scenes with part "story": together they tell EVERY event of the spine, in order. Each scene tells ONE event or two
        closely linked events, 2 to 5 flowing sentences (as many as the event needs, 35 to 75 words), every event with its cause.
     4. TWO scenes (three at most) with part "wrap" = the closing wrap-up. The first one starts with the Persian words
@@ -2223,8 +2245,8 @@ Rules for the narration:
   A short summary keeps ONLY the spine: one clear step for every event, in one or two sentences; no names of side people (a
   name is given only to a hero or to a person that a later event needs), no dates and numbers unless the story needs them, no
   description of a place unless the place matters, no second example, no explanation longer than a few words.
-  WORLD: when the spine has a "world_en" that is not empty, the first story sentences (the "heroes" scene) say it plainly
-  in simple words before any event, and a hero who is not an ordinary person is called by what he or she is the first time
+  WORLD: when the spine has a "world_en" that is not empty, the first story sentences say it plainly
+  in simple words as a part of the narration of the first event, and a hero who is not an ordinary person is called by what he or she is the first time
   (never leave the listener asking "what is this?").
   SENTENCE TEST: before you keep a sentence ask "if I delete it, does the viewer lose a hero, a cause, a turning point, the
   climax or the ending?" If not, do not write it. A sentence that only decorates, repeats, describes a mood or names a side
@@ -2249,8 +2271,8 @@ Rules for the narration:
   events. Forbidden there: opinions, praise, the author's life, reception, comparisons with other works, background facts,
   descriptions and details that the following events do not need, a person or a place that no event needs.
 - NO AMBIGUITY (the listener never read the book and cannot go back): (1) every person is introduced with a few words of role
-  («فلانی، دختر ...») at the FIRST mention, and a name that was not introduced is never used; the heroes are introduced in
-  the "heroes" scene, everybody else at his or her first appearance; (2) a pronoun («او»، «آن‌ها»، «این») always points to the
+  («فلانی، دختر ...») at the FIRST mention, and a name that was not introduced is never used; the heroes too are introduced
+  inside the story at their first appearance (there is no separate introduction of the heroes); (2) a pronoun («او»، «آن‌ها»، «این») always points to the
   ONE person or group named in the sentence before it; if two people of the same gender are in that sentence, repeat the
   name; (3) say where and when a new situation takes place whenever it changes; (4) explain every special term, title or
   custom in a few words the first time it appears; (5) write the cause with the effect («چون»، «برای همین»، «در نتیجه»)
@@ -2809,6 +2831,29 @@ _NAME_JOIN = (r"(?:\s+(?:of|the|in|on|and|de|del|della|di|da|du|la|le|van|von|de
 NAME_RUN = re.compile(rf"{_NAME_WORD}(?:{_NAME_JOIN}{_NAME_WORD})*")
 
 
+# Animals and things are NEVER names: a capitalized «Shark» used to pass as a name, was written in English and was read in English.
+COMMON_EN_FA = ((r"sharks", "کوسه‌ها"), (r"shark", "کوسه"), (r"marlins", "ماهی‌های مارلین"), (r"marlin", "ماهی مارلین"),
+                (r"dolphins", "دلفین‌ها"), (r"dolphin", "دلفین"), (r"harpoons", "نیزه‌ها"), (r"harpoon", "نیزه"),
+                (r"skiffs", "قایق‌ها"), (r"skiff", "قایق"), (r"fishermen", "ماهیگیران"), (r"fisherman", "ماهیگیر"))
+
+
+def fix_common_english(text, book=None):
+    """Free fix in code: the common English words above become Persian. The title of the novel and the name of its author are kept."""
+    t = str(text or "")
+    keep = [str((book or {}).get(k_) or "") for k_ in ("title_en", "author_en")]
+    masks = {}
+    for n_, k_ in enumerate(keep):
+        if k_ and k_ in t:
+            tok = f"\u0001{n_}\u0001"
+            masks[tok] = k_
+            t = t.replace(k_, tok)
+    for en_, fa_ in COMMON_EN_FA:
+        t = re.sub(rf"(?<![A-Za-z]){en_}(?![A-Za-z])", fa_, t, flags=re.I)
+    for tok, k_ in masks.items():
+        t = t.replace(tok, k_)
+    return t
+
+
 def bad_latin(text):
     """True if the text has English letters outside names (names are allowed)."""
     return bool(LATIN.search(NAME_RUN.sub(" ", text)))
@@ -2880,6 +2925,8 @@ Paragraphs: {json.dumps(items, ensure_ascii=False)}"""
 
 
 def sanitize_narration(data, book):
+    for s_ in data["scenes"]:
+        s_["narration_fa"] = fix_common_english(s_["narration_fa"], book)       # «Shark» -> «کوسه» before anything else
     before = [s["narration_fa"].replace("ي", "ی").replace("ك", "ک") for s in data["scenes"]]
     data = _sanitize_core(data, book)
     for s in data["scenes"]:
@@ -2934,7 +2981,8 @@ _THING_LEXICON = [
     (_pw("گرگ"), "a large gray wolf, alert and powerful, its whole body visible", ("wolf",)),
     (_pw("ببر|پلنگ"), "a big striped tiger, powerful and alert, its whole body visible", ("tiger", "leopard")),
     (_pw("خرس"), "a huge brown bear on its hind legs, its whole body visible", ("bear",)),
-    (_pw("کوسه"), "a big gray shark in the water, its whole body visible", ("shark",)),
+    (_pw("کوسه"), "a big gray shark with a pointed snout, tall dorsal fin and crescent tail, swimming in the water, whole body visible", ("shark",)),
+    (_pw("مارلین|ماهی بزرگ|ماهی غول\\W?پیکر|ماهی عظیم|ماهی غول"), "a giant marlin with a long sharp bill, tall dorsal fin and slim silver body, leaping from the water beside the boat", ("marlin",)),
     (_pw("نهنگ"), "a gigantic whale, its whole body visible", ("whale",)),
     (_pw("هیولا|غول"), "a gigantic monster, much taller than the people, its whole body visible", ("monster", "giant")),
     (_pw("قفس"), "a strong metal cage with thick bars, big and clearly visible", ("cage",)),
@@ -2967,11 +3015,80 @@ _EVENT_LEXICON = [
 ]
 
 
+_SEA_STRONG = re.compile(_pw("دریا|اقیانوس|قایق|پارو|کوسه|مارلین|بادبان|موج|خلیج|گلف\\W?استریم"))
+_SEA_WEAK = re.compile(_pw("ماهی|ماهیگیر|قلاب|طعمه|نیزه|ریسمان|طناب|صید"))
+_SHORE_FA = re.compile(_pw("ساحل|بندر|کلبه|روستا|شهر|کافه|ماسه|شن|خانه|اسکله|کنار آب"))
+SEA_STORY = {"on": False}        # set in main(): the whole narration is about the sea (a boat, fishing)
+
+
+def sea_story_of(scenes):
+    """True when the narration speaks of the sea (boat, oars, sharks...) at least 4 times: a sea story."""
+    t = DIAC.sub("", " ".join(str(x.get("narration_fa") or "") for x in scenes)).replace("\u200c", " ")
+    return len(_SEA_STRONG.findall(t)) >= 4
+
+
+def at_sea(t):
+    """This picture is a picture AT SEA: its sentence names the sea / a boat / a sea creature (a fish word counts only in a sea story),
+    and it does not say that the people are on the shore or in a village."""
+    if _SHORE_FA.search(t) and not re.search(_pw("قایق|پارو|بادبان|کوسه|مارلین"), t):
+        return False
+    return bool(_SEA_STRONG.search(t) or (SEA_STORY["on"] and _SEA_WEAK.search(t)))
+
+
+_SEA_EVENTS = [
+    (_pw("حمله|هجوم|بلعید|گاز گرفت|دندان"), ("shark", "lunge", "snap"),
+     "a gray shark rises from the water beside the skiff and lunges at the fish tied to the boat while the fisherman strikes at it with a harpoon"),
+    (_pw("جنگ|نبرد|مبارزه|کوبید|ضربه"), ("harpoon", "club", "fight", "strike", "hit"),
+     "the fisherman in the skiff fights the shark in the water beside the boat with a harpoon and a club"),
+    (_pw("نیزه|کشت|کشتن"), ("harpoon", "thrust", "spear"),
+     "the fisherman in the skiff thrusts a long harpoon down into the giant fish beside the boat, no blood"),
+    (_pw("قلاب|طعمه|صید|شکار|گیر کرد|ریسمان"), ("line", "hook", "pull", "leap"),
+     "the fisherman in the skiff pulls a tight fishing line while a giant fish leaps from the water beside the boat"),
+    (_pw("پارو"), ("row", "oar"), "the fisherman rows his small skiff with two oars on the open sea"),
+]
+
+SEA_PLACE = "Open sea, water and sky only, no shore; people sit INSIDE a small wooden skiff, whole boat visible, never on the water."
+SEA_CREATURE = "Sharks and fish stay IN the water, never in the sky; a shark never has a man's face."
+SEA_STYLE = "Thin pencil wave lines, bare white sky, a pencil sketch not a photo."
+_SHORE_EN = re.compile(r"\b(?:(?:the|a|an|his|her|their)\s+)?(?:shore|beach|harbou?r|dock|pier|quay|village|hut|shack|town|sand(?:y)?|cliffs?|cafe|caf[eé]|terrace|lighthouse)\b", re.I)
+_SEA_CREATURE_EN = re.compile(r"\b(?:shark|sharks|marlin|fish|dolphin|whale|swordfish)\b", re.I)
+
+
+def sea_fix(sc, beat_text):
+    """Free check in code: a picture whose sentence is AT SEA is drawn at sea (not on the shore), the people sit IN a boat (never
+    standing on the water), sea creatures stay IN the water (never in the sky), and a shark never merges with a man's face."""
+    t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
+    if not at_sea(t):
+        return sc
+    for k_ in ("visual_en", "event_en", "setting_en", "action_en", "gentle_en"):
+        sc[k_] = " ".join(_SHORE_EN.sub("open water", str(sc.get(k_) or "")).split())
+    sc["must_show"] = [x for x in (sc.get("must_show") or []) if not _SHORE_EN.search(str(x))]
+    people = bool(sc.get("characters_present") or sc.get("others")) or bool(re.search(r"\b(?:man|fisherman|boy|person|people|he|she)\b", str(sc.get("visual_en") or ""), re.I))
+    txt = " ".join(str(sc.get(k_) or "") for k_ in ("visual_en", "event_en")) + " " + " ".join(map(str, sc.get("creatures_en") or []))
+    pre = [SEA_PLACE if people else "Open sea, water and sky only, no shore."]
+    if _SEA_CREATURE_EN.search(txt):
+        pre.append(SEA_CREATURE)
+    pre.append(SEA_STYLE)
+    sc["sea_en"] = " ".join(pre)                 # build_prompt puts it BEFORE the picture text, where the length limit never cuts it
+    if str(sc.get("gentle_en") or "").strip():
+        sc["gentle_en"] = (pre[0] + " " + sc["gentle_en"]).strip()
+    return sc
+
+
 def inject_event(sc, beat_text):
     """The event that the narration names (an attack, a chase, a trap, a death...) is always in the picture plan: when neither
     the event line nor the picture text has it, a short gentle line is put in front of the event."""
     t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
     have = (str(sc.get("event_en") or "") + " " + str(sc.get("visual_en") or "")).lower()
+    if at_sea(t):
+        # AT SEA the generic events are wrong (running people, a hunt, mourners at a death: the fisherman «kills» a FISH): sea events only
+        hints = [en for pat, keys, en in _SEA_EVENTS if re.search(pat, t) and not any(k in have for k in keys)][:1]
+        if re.search(_pw("کوسه"), t):
+            hints = [h.replace("down into the giant fish beside the boat, no blood", "at the gray shark beside the boat, no blood") for h in hints]
+        hints += [en for pat, keys, en in _EVENT_LEXICON if en.startswith("a heavy storm") and re.search(pat, t) and not any(k in have for k in keys)][:1]
+        if hints:
+            sc["event_en"] = ". ".join(hints + ([str(sc["event_en"])] if sc.get("event_en") else []))
+        return sc
     hints = [en for pat, keys, en in _EVENT_LEXICON if re.search(pat, t) and not any(k in have for k in keys)][:2]
     if hints:
         sc["event_en"] = ". ".join(hints + ([str(sc["event_en"])] if sc.get("event_en") else []))
@@ -3653,6 +3770,16 @@ Rules:
   with rumpled sheets, a candle, a medicine bottle, drawn curtains, grey morning light; a flight: an open door, a
   dropped bag, a dark road, the moon). Write them concretely (material, color, state: worn, broken, open, lit, wet), never
   as general words like "a sad room". Details never add a person. At least 2 items of "must_show" are such details.
+- AT SEA (very important): when the sentence is at sea (a boat, rowing, fishing, the open water, a fish or a shark), the picture is
+  AT SEA: water and sky all around, NO shore, beach, harbor or hut (the shore only when the sentence itself says the person is on
+  the shore); every person is INSIDE a small boat with the whole boat visible (never standing, walking or floating on the water);
+  every fish, shark and whale is IN the water (never in the sky or the air); a person and a shark are two separate figures, each with
+  its own head and its own body, and a shark never has a person's face.
+- THE HIGH POINTS MUST BE SEEN (very important): the biggest moments of the story (the fight with an animal, the catch of a giant
+  fish, a duel, a chase, a rescue, a storm, the final blow) are the reason people watch: EVERY sentence that tells such a moment gets
+  its own picture that SHOWS the action itself with the creature or the opponent large and clearly visible next to the person
+  (the person pulling the line while the giant fish leaps from the water; the person striking at the shark with a harpoon while the
+  shark rises beside the boat), never a calm picture of a place or of the person alone. Show it by the action, without blood.
 - "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
 - {FRAMING}
 - {POSE}
@@ -4583,7 +4710,8 @@ KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
 ANATOMY = ("Each person: one head with exactly one face (no extra face or face-like shape anywhere), two arms, two hands with five fingers, "
-           "two long legs (legs about half of the body height), small head (one eighth of the height), normal hands and feet, no overlapping limbs")
+           "two long legs (legs about half of the body height), small head (one eighth of the height), normal hands and feet, no overlapping limbs, "
+           "head only on the neck, feet only at the leg ends")
 NO_EXTRA = "No eyeglasses, no other person anywhere, no crowd, no faces in windows, no second copy, twin, reflection or extra head"
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
@@ -4682,6 +4810,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
         creatures = ([HORSE_VEHICLE_EN] + creatures)[:2]          # a carriage is never drawn without its horses
     subject = ("Main subject, drawn large: " + "; ".join(_trim_words(x, 28) for x in creatures) + ". "
                if creatures else "")
+    sea_note = " ".join(str(scene.get("sea_en") or "").split())
+    if sea_note:                     # a picture AT SEA: the rules of the sea stand before everything that may be cut
+        subject += sea_note + " "
     if creatures:                    # "nobody else" must not forbid the creature of the event
         people_en = re.sub(r"\bnobody else\b", "no other people", people_en, flags=re.I)
     if people_en:
@@ -4698,8 +4829,9 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
            and not re.search(r"\b(woman|girl|female|mother|wife|queen|lady)\b", str(c.get("tag_en") or c.get("look_en") or "")[:60], re.I)
            for c in present):
         count += "Men wear men's clothes. "
-    if (present or others) and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
-                                                    + " ".join(map(str, scene.get("must_show") or []))):
+    if ((present or others) and not sea_note
+            and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en")) + " "
+                                     + " ".join(map(str, scene.get("must_show") or [])))):
         count += "Everybody wears proper day clothes. "
     nh_all = bool(present) and all(c.get("nonhuman") for c in present) and not others
     nh_any = any(c.get("nonhuman") for c in present)
@@ -4714,7 +4846,8 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
         if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
             count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else NO_EXTRA) + ". "
     if has_people and scene.get("kind") in (None, "", "event"):
-        count += "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. "
+        count += ("Every person mid-action (pulling, rowing, striking, gripping), never idle. " if sea_note else
+                  "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. ")
     if total > MAX_PEOPLE:
         count += f"Only {MAX_PEOPLE} people have large clear faces; the others are small, far away or from behind. "
     if has_people and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en"))):
@@ -5321,6 +5454,15 @@ For EACH picture return:
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
+  * SEA: a person at sea who stands or walks on the water or floats with no boat, or a boat that is not visible: at most 2; a picture at
+    the shore or in a village when the narration is at sea (a boat, rowing, the open water): at most 2;
+  * CREATURE IN THE WRONG PLACE: a shark, a fish, a whale or another sea creature in the sky, in the clouds or on dry land: at most 2;
+  * MERGED FACE: a creature (a shark, a fish) whose head or face is the same as, or mixed with, a person's face, or a person with an
+    animal's head: at most 2 and "extra_face" true;
+  * LIMBS ON THE HEAD: feet, legs, hands or arms that grow out of or are stuck to the head, or a head attached to a limb: at most 2
+    and "limbs_ok" false;
+  * HIGH POINT: the narration tells a fight, a catch, a hunt or another high point but the picture does not show that action (the creature
+    or the opponent missing, the person only sitting or standing calmly): at most 3;
   * SIGNATURE TRAIT: a character whose sheet names a visible body trait (a hunchback, a limp...) must clearly show it and look like
     the adult of the sheet (a hunchback man has a big visible hump and a stooped body and is never a boy or a straight figure):
     "trait_ok" false, at most 3 (a hump required by the sheet is NOT a proportion mistake);
@@ -5979,7 +6121,11 @@ def photo_like(path):
             return False
         mean = sum(raw) / len(raw)
         white = sum(1 for b in raw if b > 200) / len(raw)
-        return mean < 75 and white < 0.08
+        if mean < 75 and white < 0.08:                  # a dark, cinematic picture
+            return True
+        paper = sum(1 for b in raw if b > 228) / len(raw)
+        mid = sum(1 for b in raw if 60 <= b <= 200) / len(raw)
+        return paper < 0.03 and mid > 0.80              # a bright photo-like picture: smooth gray tones everywhere, no bare white paper at all
     except Exception:  # noqa: BLE001
         return False
 
@@ -7217,6 +7363,9 @@ def main():
             pending["script"] = script
             save_json(PENDING_FILE, pending)
     has_event = any(str(b.get("kind") or "event") == "event" for s in scenes for b in (s.get("beat_visuals") or []))
+    SEA_STORY["on"] = sea_story_of(scenes)
+    if SEA_STORY["on"]:
+        print("Sea story: the pictures at sea get a boat, creatures in the water and no shore.", flush=True)
     for i, s in enumerate(scenes):
         beats = s.get("beats") or [s["narration_fa"]]
         bvs = s.get("beat_visuals") or []
@@ -7235,7 +7384,8 @@ def main():
                 sc["emotion_en"] = bvs[j].get("emotion_en", "")
                 sc["gentle_en"] = bvs[j].get("gentle_en", "")
                 sc["creatures_en"] = bvs[j].get("creatures_en", [])
-                if _VIOLENT_ANY.search(" ".join([str(sc.get("visual_en") or ""), str(sc.get("event_en") or "")])):
+                if (_VIOLENT_ANY.search(" ".join([str(sc.get("visual_en") or ""), str(sc.get("event_en") or "")]))
+                        and not (SEA_STORY["on"] and at_sea(DIAC.sub("", beat)) and not re.search(r"\b(?:blood|corpse|dead bod|drown)", str(sc.get("visual_en") or ""), re.I))):
                     gentle_ = str(sc.get("gentle_en") or "").strip() or soften_violence(sc.get("visual_en"))
                     sc["visual_full_en"] = sc["visual_en"]
                     sc["visual_en"] = gentle_                       # the event told gently: the safety filter accepts it
@@ -7251,6 +7401,7 @@ def main():
                 sc["event_en"] = " ".join(str(s.get("action_en") or "").split())
             inject_subjects(sc, beat, script.get("subjects"))
             inject_event(sc, beat)
+            sea_fix(sc, beat)                      # at sea: a boat under the people, creatures in the water, no shore, no merged faces
             card_kind = None
             if TITLE_CARDS and (i, j) == author_pos:
                 sc.update(author_library_plan(script.get("author")))
@@ -7331,11 +7482,10 @@ def main():
     print(f"video length = {total:.1f}s, size = {final.stat().st_size / 1e6:.1f} MB", flush=True)
 
     head_ = f"{book.get('title_fa') or book['title_en']}\n{book.get('author_fa') or book['author_en']}"
-    caption = f"{head_}\n\nمنبع: ویکی‌پدیا · CC BY-SA 4.0 (جزئیات در پاسخ زیر همین پست)"[:1000]     # short: Telegram lays it over the picture
-    caption_full = f"{head_}\n\n{attribution_text(src)}"[:2200]                                         # Instagram: no overlay problem
+    caption = f"{head_}\n\n{attribution_text(src)}"[:1000]     # short and complete: everything is in the caption, no reply under the video
+    caption_full = caption                                       # Instagram gets the same short caption
     wait_for_publish_time()
     msg_id = send_video(final, caption)
-    send_credit_reply(msg_id, f"{head_}\n\n{attribution_text(src)}")
     try:                                   # Instagram: any problem here is only printed, the video is already in the channel
         if IG_USER_ID and IG_TOKEN:
             post_instagram(instagram_cut(final, kind), caption_full)
