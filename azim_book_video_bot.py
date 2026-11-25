@@ -439,10 +439,30 @@ AUTHOR_FA_FIX = {            # a spelling that is wrong or unusual in Iran -> th
     "فیودور داستایفسکی": "فئودور داستایفسکی", "فیودور میخایلوویچ داستایفسکی": "فئودور داستایفسکی",
     "فئودور میخایلوویچ داستایفسکی": "فئودور داستایفسکی", "فیودور داستایوسکی": "فئودور داستایفسکی",
     "آنتون چخوف": "آنتوان چخوف", "آنتون پاولوویچ چخوف": "آنتوان چخوف",
+    "جان استاین بک": "جان اشتاین‌بک", "جان استاینبک": "جان اشتاین‌بک", "جان استین بک": "جان اشتاین‌بک", "جان استینبک": "جان اشتاین‌بک",
+    "جان اشتاین بک": "جان اشتاین‌بک", "جان اشتاینبک": "جان اشتاین‌بک", "جان اشتاین‌بک": "جان اشتاین‌بک",
 }
 AUTHOR_EN_FA = {"leo tolstoy": "لئو تولستوی", "lev tolstoy": "لئو تولستوی", "leo nikolayevich tolstoy": "لئو تولستوی",
                 "fyodor dostoevsky": "فئودور داستایفسکی", "fyodor dostoyevsky": "فئودور داستایفسکی",
-                "anton chekhov": "آنتوان چخوف"}
+                "anton chekhov": "آنتوان چخوف", "john steinbeck": "جان اشتاین‌بک"}
+
+
+# Names that the voice read wrongly: the ONE spelling with vowel marks that the voice gets (subtitles show the name in English letters).
+# «Steinbeck»: «ش» (not «س») and the letter «ب» with a fatha (the voice said «استاین‌بِک»).
+FIXED_NAMES_FA = {"john steinbeck": "جان اِشتاین\u200cبَک", "steinbeck": "اِشتاین\u200cبَک"}
+
+
+def apply_fixed_names(names):
+    """The name map of the video with the fixed spellings above (they win over the robot's spelling)."""
+    out = {str(k).strip(): str(v).strip() for k, v in (names or {}).items()}
+    for k in list(out):
+        v = FIXED_NAMES_FA.get(" ".join(k.lower().split()))
+        if v:
+            out[k] = v
+    for k, v in FIXED_NAMES_FA.items():
+        if not any(" ".join(x.lower().split()) == k for x in out):
+            out[" ".join(w.capitalize() for w in k.split())] = v
+    return out
 
 
 def _fa_key(t):
@@ -458,7 +478,7 @@ def fa_author(name_fa, name_en=""):
     if key in fixed:
         return fixed[key]
     en = " ".join(re.sub(r"[^a-z ]", " ", str(name_en or "").lower()).split())
-    if en in AUTHOR_EN_FA and (not key or key.split()[-1] in ("تولستوی", "داستایفسکی", "چخوف")):
+    if en in AUTHOR_EN_FA:
         return AUTHOR_EN_FA[en]
     return str(name_fa or "").strip()
 
@@ -746,7 +766,11 @@ MEANING_RULE = """- MEANING, NOT WORDS - THE LISTENER MUST NEVER HEAR SOMETHING 
   narrator called «A Square» may really be a square-shaped being): decide what each hero REALLY is from the whole story and
   the source, never from the name read literally. Never invent a meaning that the source and the story do not
   support: when you are not sure, write the plain physical fact that the source states. Every sentence must make sense to a
-  Persian listener who never read the book."""
+  Persian listener who never read the book.
+- FAMILY WORDS ARE TRANSLATED, NEVER WRITTEN BY SOUND: Ma / Mama / Mom = «مادر», Pa / Papa / Dad = «پدر», Grampa / Grandpa =
+  «پدربزرگ», Granma / Grandma / Gran = «مادربزرگ», Uncle = «عمو» or «دایی», Aunt = «عمه» or «خاله» (as the family tree needs). NEVER
+  «ما» for a mother, NEVER «پا» for a father, NEVER «گرن‌پا» or «گرن‌ما». When the book calls the mother «Ma Joad», write «مادرِ
+  خانوادهٔ Joad» at her first mention and «مادر» after that."""
 
 NAMES_RULE = """- NAMES: write the names of people, places, the novel and its author in ENGLISH (Latin) letters, as in the
   SOURCE TEXT (for example Holden, The Catcher in the Rye). SHORT NAMES: a long name misleads the listener. A person with
@@ -1510,6 +1534,7 @@ def clean_spine(d, lo, relax=0):
                            "because_en": " ".join(str(x.get("because_en") or "").split()),
                            "role_en": " ".join(str(x.get("role_en") or "").split()),
                            "quote_en": " ".join(str(x.get("quote_en") or "").split())[:240],
+                           "dies": [str(n).strip() for n in (x.get("dies") if isinstance(x.get("dies"), list) else []) if str(n).strip()][:4],
                            "flashback": bool(x.get("flashback"))})
     if len(events) < max(5, lo - 1 - relax):
         print(f"Story spine rejected: the model gave {len(events)} events, {max(5, lo - 1 - relax)} are needed.", flush=True)
@@ -1536,6 +1561,11 @@ def clean_spine(d, lo, relax=0):
                 pass
         e["covers"] = cv
     events = repair_with_timeline(events, timeline, lo)
+    wmap = {t["n"]: t["weight"] for t in timeline}
+    for e in events:                 # how heavy the event is for the story (the heaviest timeline point that it tells)
+        cv = [wmap[n] for n in e.get("covers", []) if n in wmap]
+        e["weight"] = max(cv) if cv else 3
+        e.setdefault("dies", [])
     return {"logline": " ".join(str(d.get("logline") or "").split()), "heroes": heroes[:4], "events": events[:14],
             "world_en": " ".join(str(d.get("world_en") or "").split()),
             "subjects": [{"en": " ".join(str(x.get("en") or "").split())[:200],
@@ -1585,6 +1615,49 @@ def order_events_by_source(events, text):
     return out, moved
 
 
+def review_spine(sp, src):
+    """ONE cheap Gemini call (the light models have their own free quota) that reads the finished spine against the source:
+    an event that the source does not support is removed; an essential point that no event tells is added (at most 2 each).
+    Any problem here leaves the spine as it is."""
+    try:
+        events = [{"id": e["id"], "what_en": e["what_en"], "weight": e.get("weight", 3), "role_en": e.get("role_en", "")} for e in sp["events"]]
+        prompt = f"""You are a strict story editor. SOURCE TEXT:
+{str(src.get('text') or '')[:14000]}
+
+STORY SPINE (the events a short video will tell, in order): {json.dumps(events, ensure_ascii=False)}
+Check it against the SOURCE only:
+1. "invented": ids of events that the source does NOT support (nothing like it happens in the source). Normally [].
+2. "missing": at most 2 ESSENTIAL points that no event tells and without which the cause-and-effect chain, a turning point, the climax or
+   the ending cannot be understood. Each {{"after_id": id of the event after which it happens, "who_en": "...", "what_en": "ONE plain sentence",
+   "where_en": "...", "because_en": "what caused it", "role_en": "turning point|crisis|climax|complication", "dies": []}}. Normally [].
+Return JSON {{"invented": [], "missing": []}}."""
+        out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS)
+        bad = {int(x) for x in (out.get("invented") or []) if str(x).lstrip("-").isdigit()}
+        ev = [e for e in sp["events"] if e["id"] not in bad] if len(sp["events"]) - len(bad) >= 5 else list(sp["events"])
+        added = 0
+        for m_ in (out.get("missing") or [])[:2]:
+            if not isinstance(m_, dict) or not str(m_.get("what_en") or "").strip() or not str(m_.get("after_id") or "").lstrip("-").isdigit():
+                continue
+            pos = next((k for k, e in enumerate(ev) if e["id"] == int(m_["after_id"])), None)
+            if pos is None:
+                continue
+            ev.insert(pos + 1, {"id": 0, "who_en": " ".join(str(m_.get("who_en") or "").split()), "what_en": " ".join(str(m_["what_en"]).split()),
+                                "where_en": " ".join(str(m_.get("where_en") or "").split()), "because_en": " ".join(str(m_.get("because_en") or "").split()),
+                                "role_en": " ".join(str(m_.get("role_en") or "turning point").split()), "quote_en": "", "flashback": False,
+                                "dies": [str(n) for n in (m_.get("dies") or []) if str(n).strip()][:3], "covers": [], "weight": 5})
+            added += 1
+        for n, e in enumerate(ev, 1):
+            e["id"] = n
+        if bad or added:
+            print(f"Story spine review: {len(bad)} unsupported event(s) removed, {added} essential event(s) added.", flush=True)
+        sp["events"] = ev[:14]
+    except (GeminiBlocked, GeminiQuotaExhausted):
+        pass
+    except Exception as e:  # noqa: BLE001
+        print("Story spine review skipped:", e, flush=True)
+    return sp
+
+
 def build_spine(book, src, cast, relax=0):
     """Step B1 (ONE Gemini call, English): BEFORE any Persian is written, decide WHAT the viewer must be told: the
     heroes and the few main events in order, each joined to the one before by its cause. The narration is then written
@@ -1625,7 +1698,7 @@ Return JSON with exactly these keys:
   knows, wants or is); 4 = a major cause or a major result of a weight-5 point; 3 = helps to understand; 2 = a side episode, a
   side person, a journey, a repeated episode; 1 = a detail, a description, a mood.
 - "events": {lo} to {hi} objects, in the order of the story, each {{"id": 1, "who_en": "...", "what_en": "...",
-  "where_en": "...", "because_en": "...", "covers": [1, 2]}}. The events are BUILT FROM THE TIMELINE: "covers" lists the "n" of
+  "where_en": "...", "because_en": "...", "dies": [], "covers": [1, 2]}}. The events are BUILT FROM THE TIMELINE: "covers" lists the "n" of
   the timeline points that the event tells (one event may merge several neighbouring points). EVERY timeline point with weight
   5 or 4 is covered by an event, so that nothing important is missing; a point with weight 1 or 2 is covered only when it is
   the cause of a heavier point (then merge it into that event); events are never made of weight 1 or 2 points alone.
@@ -1635,7 +1708,8 @@ Return JSON with exactly these keys:
       word (a ship that «kills itself», a city that «dies»), write the real event behind it (the ship destroys itself on
       purpose), judged from the whole story;
     "where_en": the place (and the time if it changes);
-    "because_en": what in the PREVIOUS event caused this one ("" for event 1).
+    "because_en": what in the PREVIOUS event caused this one ("" for event 1);
+    "dies": the names (as in "heroes" or as in the source) of the characters who DIE or are KILLED in this event ([] when nobody dies).
   Every event object also has: "role_en" (exactly one of: "setup", "inciting incident", "turning point", "complication",
   "crisis", "climax", "resolution": the job of this event in the story), "quote_en" (the English sentence of the SOURCE TEXT
   that this event comes from, copied word for word, at most 30 words) and "flashback" (true only if the event happened BEFORE
@@ -1683,7 +1757,20 @@ def _norm_wrap(t):
     return t.replace("\u200c", "").replace(" ", "")
 
 
-def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text=""):
+_CRITICAL_ROLES = ("inciting incident", "turning point", "crisis", "climax", "resolution")
+
+
+def protected_events(spine):
+    """The ids of the events that are the HEART of the story (the weight-5 events, the inciting incident, the turning points,
+    the crisis, the climax, the resolution and the last event). A video that is too long loses its LIGHT events first."""
+    ev = (spine or {}).get("events") or []
+    prot = {e["id"] for e in ev if str(e.get("role_en") or "").strip().lower() in _CRITICAL_ROLES or int(e.get("weight") or 3) >= 5}
+    if ev:
+        prot.add(ev[-1]["id"])
+    return prot
+
+
+def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text="", protected=None):
     """The writer tags EVERY sentence with the story event it tells (or with its part). The program joins the
     sentences of a scene into the narration and DROPS every sentence whose tag is not allowed for its part, so that a
     sentence that serves no event never reaches the video. Returns (scenes, problems)."""
@@ -1723,7 +1810,8 @@ def tagged_to_scenes(raw, n_ev, strict=True, max_words=None, open_text=""):
                 total_w += nw
                 if is_story and need_of(x) == 2 and e_ is not None:
                     cands.append((nw, e_, id(x)))
-        for nw, e_, xid in sorted(cands, reverse=True):
+        prot_ = protected or set()
+        for nw, e_, xid in sorted(cands, key=lambda c: (c[1] in prot_, -c[0])):          # light events first, the heart last
             if total_w <= max_words:
                 break
             if support.get(e_, 0) >= 2:            # the event keeps at least one other sentence with NEED 2 or 3
@@ -1865,7 +1953,7 @@ def write_scenes_chunked(book, src, spine, cast, words, author_src, author_g, so
 {MEANING_RULE}
 {TONE_RULES}
 {NAMES_RULE}"""
-    clean = lambda e: {k: (v if k == "id" else _soft_text(v, soft)) for k, v in e.items() if k in ("id", "who_en", "what_en", "where_en", "because_en", "role_en")}
+    clean = lambda e: {k: (v if k == "id" else _soft_text(v, soft)) for k, v in e.items() if k in ("id", "who_en", "what_en", "where_en", "because_en", "role_en", "weight")}
 
     # ---- 1) the opening and the heroes
     heroes = spine["heroes"]
@@ -1914,6 +2002,7 @@ THE EVENT BEFORE THESE (already told; do not tell it again): {_soft_text(prev_en
 LAST PERSIAN SENTENCE ALREADY SAID: {prev_fa or '(none)'}
 EVENTS TO TELL NOW, in this order: {json.dumps([clean(e) for e in part_ev], ensure_ascii=False)}
 For EACH event write ONE scene of 2 to 4 flowing Persian sentences ({per_ev - 12} to {per_ev + 12} words in all) that tells WHAT happens and WHY (its cause).
+An event whose "weight" is 5, or whose "role_en" is inciting incident, turning point, crisis, climax or resolution, is the HEART of the story: give it 3 to 5 sentences ({per_ev} to {per_ev + 35} words) with the action, its cause and its result. An event with weight 3 or less gets ONE short sentence (12 to 22 words).
 The first sentence of the first scene continues from the last sentence already said through a connector.
 {'This is the LAST chunk: the last event is the ending and may tell how it ends.' if last_chunk else 'NEVER tell, hint at or foreshadow the outcome or anything that happens after these events (no teaser, no «later», no ending).'}
 Return JSON {{"scenes": [{{"ev": <event id>, "sentences": [{{"fa": "ONE Persian sentence", "need": 3 or 2}}], "characters_present": [names from the list that are visible],
@@ -2156,6 +2245,7 @@ def write_scenes(book, src, plan):
     for att_ in range(3):
         spine = build_spine(book, src, cast, relax=att_ * 2)
         if spine:
+            spine = review_spine(spine, src)
             for k_ in ("title_fa", "author_fa"):
                 if not book.get(k_) and spine.get(k_):
                     book[k_] = spine[k_]
@@ -2239,6 +2329,10 @@ Return JSON with exactly these keys:
 
 Rules for the narration:
 - Total narration: {words} Persian words. Stay close to the source and the spine; never pad.
+- EVENT WEIGHT (the spine gives every event a "weight" from 1 to 5 and a "role_en"): the events with weight 5 and every inciting
+  incident, turning point, crisis, climax and the ending are the HEART of the story: tell them fully (3 to 5 sentences with the
+  action, its cause and its result), never shorter than the other events. An event with weight 3 or less is told in ONE short
+  sentence. When the video must stay short, the program cuts the light events first and NEVER touches the heart of the story.
 - ONLY WHAT MATTERS: tell the important events of the spine completely and clearly (who, what, why, what follows) and leave
   out everything else, even if the source mentions it: minor characters, side episodes, small details, names that no later
   event needs. A listener must never be confused by a person or a place that does not matter to the story.
@@ -2331,6 +2425,7 @@ Rules for the visuals:
             hi_words = int(re.findall(r"\d+", words)[-1]) if re.findall(r"\d+", words) else None
             scenes, problems = tagged_to_scenes(data.get("scenes"), n_ev, strict=attempt < 3,
                                                 max_words=int(hi_words * 1.2) if hi_words else None,
+                                                protected=protected_events(spine),
                                                 open_text=f"در این ویدیو، رمان {book['title_en']}، نوشتهٔ {book['author_en']}، را مرور می‌کنیم.")
         except Exception as e:  # noqa: BLE001
             scenes, problems = [], [f"unreadable script: {e}"]
@@ -2832,6 +2927,8 @@ NAME_RUN = re.compile(rf"{_NAME_WORD}(?:{_NAME_JOIN}{_NAME_WORD})*")
 
 
 # Animals and things are NEVER names: a capitalized «Shark» used to pass as a name, was written in English and was read in English.
+KIN_FA = ((r"grandfather|grandpa|grampa|granpa|gramps", "پدربزرگ"), (r"grandmother|grandma|granma|granny|gran", "مادربزرگ"),
+          (r"mama|mommy|mom|ma", "مادر"), (r"papa|daddy|dad|pa", "پدر"))
 COMMON_EN_FA = ((r"sharks", "کوسه‌ها"), (r"shark", "کوسه"), (r"marlins", "ماهی‌های مارلین"), (r"marlin", "ماهی مارلین"),
                 (r"dolphins", "دلفین‌ها"), (r"dolphin", "دلفین"), (r"harpoons", "نیزه‌ها"), (r"harpoon", "نیزه"),
                 (r"skiffs", "قایق‌ها"), (r"skiff", "قایق"), (r"fishermen", "ماهیگیران"), (r"fisherman", "ماهیگیر"))
@@ -2847,8 +2944,10 @@ def fix_common_english(text, book=None):
             tok = f"\u0001{n_}\u0001"
             masks[tok] = k_
             t = t.replace(k_, tok)
-    for en_, fa_ in COMMON_EN_FA:
-        t = re.sub(rf"(?<![A-Za-z]){en_}(?![A-Za-z])", fa_, t, flags=re.I)
+    for en_, fa_ in COMMON_EN_FA + KIN_FA:
+        t = re.sub(rf"(?<![A-Za-z])(?:{en_})(?![A-Za-z])", fa_, t, flags=re.I)
+    t = re.sub(r"(?<![\u0600-\u06FF])گرن[\u200c ]?(?:د[\u200c ]?)?پا(?![\u0600-\u06FF])", "پدربزرگ", t)     # «گرن‌پا» -> پدربزرگ
+    t = re.sub(r"(?<![\u0600-\u06FF])گرن[\u200c ]?(?:د[\u200c ]?)?ما(?![\u0600-\u06FF])", "مادربزرگ", t)    # «گرن‌ما» -> مادربزرگ
     for tok, k_ in masks.items():
         t = t.replace(tok, k_)
     return t
@@ -3090,9 +3189,30 @@ def inject_event(sc, beat_text):
             sc["event_en"] = ". ".join(hints + ([str(sc["event_en"])] if sc.get("event_en") else []))
         return sc
     hints = [en for pat, keys, en in _EVENT_LEXICON if re.search(pat, t) and not any(k in have for k in keys)][:2]
+    if not (sc.get("creatures_en") or any(w in SRC_LOWER["t"] for g in _CREATURE_GATE[:8] for w in g)):    # no creature in this story:
+        hints = [h.replace("the huge creature lunges toward the running people with its mouth wide open",
+                           "the people shrink back in alarm from a sudden danger")
+                  .replace("a creature chases the fleeing people through the place",
+                           "the people hurry away through the place, glancing back in fear") for h in hints]
     if hints:
         sc["event_en"] = ". ".join(hints + ([str(sc["event_en"])] if sc.get("event_en") else []))
     return sc
+
+
+SRC_LOWER = {"t": ""}      # the source text and the spine of this book in lower case (set in main)
+_CREATURE_GATE = (("dinosaur", "raptor", "rex"), ("dragon",), ("wolf", "wolves"), ("tiger", "leopard"), ("bear",), ("shark",), ("whale",),
+                  ("monster", "ogre", "beast", "demon", "goblin", "troll", "fiend", "creature"), ("snake", "serpent", "viper"),
+                  ("eagle", "hawk"))
+
+
+def creature_allowed(keys):
+    """A creature of the word list (dinosaur, monster, wolf, bear...) is drawn ONLY when the source of THIS book has it: a
+    figurative «monster» or «wolf» of the narration (a bank, a hunger) is not a creature (a monster appeared in a picture of a
+    story that has none). Things that are not creatures are always allowed."""
+    for grp in _CREATURE_GATE:
+        if any(k in grp for k in keys):
+            return (not SRC_LOWER["t"]) or any(w in SRC_LOWER["t"] for w in grp)
+    return True
 
 
 def inject_subjects(sc, beat_text, subjects):
@@ -3114,24 +3234,43 @@ def inject_subjects(sc, beat_text, subjects):
             continue
         text = " ".join(str(sc.get("visual_en") or "").lower().split() + [str(x).lower() for x in sc.get("creatures_en") or []]
                         + [str(x).lower() for x in sc.get("must_show") or []])
-        if any(k in text for k in keys):
+        if any(k in text for k in keys) or not creature_allowed(keys):
             continue
         sc["creatures_en"] = ([en] + list(sc.get("creatures_en") or []))[:2]
         sc["must_show"] = ([en[:90]] + list(sc.get("must_show") or []))[:5]
     return sc
 
 
-def make_beats(text):
-    """Cut a paragraph into beats of about BEAT_WORDS words (whole sentences): one picture per beat."""
+BEAT_HEART = int(os.environ.get("AZIM_BEAT_HEART") or 30)    # the heart of the story (climax, turning points, weight 5): a picture about every 30 words
+BEAT_LIGHT = int(os.environ.get("AZIM_BEAT_LIGHT") or 60)    # light events (weight 3 or less): a picture about every 60 words
+
+
+def beat_words_of(scene, spine):
+    """Words per picture for ONE paragraph: the heart of the story is shown more closely, the light parts less (the total number
+    of pictures, and so the free Cloudflare use, stays about the same)."""
+    evs = {e["id"]: e for e in ((spine or {}).get("events") or []) if isinstance(e, dict) and "id" in e}
+    ids = [i for i in (scene.get("ev_ids") or []) if i in evs]
+    if scene.get("part") != "story" or not ids:
+        return BEAT_WORDS
+    if set(ids) & protected_events(spine):
+        return BEAT_HEART
+    if max(int(evs[i].get("weight") or 3) for i in ids) <= 3:
+        return BEAT_LIGHT
+    return BEAT_WORDS
+
+
+def make_beats(text, words=None):
+    """Cut a paragraph into beats of about `words` (default BEAT_WORDS) words (whole sentences): one picture per beat."""
+    words = words or BEAT_WORDS
     sents = split_sentences(DIAC.sub("", text))
     beats, cur = [], []
     for x in sents:
         cur.append(x)
-        if sum(len(y.split()) for y in cur) >= BEAT_WORDS:
+        if sum(len(y.split()) for y in cur) >= words:
             beats.append(" ".join(cur))
             cur = []
     if cur:
-        if beats and sum(len(y.split()) for y in cur) < BEAT_WORDS // 2:
+        if beats and sum(len(y.split()) for y in cur) < words // 2:
             beats[-1] += " " + " ".join(cur)
         else:
             beats.append(" ".join(cur))
@@ -3595,7 +3734,7 @@ def align_visuals(data, book, src=None):
                 s["beat_visuals"] = [cast_visual(chars, n) for n in s["cast_names"]]
                 continue
             s.pop("cast_names")                       # sentences were changed: treat as an ordinary paragraph
-        s["beats"] = split_beats_by_names(make_beats(s["narration_fa"]), chars)
+        s["beats"] = split_beats_by_names(make_beats(s["narration_fa"], beat_words_of(s, data.get("spine"))), chars)
         ctx.append({"scene": i, "part": s.get("part", "story"), "full_paragraph_fa": s["narration_fa"], "place_hint_en": s.get("setting_en", ""),
                     "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", "")})
         for j, b in enumerate(s["beats"]):
@@ -3770,6 +3909,16 @@ Rules:
   with rumpled sheets, a candle, a medicine bottle, drawn curtains, grey morning light; a flight: an open door, a
   dropped bag, a dark road, the moon). Write them concretely (material, color, state: worn, broken, open, lit, wet), never
   as general words like "a sad room". Details never add a person. At least 2 items of "must_show" are such details.
+- NO INVENTED CREATURES (very important): a monster, ghost, dragon, giant or any other creature is drawn ONLY when the SOURCE or
+  the sentence really has one. A figurative word («monster» for a bank, «wolves» for hunger, a «giant» company) is NOT a creature:
+  draw the real thing behind it (people, a building, a machine, a field). Never add a creature that the story does not have.
+- THE PICTURE IS THE SENTENCE: the picture shows what THIS part says and nothing else: first find the one or two most visual facts
+  of the part (who does what, where, to what) and draw exactly them, with the objects the part names; never a generic scene that
+  would fit any part, never something from another part.
+- FACES FIT THE MOMENT (very important): in a fight, a threat, a loss, hunger, fear, a sad or a bad situation the faces are serious,
+  tense, afraid, angry or sad, with closed lips: NOBODY smiles. A smile only in a happy moment of the sentence. Say the feeling in "emotion_en".
+- THE DEAD STAY DEAD: once a part tells that a character died or was killed, that character is in NO later picture (the grieving
+  people are drawn without him), and he is never drawn alive after his death.
 - AT SEA (very important): when the sentence is at sea (a boat, rowing, fishing, the open water, a fish or a shark), the picture is
   AT SEA: water and sky all around, NO shore, beach, harbor or hut (the shore only when the sentence itself says the person is on
   the shore); every person is INSIDE a small boat with the whole boat visible (never standing, walking or floating on the water);
@@ -4588,8 +4737,9 @@ def gemini_voice_allowed():
 def make_voice(scenes, kind, names=None):
     """ONE engine and ONE voice for the WHOLE video. If Gemini TTS fails on any paragraph, the whole video is
     read again by Pocket TTS (never one paragraph with one voice and the next with another)."""
+    names = apply_fixed_names(names)
     _VOICE_NAMES.clear()
-    _VOICE_NAMES.update({str(k).strip(): str(v).strip() for k, v in (names or {}).items()})
+    _VOICE_NAMES.update(names)
     if gemini_tts_ready() and gemini_voice_allowed():
         for mdl in GEMINI_TTS_MODELS:
             if mdl in _gtts_dead_models or not gemini_tts_ready():
@@ -4918,6 +5068,10 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     emo = " ".join(str(scene.get("emotion_en") or "").split())
     if emo and has_people:
         count += f"{'Expressions' if nh_all else 'Faces'} showing the feeling: {_trim_words(emo, 28)}. "
+    if has_people and re.search(r"fear|afraid|angry|anger|fight|grief|griev|sad|pain|shock|worr|despair|hunger|hungry|threat|danger|anxious|terrif|"
+                                r"cry|weep|loss|lost|suffer|struggl|desperat|poverty|death|dying|attack|flee|escape",
+                                " ".join([emo, str(scene.get("visual_en") or ""), str(scene.get("event_en") or "")]), re.I):
+        count += "Serious, tense, frightened or sad faces with closed lips: nobody smiles. "
     non_event = (str(scene.get("kind") or "event") != "event") or people_en.lower().startswith("no people")
 
     def compose(main_t, full, era, tail):
@@ -5267,7 +5421,7 @@ def _draw_ref(c, k, prompt, cseed):
     return small
 
 
-def check_cast_refs(chars, refs, index, era_short):
+def check_cast_refs(chars, refs, index, era_short, _round=1):
     """ONE Gemini call looks at all reference faces: a face that is distorted, does not fit its look sheet or looks like
     another character is drawn again (once). Every picture of the video copies these faces, so they must be good."""
     if not (IMAGE_CHECK and refs):
@@ -5330,6 +5484,8 @@ Return JSON {{"checks": [{{"n": 1, "ok": true, "fix_en": ""}}], "similar_pairs":
             raise
         except Exception as e:  # noqa: BLE001
             print(f"Reference picture of {n} not redrawn: {e}", flush=True)
+    if bad and _round < 2:             # the redrawn faces are looked at once more (two faces that still look alike are drawn again)
+        check_cast_refs(chars, refs, index, era_short, _round=2)
 
 
 def make_cast_refs(chars, era, book, seed):
@@ -5489,6 +5645,7 @@ For EACH picture return:
   * COUNT THE PEOPLE: their number and kind must equal "exact_people" (for example one mother and ONE child: two girls
     next to the mother is wrong); one person too many or too few: at most 4. Any extra figure that is not in "exact_people" (a small person far away,
     a crowd, a face in a window, a figure in a painting or a statue that looks like a person): at most 3;
+  * SMILE IN A BAD MOMENT: a person who smiles or laughs in a fight, a threat, danger, grief, hunger, loss or another bad situation: at most 3;
   * FACE FEELING: the faces must show the feeling of the moment (worry, fear, joy, sadness, anger, shock...) that fits the
     narration and the place; blank, smiling-by-default or wrong-feeling faces (a smile at a death, a calm face in danger):
     at most 5;
@@ -7363,6 +7520,14 @@ def main():
             pending["script"] = script
             save_json(PENDING_FILE, pending)
     has_event = any(str(b.get("kind") or "event") == "event" for s in scenes for b in (s.get("beat_visuals") or []))
+    events_by_id = {e["id"]: e for e in ((script.get("spine") or {}).get("events") or []) if isinstance(e, dict) and "id" in e}
+    dead = []                                       # first names (lower case) of the characters that died in an earlier scene
+
+    def is_dead(name):
+        w = (str(name).lower().split() or [""])[0]
+        return bool(w) and any(w == d_ or (len(w) > 3 and (w in d_ or d_ in w)) for d_ in dead)
+
+    SRC_LOWER["t"] = (str(src.get("text") or "") + " " + json.dumps(script.get("spine") or {}, ensure_ascii=False)).lower()
     SEA_STORY["on"] = sea_story_of(scenes)
     if SEA_STORY["on"]:
         print("Sea story: the pictures at sea get a boat, creatures in the water and no shore.", flush=True)
@@ -7402,6 +7567,8 @@ def main():
             inject_subjects(sc, beat, script.get("subjects"))
             inject_event(sc, beat)
             sea_fix(sc, beat)                      # at sea: a boat under the people, creatures in the water, no shore, no merged faces
+            if dead:                               # a character who died in an earlier scene is never drawn again (alive)
+                sc["characters_present"] = [n for n in (sc.get("characters_present") or []) if not is_dead(n)]
             card_kind = None
             if TITLE_CARDS and (i, j) == author_pos:
                 sc.update(author_library_plan(script.get("author")))
@@ -7472,6 +7639,11 @@ def main():
                 except Exception as e:  # noqa: BLE001
                     print(f"Style reference not made ({e}).", flush=True)
             done_pics += 1
+        for eid_ in (s.get("ev_ids") or []):        # after this scene: whoever dies in it is gone from all later pictures
+            for nm_ in ((events_by_id.get(eid_) or {}).get("dies") or []):
+                w_ = (str(nm_).lower().split() or [""])[0]
+                if w_ and w_ not in dead:
+                    dead.append(w_)
     if IMAGE_CHECK:
         check_and_fix_images(jobs)
     make_title_cards(jobs, book)          # after the check: the cards use the best version of the story pictures
