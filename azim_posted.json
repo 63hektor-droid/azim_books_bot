@@ -623,5 +623,15 @@
   "date_pt": "2026-11-24",
   "wiki": "Lord of the Flies",
   "date": "2026-11-25"
+ },
+ {
+  "title_en": "The Picture of Dorian Gray",
+  "title_fa": "تصویر دوریان گری",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-25",
+  "wiki": "The Picture of Dorian Gray",
+  "date": "2026-11-25"
  }
 ]
