@@ -613,5 +613,15 @@
   "date_pt": "2026-11-24",
   "wiki": "The Grapes of Wrath",
   "date": "2026-11-24"
+ },
+ {
+  "title_en": "Lord of the Flies",
+  "title_fa": "سالار مگس‌ها",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-24",
+  "wiki": "Lord of the Flies",
+  "date": "2026-11-25"
  }
 ]
