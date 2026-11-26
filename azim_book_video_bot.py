@@ -67,7 +67,7 @@ BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture abou
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
-VISUAL_VERSION = 27       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 28       # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 24       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -1037,6 +1037,7 @@ def enforce_distinct_cast(chars):
     set_facial_hair(chars)
     humans = [c for c in chars if not c.get("nonhuman")]
     enforce_distinct_garments(humans)
+    enforce_distinct_hairstyles(humans)
     enforce_vivid_tops(humans)
     used = {"hair_color": set(), "top_color": set(), "bottom_color": set()}
     for c in chars:
@@ -1319,6 +1320,176 @@ def apply_age_gaps(chars, relations):
     return chars
 
 
+
+_GLASSES_RX = re.compile(r"\b(?:glasses|spectacles|spectacled|bespectacled|eyeglasses|specs)\b", re.I)
+_GLASSES_STRIP = re.compile(r"(?:,\s*|\s+)?(?:and\s+|with\s+|wearing\s+)?(?:an?\s+|his\s+|her\s+)?(?:[\w-]+\s+){0,3}?(?:eye)?(?:glasses|spectacles)\b", re.I)
+_GLASSES_NOT_WORN = re.compile(r"\b(?:take|takes|took|taken|steal|steals|stole|use|uses|used|borrow|borrows|borrowed|snatch\w*|focus\w*|lens\w*|fire|smash\w*|break|breaks|broke)\b", re.I)
+GLASSES_EN = "simple round thin-framed eyeglasses with two clear equal round lenses, clearly visible on the face"
+
+
+def _glasses_in_sentence(src_, first):
+    """True when ONE sentence of the source says that THIS person wears glasses (not that somebody takes or uses them)."""
+    for sent in re.split(r"(?<=[.!?])\s+", src_):
+        if (re.search(rf"(?<![A-Za-z]){re.escape(first)}(?![A-Za-z])", sent) and _GLASSES_RX.search(sent)
+                and not _GLASSES_NOT_WORN.search(sent)):
+            return True
+    return False
+
+
+def apply_glasses(chars, source_text=""):
+    """A character who wears glasses in the SOURCE (the bespectacled boy) is drawn WITH glasses in every picture, and
+    nobody else gets glasses. The flag \"glasses\" comes from the cast design; a script that has no flag yet is decided by
+    the source sentences. Free check in code. It can run again on the same characters."""
+    src_ = str(source_text or "")
+    has_any = bool(_GLASSES_RX.search(src_))
+    for c in chars or []:
+        if not isinstance(c, dict) or c.get("nonhuman"):
+            continue
+        first = (re.findall(r"[A-Za-z][A-Za-z'’\-]+", str(c.get("name") or "")) or [""])[0]
+        if "glasses" in c:
+            want = bool(c.get("glasses")) and has_any
+        else:
+            want = bool(has_any and first and _glasses_in_sentence(src_, first))
+        c["glasses"] = want
+        keys = ("look_en", "tag_en", "key_en", "signature_en")
+        if not want:
+            for k in keys:
+                v = str(c.get(k) or "")
+                if v and _GLASSES_RX.search(v):
+                    c[k] = " ".join(_GLASSES_STRIP.sub("", v).split()).strip(" ,")
+            continue
+        if not _GLASSES_RX.search(str(c.get("look_en") or "")):
+            c["look_en"] = str(c.get("look_en") or "").rstrip(". ") + f". Wears {GLASSES_EN}."
+        if not _GLASSES_RX.search(str(c.get("tag_en") or "")):
+            c["tag_en"] = (str(c.get("tag_en") or "").rstrip(" ,.") + ", wearing round thin-framed glasses").strip(" ,")
+        if not _GLASSES_RX.search(str(c.get("key_en") or "")):
+            c["key_en"] = (str(c.get("key_en") or "").rstrip(" ,.") + ", wearing round thin-framed glasses").strip(" ,")
+        print(f"Cast: {c.get('name')} wears glasses in the source: drawn with glasses in every picture.", flush=True)
+    return chars
+
+
+# Every person of one gender gets another KIND of hairstyle (the picture model otherwise gives everybody the same one).
+_HAIR_CLASSES = (("bald", r"bald|shaved|buzz"), ("bun", r"\bbun\b|\bknot\b|chignon"), ("braid", r"braid|plait|pigtail"),
+                 ("ponytail", r"ponytail|pony tail|tied[- ]back"), ("bob", r"\bbob\b|chin-length"), ("curly", r"curl|afro|ringlet"),
+                 ("long", r"long|shoulder|waist|flowing"), ("short", r"short|crop|close-cut|neat|side-part|parted|slicked"))
+_HAIR_POOL_M = {"short": "short neat side-parted", "curly": "thick curly", "ponytail": "wavy tied-back ponytail",
+                "long": "long straight loose", "bald": "thin, receding, short"}
+_HAIR_POOL_F = {"bun": "tied-up bun", "braid": "long-braided", "bob": "chin-length bob-cut",
+                "long": "long loose wavy", "ponytail": "high-ponytail", "curly": "voluminous curly shoulder-length",
+                "short": "short cropped"}
+
+
+def _hair_class(style):
+    t = str(style or "").lower()
+    for k, pat in _HAIR_CLASSES:
+        if re.search(pat, t):
+            return k
+    return ""
+
+
+def enforce_distinct_hairstyles(chars):
+    """Free check in code: two people of the same gender never share the same kind of hairstyle (long, short, curly, a bun,
+    a braid, a ponytail, a bob, bald). The later one gets a free kind; the new style replaces the old one in the look sheet."""
+    used = {True: set(), False: set()}
+    for k, c in enumerate(chars):
+        if c.get("nonhuman"):
+            continue
+        text = (str(c.get("look_en") or "") + " " + str(c.get("tag_en") or ""))
+        female = bool(_FEMALE_TXT.search(text))
+        try:
+            age = int(re.findall(r"\d+", str(c.get("age") or ""))[0])
+        except (IndexError, ValueError):
+            age = 30
+        old = str(c.get("hair_style") or "").strip()
+        cls = _hair_class(old)
+        if cls and cls in used[female]:
+            pool = _HAIR_POOL_F if female else _HAIR_POOL_M
+            free = [(kk, v) for kk, v in pool.items() if kk not in used[female] and not (kk == "bald" and age < 40)]
+            if age < 14:
+                free = [(kk, v) for kk, v in free if kk in ("short", "curly", "braid", "ponytail", "bob", "long")] or free
+            if free:
+                cls, new = free[k % len(free)]
+                print(f"Cast: {c.get('name')} had the same kind of hairstyle as another character: now '{new}'.", flush=True)
+                changed = False
+                for key in ("look_en", "tag_en"):
+                    v = str(c.get(key) or "")
+                    if old and old.lower() in v.lower():
+                        c[key] = re.sub(re.escape(old), new, v, count=1, flags=re.I)
+                        changed = True
+                if not changed:
+                    c["look_en"] = str(c.get("look_en") or "").rstrip(". ") + f". Hair: {c.get('hair_color') or ''} hair, {new}."
+                c["hair_style"] = new
+        if cls:
+            used[female].add(cls)
+    return chars
+
+
+_TITLE_WORDS = {"mr", "mrs", "ms", "miss", "dr", "sir", "lady", "lord", "old", "young", "the", "captain", "father", "mother", "uncle", "aunt",
+                "king", "queen", "prince", "princess", "count", "countess", "madame", "monsieur", "master", "mister", "saint", "st"}
+_KILL_VERBS = r"(?:kill|kills|killed|murder|murders|murdered|execute|executes|executed|hang|hangs|hanged|strangle|strangles|strangled|drown|drowns|drowned|slay|slays|slew)"
+_DIE_VERBS = (r"(?:dies|died|die|is killed|was killed|gets killed|is murdered|was murdered|is hanged|was hanged|is executed|was executed|"
+              r"drowns|drowned|is drowned|was drowned|commits suicide|kills himself|kills herself|takes his own life|takes her own life|perishes|perished)")
+DEATH_FA = re.compile(r"(?:کشته\s*(?:شد|می\s*‌?شد|شدند)|کشتندش|کشتند|جان\s*باخت|جان\s*سپرد|از\s*دنیا\s*رفت|درگذشت|به\s*قتل\s*رسید|اعدام\s*شد|"
+                      r"غرق\s*شد|دار\s*زده\s*شد|خودکشی\s*کرد|جانش\s*را\s*از\s*دست\s*داد|چشم\s*از\s*جهان\s*فرو\s*بست|را\s*کشت(?![\u0600-\u06FF])|"
+                      r"او\s*را\s*کشت|زندگی\s*را\s*بدرود\s*گفت)")
+
+
+def death_key(name):
+    """The first real name of a person, lower case («Mr. Smith» -> «smith»; «Piggy» -> «piggy»)."""
+    toks = re.findall(r"[A-Za-z][A-Za-z'’\-]+", str(name or ""))
+    toks = [t for t in toks if t.lower().strip(".") not in _TITLE_WORDS] or toks
+    return toks[0].lower() if toks else ""
+
+
+def infer_deaths(events, chars):
+    """Free check in code: an event whose \"dies\" list is empty although its sentence says that a character of the cast is killed or
+    dies (\\"X is killed\\", \\"Y kills X\\", \\"X drowns\\") gets that character in its \"dies\" list. So the dead are also found when
+    the spine forgot them. Returns how many events were completed."""
+    names = [str(c.get("name")) for c in (chars or []) if isinstance(c, dict) and c.get("name") and not c.get("nonhuman")]
+    done = 0
+    for e in events:
+        if e.get("dies"):
+            continue
+        t = str(e.get("what_en") or "")
+        found = []
+        for n in names:
+            k = re.escape(death_key(n))
+            if not k:
+                continue
+            nm = rf"(?<![A-Za-z]){k}(?![A-Za-z])"
+            if (re.search(rf"{nm}\s+(?:[\w'’-]+\s+){{0,2}}?{_DIE_VERBS}\b", t, re.I)
+                    or re.search(rf"\b{_KILL_VERBS}\s+(?!by\b|at\b)(?:the\s+|his\s+|her\s+|their\s+)?(?:[\w'’-]+\s+){{0,2}}?{nm}", t, re.I)
+                    or re.search(rf"{nm}\s+(?:[\w'’-]+\s+){{0,2}}?(?:killed|murdered|hanged|executed|drowned)\s+by\b", t, re.I)):
+                found.append(n)
+        if found:
+            e["dies"] = found[:3]
+            done += 1
+    return done
+
+
+def drop_dead_from_pic(sc, is_dead):
+    """A character who died in an earlier picture is in NO later picture: not among the people, not in the picture text, not in the count."""
+    present = list(sc.get("characters_present") or [])
+    gone = [n for n in present if is_dead(n)]
+    if not gone:
+        return sc
+    sc["characters_present"] = [n for n in present if n not in gone]
+    for nm in gone:
+        k = re.escape(death_key(nm))
+        if not k:
+            continue
+        rx = re.compile(rf"(?<![A-Za-z]){k}(?![A-Za-z])", re.I)
+        for key in ("visual_en", "event_en", "visual_full_en", "gentle_en"):
+            v = str(sc.get(key) or "")
+            if v and rx.search(v):
+                parts = [x for x in re.split(r"(?<=[.!?])\s+", v) if not rx.search(x)]
+                sc[key] = " ".join(parts)
+        sc["must_show"] = [x for x in (sc.get("must_show") or []) if not rx.search(str(x))]
+        sc["others"] = [x for x in (sc.get("others") or []) if not rx.search(str(x))]
+    sc["people_en"] = ""            # the count is made again from the people who are really drawn
+    return sc
+
+
 def design_cast(book, src):
     """Step B0: BEFORE the script is written, design the era and ONE fixed look sheet for every important character
     (ages that fit the family, very different faces and bodies, different clothes, true to the era)."""
@@ -1344,7 +1515,7 @@ Return JSON with exactly these keys:
 - "characters": the important characters, at most 6, most important first, each {{"name": "...", "look_en": "...", "tag_en": "...",
   "age": 30, "face_type": 3, "hair_color": "...", "hair_style": "...", "top_en": "...", "top_color": "...", "bottom_en": "...", "bottom_color": "...",
   "eye_color": "...", "hair_in_source": false, "eyes_in_source": false, "outfit_color_in_source": false,
-  "species_en": "human", "species_note_en": "", "facial_hair": "clean-shaven", "facial_hair_in_source": false}}.
+  "species_en": "human", "species_note_en": "", "facial_hair": "clean-shaven", "facial_hair_in_source": false, "glasses": false}}.
   CREATURES: an important non-human being that appears in several events of the story (a dinosaur species, a monster, a
   dragon, a wolf pack, a ship, a machine) is cast as a character too (use the free places of the cast), with "species_en" and
   a look sheet, so that it looks the same in every picture and is drawn whenever the story speaks of it.
@@ -1363,7 +1534,8 @@ Return JSON with exactly these keys:
   family name or title), written the same way in every text. "look_en" is ONE look sheet of 55 to 75 English words in
   this fixed order: gender and exact age in years; body build; skin tone; eyes (color and shape);
   eyebrows; mouth and lips; hair (color, length, style); facial hair; ONE distinctive feature (scar, mole,
-  freckles; never glasses, they are drawn deformed); the DAY OUTFIT with colors (see the OUTFIT rule below). It is pasted into EVERY picture of this
+  freckles; eyeglasses ONLY for a person whom the SOURCE TEXT itself describes with glasses or spectacles: then "glasses" is true and the look sheet says
+  simple round thin-framed eyeglasses with two clear equal lenses; nobody else wears glasses); the DAY OUTFIT with colors (see the OUTFIT rule below). It is pasted into EVERY picture of this
   character and never changes, so describe the character in the MAIN period of the story. Only appearance: no mood,
   no action, no names of actors. "tag_en" is the SHORT version of the same look: 14 to 20 English words with only what
   makes this person recognizable at first sight (gender and age, hair color and style, ONE distinctive feature, build,
@@ -1452,12 +1624,14 @@ Rules:
                               "species_note_en": " ".join(str(c.get("species_note_en") or "").split()),
                               "facial_hair": " ".join(str(c.get("facial_hair") or "").split()),
                               "facial_hair_in_source": c.get("facial_hair_in_source") is True,
+                              "glasses": c.get("glasses") is True,
                               "nonhuman": not _HUMAN_SPECIES.match(" ".join(str(c.get("species_en") or "human").split()) or "human")})
         chars = vary_free_traits(chars[:6], d.get("natural_hair_colors"), d.get("natural_eye_colors"))
         chars = apply_age_gaps(chars, d.get("relations"))
         chars = fix_nightwear(chars, src["text"], era)
         chars = add_signatures(enforce_distinct_cast(enforce_distinct_faces(chars, picks)))
         chars = drop_unsupported_cane(chars, src["text"])
+        chars = apply_glasses(chars, src["text"])
         if not era:
             return None
         print(f"Cast designed: {len(chars)} character(s), era: {era}", flush=True)
@@ -1566,7 +1740,7 @@ def clean_spine(d, lo, relax=0):
         cv = [wmap[n] for n in e.get("covers", []) if n in wmap]
         e["weight"] = max(cv) if cv else 3
         e.setdefault("dies", [])
-    return {"logline": " ".join(str(d.get("logline") or "").split()), "heroes": heroes[:4], "events": events[:14],
+    return {"logline": " ".join(str(d.get("logline") or "").split()), "heroes": heroes[:4], "events": trim_events(events, 14),
             "world_en": " ".join(str(d.get("world_en") or "").split()),
             "subjects": [{"en": " ".join(str(x.get("en") or "").split())[:200],
                           "fa": [DIAC.sub("", str(w)).strip() for w in (x.get("fa") or []) if str(w).strip()][:4]}
@@ -1583,11 +1757,15 @@ def _norm_en(t):
     return re.sub(r"[^a-z0-9 ]+", "", str(t).lower().replace("-", " "))
 
 
+_ORDER_STATE = {"checked": False}
+
+
 def order_events_by_source(events, text):
     """Free check in code (no Gemini call): the position of every event's source quote inside the source text. When the
     story is told in the order of the source (no flashback) and an event stands before an earlier one, the events are
     sorted back into the order of the source. Events whose quote is not found keep their place."""
     src_n = _norm_en(text)
+    _ORDER_STATE["checked"] = False
     pos = []
     for e in events:
         q = _norm_en(e.get("quote_en") or "")
@@ -1602,6 +1780,7 @@ def order_events_by_source(events, text):
     known = [(x, k) for k, x in enumerate(pos) if x >= 0 and 0 < k < len(events) - 1]   # first = start, last = ending: fixed
     if len(known) < 2:
         return events, 0
+    _ORDER_STATE["checked"] = True
     order = [k for _, k in sorted(known)]
     moved = sum(1 for a, b in zip(order, sorted(order)) if a != b)
     if not moved:
@@ -1615,12 +1794,51 @@ def order_events_by_source(events, text):
     return out, moved
 
 
+def trim_events(events, cap=14):
+    """More events than the cap: the LIGHTEST events leave (never the first, the last, a turning point, the crisis, the climax or a
+    weight-5 event), not the tail of the list (the ending must never be cut off). Events are numbered 1..n again."""
+    ev = list(events)
+    while len(ev) > cap:
+        cands = [k for k in range(1, len(ev) - 1)
+                 if str(ev[k].get("role_en") or "").strip().lower() not in _CRITICAL_ROLES and int(ev[k].get("weight") or 3) < 5]
+        if not cands:
+            cands = list(range(1, len(ev) - 1))
+        k = min(cands, key=lambda i: (int(ev[i].get("weight") or 3), -i))
+        print(f"Story spine: more than {cap} events: the lightest one (#{ev[k].get('id')}, weight {ev[k].get('weight', 3)}) was removed, not the ending.", flush=True)
+        ev.pop(k)
+    for n, e in enumerate(ev, 1):
+        e["id"] = n
+    return ev
+
+
+def order_events_by_timeline(events):
+    """Free check in code: the timeline of the spine lists the plot points in the order of the source, and every event says which
+    points it tells (\"covers\"). An event that tells earlier points than the event before it is put back in front of it. Not used
+    when an event is a flashback. Returns (events, how many moved)."""
+    if any(e.get("flashback") for e in events):
+        return events, 0
+    keyed = [(k, min(e["covers"])) for k, e in enumerate(events) if e.get("covers")]
+    if len(keyed) < max(4, len(events) - 2):
+        return events, 0
+    srt = sorted(keyed, key=lambda x: x[1])
+    moved = sum(1 for a, b in zip(keyed, srt) if a[0] != b[0])
+    if not moved:
+        return events, 0
+    out = list(events)
+    for (slot, _), (k, _) in zip(keyed, srt):
+        out[slot] = events[k]
+    for n, e in enumerate(out, 1):
+        e["id"] = n
+    return out, moved
+
+
 def review_spine(sp, src):
     """ONE cheap Gemini call (the light models have their own free quota) that reads the finished spine against the source:
     an event that the source does not support is removed; an essential point that no event tells is added (at most 2 each).
     Any problem here leaves the spine as it is."""
     try:
-        events = [{"id": e["id"], "what_en": e["what_en"], "weight": e.get("weight", 3), "role_en": e.get("role_en", "")} for e in sp["events"]]
+        events = [{"id": e["id"], "what_en": e["what_en"], "weight": e.get("weight", 3), "role_en": e.get("role_en", ""),
+                   "flashback": bool(e.get("flashback"))} for e in sp["events"]]
         prompt = f"""You are a strict story editor. SOURCE TEXT:
 {str(src.get('text') or '')[:14000]}
 
@@ -1630,10 +1848,19 @@ Check it against the SOURCE only:
 2. "missing": at most 2 ESSENTIAL points that no event tells and without which the cause-and-effect chain, a turning point, the climax or
    the ending cannot be understood. Each {{"after_id": id of the event after which it happens, "who_en": "...", "what_en": "ONE plain sentence",
    "where_en": "...", "because_en": "what caused it", "role_en": "turning point|crisis|climax|complication", "dies": []}}. Normally [].
-Return JSON {{"invented": [], "missing": []}}."""
+3. "order": the ids of ALL events in the order in which they happen according to the SOURCE. The current order is almost always right: then return [].
+   Give the full list only when an event clearly stands before the event that causes it, or before an earlier event of the source (an earlier
+   event told after a later one, the ending before something that happens earlier). An event marked "flashback" stays where it is.
+Return JSON {{"invented": [], "missing": [], "order": []}}."""
         out = gemini_json(prompt, minutes=4, models=CHEAP_MODELS)
         bad = {int(x) for x in (out.get("invented") or []) if str(x).lstrip("-").isdigit()}
         ev = [e for e in sp["events"] if e["id"] not in bad] if len(sp["events"]) - len(bad) >= 5 else list(sp["events"])
+        cur_ids = [e["id"] for e in ev]
+        order_ = [int(x) for x in (out.get("order") or []) if str(x).lstrip("-").isdigit() and int(x) in cur_ids]
+        if order_ and sorted(order_) == sorted(cur_ids) and order_ != cur_ids and not any(e.get("flashback") for e in ev):
+            by_id = {e["id"]: e for e in ev}
+            ev = [by_id[i] for i in order_]
+            print("Story spine review: the order of the events was corrected from the source.", flush=True)
         added = 0
         for m_ in (out.get("missing") or [])[:2]:
             if not isinstance(m_, dict) or not str(m_.get("what_en") or "").strip() or not str(m_.get("after_id") or "").lstrip("-").isdigit():
@@ -1650,7 +1877,7 @@ Return JSON {{"invented": [], "missing": []}}."""
             e["id"] = n
         if bad or added:
             print(f"Story spine review: {len(bad)} unsupported event(s) removed, {added} essential event(s) added.", flush=True)
-        sp["events"] = ev[:14]
+        sp["events"] = trim_events(ev, 14)
     except (GeminiBlocked, GeminiQuotaExhausted):
         pass
     except Exception as e:  # noqa: BLE001
@@ -1745,6 +1972,10 @@ Return JSON with exactly these keys:
         sp["events"], moved = order_events_by_source(sp["events"], src["text"])
         if moved:
             print(f"Story spine: {moved} event(s) were put back into the order of the source.", flush=True)
+        elif not _ORDER_STATE["checked"]:          # the quotes could not be found: the timeline of the source decides the order
+            sp["events"], moved2 = order_events_by_timeline(sp["events"])
+            if moved2:
+                print(f"Story spine: {moved2} event(s) were put back into the order of the source timeline.", flush=True)
         print(f"Story spine: {len(sp['events'])} main events, {len(sp['heroes'])} heroes. Logline: {sp['logline'][:110]}",
               flush=True)
     return sp
@@ -3259,6 +3490,19 @@ def beat_words_of(scene, spine):
     return BEAT_WORDS
 
 
+def key_events_of(scene, spine):
+    """The story events of a paragraph that are the BACKBONE of the story (weight 4 or 5, turning point, crisis, climax,
+    resolution, the ending): the picture plan must show each of them itself."""
+    evs = {e["id"]: e for e in ((spine or {}).get("events") or []) if isinstance(e, dict) and "id" in e}
+    prot = protected_events(spine)
+    out = []
+    for i in (scene.get("ev_ids") or []):
+        e = evs.get(i)
+        if e and (i in prot or int(e.get("weight") or 3) >= 4):
+            out.append(" ".join(str(e.get("what_en") or "").split())[:200])
+    return out[:2]
+
+
 def make_beats(text, words=None):
     """Cut a paragraph into beats of about `words` (default BEAT_WORDS) words (whole sentences): one picture per beat."""
     words = words or BEAT_WORDS
@@ -3725,6 +3969,10 @@ def align_visuals(data, book, src=None):
         places = design_places(book, src, data.get("era_en", ""))
         data["locations"] = places
     items, ctx = [], []
+    spine_ = data.get("spine") or {}
+    infer_deaths(spine_.get("events") or [], chars)
+    ev_by_id_ = {e["id"]: e for e in (spine_.get("events") or []) if isinstance(e, dict) and "id" in e}
+    dead_names = []                                      # characters who died in an earlier paragraph
     for i, s in enumerate(scenes):
         s.pop("beat_visuals", None)
         if s.get("cast_names"):
@@ -3736,7 +3984,12 @@ def align_visuals(data, book, src=None):
             s.pop("cast_names")                       # sentences were changed: treat as an ordinary paragraph
         s["beats"] = split_beats_by_names(make_beats(s["narration_fa"], beat_words_of(s, data.get("spine"))), chars)
         ctx.append({"scene": i, "part": s.get("part", "story"), "full_paragraph_fa": s["narration_fa"], "place_hint_en": s.get("setting_en", ""),
-                    "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", "")})
+                    "mood_hint_en": s.get("mood_en", ""), "source_en": s.get("source_en", ""),
+                    "key_events_en": key_events_of(s, spine_), "already_dead": list(dead_names)})
+        for x_ in (s.get("ev_ids") or []):
+            for nm_ in ((ev_by_id_.get(x_) or {}).get("dies") or []):
+                if nm_ not in dead_names:
+                    dead_names.append(nm_)
         for j, b in enumerate(s["beats"]):
             items.append({"i": len(items), "scene": i, "part": s.get("part", "story"), "narration_fa": b})
     for k, it in enumerate(items):                     # neighbours: pronouns ("he", "she") and the place continue from them
@@ -3918,7 +4171,12 @@ Rules:
 - FACES FIT THE MOMENT (very important): in a fight, a threat, a loss, hunger, fear, a sad or a bad situation the faces are serious,
   tense, afraid, angry or sad, with closed lips: NOBODY smiles. A smile only in a happy moment of the sentence. Say the feeling in "emotion_en".
 - THE DEAD STAY DEAD: once a part tells that a character died or was killed, that character is in NO later picture (the grieving
-  people are drawn without him), and he is never drawn alive after his death.
+  people are drawn without him), and he is never drawn alive after his death. The paragraph context lists them in "already_dead":
+  nobody named there is in \"characters_present\", in \"people_en\", in \"others\" or anywhere in the picture text (a memory of him is
+  drawn as an object of his: a hat, a chair, a grave, never as the living person).
+- KEY EVENTS (very important): when the paragraph context has \"key_events_en\", those events are the BACKBONE of the story. The FIRST picture of
+  that paragraph shows that event itself: its action and its visible result, with the people or the creature that do it, in the place where it
+  happens (the way the part tells it), never a calm picture of a place or of people standing.
 - AT SEA (very important): when the sentence is at sea (a boat, rowing, fishing, the open water, a fish or a shark), the picture is
   AT SEA: water and sky all around, NO shore, beach, harbor or hut (the shore only when the sentence itself says the person is on
   the shore); every person is INSIDE a small boat with the whole boat visible (never standing, walking or floating on the water);
@@ -4370,6 +4628,7 @@ _VOICE_REGEX = ((rf"(?<![\u0600-\u06FF]){_dtol('کشنده')}(?![{_PL}])", "کُ
 #   ییلاق    -> the FIRST ی with kasra (یِیلاق), also ییلاقی / ییلاقات (the voice read it as «یالاق»)
 _FORCE_MARKS = (("کتاب", "کِتاب"), ("کولی", "کُولی"), ("رشوه", "رِشوه"), ("زیرشیروانی", "زیرشِیرْوانی"), ("وقار", "وَقار"), ("باوقار", "باوَقار"), ("گراز", "گُراز"), ("کورکورانه", "کُورکُورانه"), ("پرشور", "پُرشور"), ("\u06cc\u06cc\u0644\u0627\u0642", "\u06cc\u0650\u06cc\u0644\u0627\u0642"), ("کندوکاو", "کَندوکاو"), ("نورزید", "نَوَرزید"),
                 ("فرافکن", "فَرافْکَن"),
+                ("سرکش", "سَرکِش"),          # «سرکش / سرکشی / سرکشان»: ک with KASRA (the voice read it with fatha)
                 ("ثروت", "سَروَت"), ("کشنده", "کُوشَنده"),
                 ("هفتاد", "هَفتاد"), ("هشتاد", "هَشتاد"), ("شصت", "شَصت"), ("پنجاه", "پَنجاه"), ("چهل", "چِهِل"))      # ثروتمند / ثروت: the voice read «ث» as «ش»; «س» is the same sound      # فرافکنی / فرافکنانه...: the letter ک must be spoken (sukun on ف, fatha on ک)
 
@@ -4863,6 +5122,13 @@ ANATOMY = ("Each person: one head with exactly one face (no extra face or face-l
            "two long legs (legs about half of the body height), small head (one eighth of the height), normal hands and feet, no overlapping limbs, "
            "head only on the neck, feet only at the leg ends")
 NO_EXTRA = "No eyeglasses, no other person anywhere, no crowd, no faces in windows, no second copy, twin, reflection or extra head"
+
+
+def no_extra_for(present):
+    """\"No eyeglasses\" for everybody, except in a picture of a character who wears glasses in the story."""
+    if any(isinstance(c, dict) and c.get("glasses") for c in (present or [])):
+        return NO_EXTRA.replace("No eyeglasses, ", "Eyeglasses ONLY on the person whose description says so (simple round thin frame, two clear equal lenses), nobody else wears glasses, ")
+    return NO_EXTRA
 CROWD_WORDS = ("crowd", "soldiers", "villagers", "mourners", "audience", "guests", "students", "workers", "passers",
                "people of", "townspeople", "congregation")
 PROMPT_WORDS = 200        # FLUX schnell reads only about the first 256 tokens: everything after that is lost
@@ -4994,7 +5260,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
         count += ((("Every character keeps exactly the body described in its sheet, with no extra parts and no extra limbs. "
                     if nh_all else ANATOMY + " (humans only). ")) if nh_any else ANATOMY + ". ")
         if not any(w in (people_en + " " + " ".join(others)).lower() for w in CROWD_WORDS):
-            count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else NO_EXTRA) + ". "
+            count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else no_extra_for(present)) + ". "
     if has_people and scene.get("kind") in (None, "", "event"):
         count += ("Every person mid-action (pulling, rowing, striking, gripping), never idle. " if sea_note else
                   "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. ")
@@ -5112,7 +5378,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
         main = _trim_words(main, len(main.split()) - 4)
         out = compose(main, False, era_short, CLEAN_SHORT)
     if len(out) > 1850:        # still too long (many people with references): the general rules get shorter, the end of the prompt (era, shot, style) must not be cut
-        for old_, new_ in ((NO_EXTRA + ". ", ""), ("Everybody alive and upright. ", ""), ("Everybody wears proper day clothes. ", ""),
+        for old_, new_ in ((no_extra_for(present) + ". ", ""), ("Everybody alive and upright. ", ""), ("Everybody wears proper day clothes. ", ""),
                            ("No animals. ", ""), (ANATOMY, "Each person: one head with one face, two arms, two hands, two long legs, small head")):
             count = count.replace(old_, new_)
             out = compose(main, False, era_short, CLEAN_SHORT)
@@ -5557,7 +5823,8 @@ def check_images(jobs, models=None):
                        "exact_people": sc.get("people_en") or "", "must_show": sc.get("must_show") or [],
                        "kind": sc.get("kind") or "event", "cover": bool(sc.get("cover")),
                        "expected_people": expected_people(sc),
-                       "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0]})
+                       "character_sheets": sheets, "era": str(sc.get("era_en") or "").split(". Clothing")[0],
+                       "glasses_for": [x.split(":")[0] for x in sheets if _GLASSES_RX.search(x)]})
     ref_names = []
     for j in jobs:
         for n in (j["sc"].get("characters_present") or []):
@@ -5692,7 +5959,9 @@ For EACH picture return:
 - "hands_per_person": a list with ONE number for each person you can see: how many HANDS that person has in the picture
   (count them one by one: two is right; three or more is a mistake that must be reported here).
 - "twins": true if two people in the picture look alike (the same face, the same hair or the same clothes).
-- "glasses": true if ANY person wears eyeglasses (they are always drawn deformed here: no eyeglasses are wanted at all).
+- "glasses": true if a person wears eyeglasses although his or her sheet does not say so (only the people named in "glasses_for" wear glasses).
+  "glasses_ok": when "glasses_for" is not empty: false if ANY person named there has NO eyeglasses on the face, or if the eyeglasses are
+  deformed (a missing or uneven lens, lenses merged into the eyes or the face, a frame that crosses the face wrongly); otherwise true (always true when "glasses_for" is empty).
 - "age_ok": false when a named character looks clearly younger or older than the age of his or her look sheet (a child instead of an
   adult or an adult instead of a child) or than his or her reference portrait. Otherwise true.
 - "idle": true when ANY person (named or not) only stands, sits or poses and is NOT visibly DOING the action of ITS "narration_fa" sentence with the
@@ -5717,7 +5986,7 @@ For EACH picture return:
 - "missing": a short English phrase: the key thing that is missing or wrong (empty if the score is 8 or more).
 - "fix_en": only if the score is below 8: what a new picture must clearly show, in POSITIVE words, at most 22 words
   (for example "a woman lying motionless on the ground, two men standing over her in shock, all fully visible, wide shot").
-Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "extra_face": false, "trait_ok": true, "proportion_ok": true, "vehicle_ok": true, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
+Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok": true, "style_ok": true, "hands_per_person": [2, 2], "twins": false, "glasses": false, "glasses_ok": true, "age_ok": true, "animal_ok": true, "text_ok": true, "idle": false, "extra_face": false, "trait_ok": true, "proportion_ok": true, "vehicle_ok": true, "outfit_ok": true, "invented": false, "duplicate": false, "score": 7, "look_score": 7, "missing": "...", "fix_en": "..."}}]}} with one item per picture."""
     try:
         out = gemini_json(prompt, minutes=4, models=models or CHEAP_MODELS,
                           images=[j["img"].read_bytes() for j in jobs] + [CAST_REFS[n].read_bytes() for n in ref_names] + ([style_img] if style_img else []))
@@ -5775,7 +6044,10 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
                 fix = ("the carriage is pulled by two harnessed horses fully visible in front of it; " + fix)[:200]
             if c.get("glasses") is True:
                 score = min(score, 4)
-                fix = ("nobody wears eyeglasses, clean natural eyes; " + fix)[:200]
+                fix = ("only the person whose sheet says so wears eyeglasses, everybody else has clean natural eyes; " + fix)[:200]
+            if c.get("glasses_ok") is False:
+                score = min(score, 3)
+                fix = ("the bespectacled person wears simple round thin-framed eyeglasses with two clear equal round lenses, clearly visible on the face; " + fix)[:200]
             if c.get("age_ok") is False:
                 score = min(score, 3)
                 fix = ("every named person at exactly the age of his or her reference image, never a child instead of an adult or the other way round; " + fix)[:200]
@@ -7502,6 +7774,7 @@ def main():
         PENDING_FILE.unlink(missing_ok=True)
         sys.exit(1)
 
+    apply_glasses(script.get("characters", []), str(src.get("text") or ""))     # a saved script of an older version gets its glasses too
     seed = int(time.time()) % 100000
     saved_pics_dir(book)
     cast_refs = make_cast_refs(script.get("characters", []), script.get("era_en", ""), book, seed)
@@ -7521,10 +7794,13 @@ def main():
             save_json(PENDING_FILE, pending)
     has_event = any(str(b.get("kind") or "event") == "event" for s in scenes for b in (s.get("beat_visuals") or []))
     events_by_id = {e["id"]: e for e in ((script.get("spine") or {}).get("events") or []) if isinstance(e, dict) and "id" in e}
-    dead = []                                       # first names (lower case) of the characters that died in an earlier scene
+    n_inf = infer_deaths(list(events_by_id.values()), script.get("characters", []))
+    if n_inf:
+        print(f"Deaths: {n_inf} event(s) had no list of the dead although a character is killed or dies in them: completed from the event text.", flush=True)
+    dead = []                                       # first names (lower case) of the characters that died in an earlier picture
 
     def is_dead(name):
-        w = (str(name).lower().split() or [""])[0]
+        w = death_key(name)
         return bool(w) and any(w == d_ or (len(w) > 3 and (w in d_ or d_ in w)) for d_ in dead)
 
     SRC_LOWER["t"] = (str(src.get("text") or "") + " " + json.dumps(script.get("spine") or {}, ensure_ascii=False)).lower()
@@ -7567,8 +7843,8 @@ def main():
             inject_subjects(sc, beat, script.get("subjects"))
             inject_event(sc, beat)
             sea_fix(sc, beat)                      # at sea: a boat under the people, creatures in the water, no shore, no merged faces
-            if dead:                               # a character who died in an earlier scene is never drawn again (alive)
-                sc["characters_present"] = [n for n in (sc.get("characters_present") or []) if not is_dead(n)]
+            if dead and not any((events_by_id.get(x_) or {}).get("flashback") for x_ in (s.get("ev_ids") or [])):
+                drop_dead_from_pic(sc, is_dead)    # a character who died in an earlier picture is never drawn again (alive)
             card_kind = None
             if TITLE_CARDS and (i, j) == author_pos:
                 sc.update(author_library_plan(script.get("author")))
@@ -7639,9 +7915,15 @@ def main():
                 except Exception as e:  # noqa: BLE001
                     print(f"Style reference not made ({e}).", flush=True)
             done_pics += 1
+            if DEATH_FA.search(DIAC.sub("", beat)):         # the beat tells the death: the dead is gone from the NEXT picture of this scene already
+                for eid_ in (s.get("ev_ids") or []):
+                    for nm_ in ((events_by_id.get(eid_) or {}).get("dies") or []):
+                        w_ = death_key(nm_)
+                        if w_ and re.search(rf"(?<![A-Za-z]){re.escape(w_)}(?![A-Za-z])", beat, re.I) and w_ not in dead:
+                            dead.append(w_)
         for eid_ in (s.get("ev_ids") or []):        # after this scene: whoever dies in it is gone from all later pictures
             for nm_ in ((events_by_id.get(eid_) or {}).get("dies") or []):
-                w_ = (str(nm_).lower().split() or [""])[0]
+                w_ = death_key(nm_)
                 if w_ and w_ not in dead:
                     dead.append(w_)
     if IMAGE_CHECK:
