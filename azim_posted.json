@@ -633,5 +633,15 @@
   "date_pt": "2026-11-25",
   "wiki": "The Picture of Dorian Gray",
   "date": "2026-11-25"
+ },
+ {
+  "title_en": "Robinson Crusoe",
+  "title_fa": "رابینسون کروزوئه",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-26",
+  "wiki": "Robinson Crusoe",
+  "date": "2026-11-26"
  }
 ]

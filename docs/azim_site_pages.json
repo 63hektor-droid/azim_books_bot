@@ -169,5 +169,14 @@
   "author_en": "Oscar Wilde",
   "date": "2026-11-25",
   "cover": true
+ },
+ {
+  "slug": "robinson-crusoe",
+  "title_fa": "رابینسون کروزوئه",
+  "title_en": "Robinson Crusoe",
+  "author_fa": "دنیل دفو",
+  "author_en": "Daniel Defoe",
+  "date": "2026-11-26",
+  "cover": true
  }
 ]
