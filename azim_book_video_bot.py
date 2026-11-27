@@ -67,7 +67,7 @@ BEAT_WORDS = int(os.environ.get("AZIM_BEAT_WORDS") or 44)   # a new picture abou
 MAX_WORDS = int(os.environ.get("AZIM_MAX_WORDS") or 860)   # about 5 minutes 55 seconds of narration
 MIN_WORDS = int(os.environ.get("AZIM_MIN_WORDS") or 560)   # about 3 minutes 50 seconds of narration (never below 3 minutes)
 MIN_FINAL_WORDS = int(os.environ.get("AZIM_MIN_FINAL_WORDS") or 470)   # the finished script (after cleaning) must still have this many words
-VISUAL_VERSION = 28       # pictures of a saved script written by an older version are planned again (1 Gemini call)
+VISUAL_VERSION = 29       # pictures of a saved script written by an older version are planned again (1 Gemini call)
 SCRIPT_VERSION = 24       # a saved script of another version is not resumed
 
 # ----- the ONLY source of the story: the "Plot" section of the novel's English Wikipedia article.
@@ -3351,6 +3351,11 @@ _SHORE_FA = re.compile(_pw("ساحل|بندر|کلبه|روستا|شهر|کاف�
 SEA_STORY = {"on": False}        # set in main(): the whole narration is about the sea (a boat, fishing)
 
 
+_SEA_EXTRA = re.compile(_pw("امواج|دریایی|دریائی|دریانورد|کشتی(?!\\s*(?:گرفت|گیر|بگیر))|عرشه|ناخدا|ملوان|لنگر"))
+_VOYAGE = re.compile(r"(?:سوار\s+(?:یک\s+|آن\s+|این\s+)?(?:کشتی|قایق)|با\s+(?:یک\s+|آن\s+|این\s+)?(?:کشتی|قایق)|(?:راهی|عازم)\s+(?:سفر\s+)?(?:دریا|اقیانوس)|به\s+(?:دریا|اقیانوس)\s+(?:رفت|زد|راه|سفر)|سفر\s+دریایی|سفر\s+دریائی|دریانوردی)")
+_SHIP_FA = re.compile(_pw("کشتی(?!\\s*(?:گرفت|گیر|بگیر))|ناخدا|ملوان|عرشه|دریانورد"))
+
+
 def sea_story_of(scenes):
     """True when the narration speaks of the sea (boat, oars, sharks...) at least 4 times: a sea story."""
     t = DIAC.sub("", " ".join(str(x.get("narration_fa") or "") for x in scenes)).replace("\u200c", " ")
@@ -3360,9 +3365,10 @@ def sea_story_of(scenes):
 def at_sea(t):
     """This picture is a picture AT SEA: its sentence names the sea / a boat / a sea creature (a fish word counts only in a sea story),
     and it does not say that the people are on the shore or in a village."""
-    if _SHORE_FA.search(t) and not re.search(_pw("قایق|پارو|بادبان|کوسه|مارلین"), t):
+    if _SHORE_FA.search(t) and not re.search(_pw("قایق|پارو|بادبان|کوسه|مارلین"), t) and not _VOYAGE.search(t):
         return False
-    return bool(_SEA_STRONG.search(t) or (SEA_STORY["on"] and _SEA_WEAK.search(t)))
+    return bool(_SEA_STRONG.search(t) or _SEA_EXTRA.search(t) or _VOYAGE.search(t)
+                or (SEA_STORY["on"] and _SEA_WEAK.search(t)))
 
 
 _SEA_EVENTS = [
@@ -3384,18 +3390,69 @@ _SHORE_EN = re.compile(r"\b(?:(?:the|a|an|his|her|their)\s+)?(?:shore|beach|harb
 _SEA_CREATURE_EN = re.compile(r"\b(?:shark|sharks|marlin|fish|dolphin|whale|swordfish)\b", re.I)
 
 
+SEA_PLACE_BOAT = "Open sea, water and sky only, no shore; people sit INSIDE a wooden boat, whole boat visible, never on the water."
+SEA_PLACE_SHIP = "Open sea, water and sky only, no shore; people stand ON the deck of a sailing ship, whole ship visible, never on the water."
+SEA_VOYAGE = " The vessel is far out at sea; no shore, harbor or dock in the picture."
+_SHIP_EN = re.compile(r"\b(?:ship|ships|deck|captain|sailor|sailors|crew|mast|masts|galleon|schooner|frigate|brig|steamer|liner|sails?)\b", re.I)
+_ON_WATER_EN = re.compile(r"\b(?:walks?|walking|stands?|standing|runs?|running|strides?|striding|steps?|stepping|treads?|treading|dances?|dancing|floats?|floating)\s+"
+                          r"(?:right\s+|calmly\s+|alone\s+|boldly\s+)?(?:on|upon|across|over|atop)\s+(?:the\s+|a\s+)?"
+                          r"(?:(?:crashing|huge|rolling|towering|stormy|raging|dark|giant|great|rough|churning)\s+)*(?:waves?|water|sea|ocean|surface|swells?)\b", re.I)
+
+
+_ON_SHORE_EN = re.compile(r"\s+(?:on|at|by|near|along|beside|beyond)\s+(?:the\s+|a\s+|his\s+|her\s+)?(?:shore|beach|harbou?r(?:\s+dock)?|dock|pier|quay|quayside|sand)\b", re.I)
+_SHORE_HOUSES_EN = re.compile(r"\b(?:houses?|cottages?|buildings?|rooftops?|villages?|towns?|lighthouse|harbou?r|dock|pier|quay|beach|shore)\b", re.I)
+
+
+def _content_idx(parts):
+    """Index of the first sentence that is more than a shot name («Medium-wide shot.»): the MAIN sentence of the picture text."""
+    for i_, p_ in enumerate(parts):
+        if len(p_.split()) > 5:
+            return i_
+    return 0
+
+
+def _aboard(text, phrase):
+    """«stands on the beach at the dock» -> «stands on the deck of the ship»: the first shore place becomes the vessel, the others are removed,
+    and later sentences about the shore or houses are dropped."""
+    text = re.sub(r",?\s*(?:with\s+|and\s+)?(?:(?:the|a|an|some|rows? of|village|town|harbou?r|small|white|stone|wooden|distant)\s+)*"
+                  r"(?:houses?|cottages?|buildings?|rooftops?)\b[^.;]*", "", str(text or ""), flags=re.I)
+    out, n = _ON_SHORE_EN.subn(" " + phrase, str(text or ""), count=1)
+    if n:
+        out = _ON_SHORE_EN.sub("", out)
+    parts = re.split(r"(?<=[.;])\s+", out)
+    c_ = _content_idx(parts)
+    return " ".join(p for i, p in enumerate(parts) if i <= c_ or not _SHORE_HOUSES_EN.search(p)).replace("..", ".").replace("..", ".")
+
+
 def sea_fix(sc, beat_text):
-    """Free check in code: a picture whose sentence is AT SEA is drawn at sea (not on the shore), the people sit IN a boat (never
-    standing on the water), sea creatures stay IN the water (never in the sky), and a shark never merges with a man's face."""
+    """Free check in code: a picture whose sentence is AT SEA is drawn at sea (not on the shore), the people are INSIDE a boat or ON the
+    deck of a ship (never standing or walking on the water or the waves), a person who goes to sea by ship is aboard it (not on the
+    shore), sea creatures stay IN the water (never in the sky), and a shark never merges with a man's face."""
     t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
     if not at_sea(t):
         return sc
+    txt0 = " ".join(str(sc.get(k_) or "") for k_ in ("visual_en", "event_en"))
+    ship = bool(_SHIP_FA.search(t) or _SHIP_EN.search(txt0))
+    boat_phrase = "stands braced on the deck of the ship" if ship else "sits braced inside the boat"
+    voyage = bool(_VOYAGE.search(t))
     for k_ in ("visual_en", "event_en", "setting_en", "action_en", "gentle_en"):
-        sc[k_] = " ".join(_SHORE_EN.sub("open water", str(sc.get(k_) or "")).split())
-    sc["must_show"] = [x for x in (sc.get("must_show") or []) if not _SHORE_EN.search(str(x))]
+        v_ = str(sc.get(k_) or "")
+        if voyage:           # a person who sails away is aboard the vessel: «on the beach / at the dock» becomes «on the deck», other shore sentences go
+            v_ = _aboard(v_, "on the deck of the ship" if ship else "inside the boat")
+        v_ = _SHORE_EN.sub("open water", v_)
+        sc[k_] = " ".join(_ON_WATER_EN.sub(boat_phrase, v_).split())
+    sc["must_show"] = [_ON_WATER_EN.sub(boat_phrase, str(x)) for x in (sc.get("must_show") or []) if not _SHORE_EN.search(str(x))]
     people = bool(sc.get("characters_present") or sc.get("others")) or bool(re.search(r"\b(?:man|fisherman|boy|person|people|he|she)\b", str(sc.get("visual_en") or ""), re.I))
     txt = " ".join(str(sc.get(k_) or "") for k_ in ("visual_en", "event_en")) + " " + " ".join(map(str, sc.get("creatures_en") or []))
-    pre = [SEA_PLACE if people else "Open sea, water and sky only, no shore."]
+    if ship:
+        place = SEA_PLACE_SHIP
+    elif SEA_STORY["on"] or _SEA_WEAK.search(t):
+        place = SEA_PLACE
+    else:
+        place = SEA_PLACE_BOAT
+    if voyage:
+        place += SEA_VOYAGE
+    pre = [place if people else "Open sea, water and sky only, no shore."]
     if _SEA_CREATURE_EN.search(txt):
         pre.append(SEA_CREATURE)
     pre.append(SEA_STYLE)
@@ -3450,8 +3507,11 @@ def inject_subjects(sc, beat_text, subjects):
     """Free check in code (no Gemini call): a creature or thing that the narration of THIS picture names (a dinosaur, a cage, a
     ship...) is always drawn, even when the picture plan forgot it."""
     t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
+    fig_block = bool(figurative_words(beat_text))        # «a monstrous storm»: the word only describes the storm
     for sub in subjects or []:
         if not any(w and w in t for w in sub.get("fa", [])):
+            continue
+        if fig_block and re.search(r"monster|giant|dragon|demon|creature|beast", str(sub.get("en") or ""), re.I):
             continue
         words = [w for w in re.findall(r"[a-z]{4,}", str(sub.get("en") or "").lower())
                  if w not in ("with", "that", "huge", "large", "small", "from", "very", "tall", "big")][:3]
@@ -3467,8 +3527,141 @@ def inject_subjects(sc, beat_text, subjects):
                         + [str(x).lower() for x in sc.get("must_show") or []])
         if any(k in text for k in keys) or not creature_allowed(keys):
             continue
+        if fig_block and any(k in ("monster", "giant", "dragon") for k in keys):
+            continue
         sc["creatures_en"] = ([en] + list(sc.get("creatures_en") or []))[:2]
         sc["must_show"] = ([en[:90]] + list(sc.get("must_show") or []))[:5]
+    return sc
+
+
+# ----- a creature word that only DESCRIBES size or force («a monstrous storm», «giant waves») is never drawn as a creature
+_FIG_ADJ_FA = re.compile(r"(?<![\u0600-\u06FF])(?:هیولا(?:یی|وار|گونه|صفت|آسا)|غول\s?(?:پیکر|آسا|وار|گونه|صفت)|اژدها(?:یی|وار|گونه|آسا)|دیو(?:آسا|وار|گونه|صفت)|عظیم\s?الجثه)(?![\u0600-\u06FF])")
+_MONSTER_FA = re.compile(_pw("هیولا|غول|اژدها|دیو"))
+_FORCE_FA = re.compile(_pw("طوفان|توفان|تندباد|گردباد|موج|امواج|سیل|رعد|ابر|باد|تاریکی|مه"))
+_REAL_CREATURE_FA = re.compile(_pw("موجود|جانور|حیوان|ماهی|نهنگ|کوسه|عنکبوت|مار|گرگ|خرس|ببر|عقاب|پرنده|حشره|ملخ|هشت\\W?پا|ماهی\\W?مرکب"))
+_REAL_MONSTER_SRC = re.compile(r"\b(?:monsters?|ogres?|demons?|goblins?|trolls?|fiends?|kraken|leviathan|dragons?|giants?)\b")
+_MONSTER_NOUN_EN = re.compile(r"\b(?:monsters?|sea[- ]monsters?|creatures?|beasts?|dragons?|demons?|serpents?|fiends?|ogres?|trolls?|kraken|leviathan|tentacles?|devils?|"
+                              r"giants?(?!\s+(?:waves?|swells?|clouds?|storm|rollers?|breakers?|sails?)))\b", re.I)
+STORM_EN = "Subject: the storm itself, towering dark waves, black clouds, lightning, spray."
+FIG_NOTE_EN = "The fearsome word only tells size or fury; no monster, giant or creature appears."
+
+
+def figurative_words(beat_text):
+    """The Persian creature words of this part that only DESCRIBE size or force (هیولایی, غول‌آسا, «هیولای» طوفان...), not a creature of the
+    story: an adjective form is always figurative; a noun next to a storm, a wave or a wind only when the source of the book has no monster."""
+    t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
+    if _REAL_CREATURE_FA.search(t):
+        return []
+    words = [m.group(0).strip() for m in _FIG_ADJ_FA.finditer(t)]
+    if not words and _MONSTER_FA.search(t) and _FORCE_FA.search(t) and not _REAL_MONSTER_SRC.search(SRC_LOWER["t"]):
+        words = [m.group(0).strip() for m in _MONSTER_FA.finditer(t)]
+    return list(dict.fromkeys(words))[:3]
+
+
+def figurative_fix(sc, beat_text):
+    """Free check in code: when the narration only uses a creature word as a figure of speech («a monstrous storm at sea»), the picture
+    shows the real thing (the storm, the waves) and never a monster: every monster, giant or creature is removed from the plan."""
+    words = figurative_words(beat_text)
+    if not words:
+        return sc
+    t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
+    storm = bool(re.search(_pw("طوفان|توفان|تندباد|گردباد|موج|امواج|باد|باران|ابر|رعد|دریا"), t))
+
+    def cut(p):
+        """«A sailor grips the rail as a sea monster rises.» -> «A sailor grips the rail.» (nothing is left of a sentence that is only the monster)."""
+        m = _MONSTER_NOUN_EN.search(p)
+        if not m:
+            return p
+        head = p[:m.start()]
+        cuts = [x.start() for x in re.finditer(r",|;|\b(?:as|while|and|with|beside|before|when|where|that|which|against|toward|towards|from|by)\b", head)]
+        keep = head[:(cuts[-1] if cuts else 0)].rstrip(" ,;")
+        return (keep + ".") if len(keep.split()) >= 4 else ""
+
+    def clean(text):
+        parts = re.split(r"(?<=[.;])\s+", str(text or ""))
+        out = " ".join(x for x in (cut(p) for p in parts) if x)
+        out = re.sub(r"\bmonstrous(?:ly)?\b|\bmonster-(?:like|sized|shaped)\b", "violent", out, flags=re.I)
+        return " ".join(out.split())
+
+    for k_ in ("visual_en", "event_en", "gentle_en"):
+        if sc.get(k_):
+            sc[k_] = clean(sc[k_])
+    if len(str(sc.get("visual_en") or "").split()) < 15:      # the monster was the whole picture: the real thing is drawn instead
+        sc["visual_en"] = ("Medium-wide shot. " + (STORM_EN if storm else FIG_NOTE_EN) + " " + str(sc.get("visual_en") or "")).strip()
+    if not str(sc.get("event_en") or "").strip():
+        sc["event_en"] = "a violent storm tosses everything on towering dark waves" if storm else "the people face the fierce danger of this moment"
+    sc["creatures_en"] = [x for x in (sc.get("creatures_en") or []) if not _MONSTER_NOUN_EN.search(str(x))]
+    sc["must_show"] = [x for x in (sc.get("must_show") or []) if not _MONSTER_NOUN_EN.search(str(x))]
+    sc["fig_en"] = STORM_EN if storm else FIG_NOTE_EN
+    print(f"Figurative creature word {words}: no monster is drawn for it.", flush=True)
+    return sc
+
+
+# ----- a deserted island where the hero is alone: nobody else, no street, no houses
+ISLAND = {"on": False}
+_ISLAND_FA = re.compile(_pw("جزیره", False))
+_ISLAND_EMPTY_FA = re.compile(r"جزیره(?:\s?ای|\s?ی)?\s+(?:متروک|خالی|دورافتاده|دور\s?افتاده|بی\s?نام|ناشناخته|کوچک|ویران|بی\s?سکنه|بی\s?ساکن|بی\s?آدم|بیابان|خلوت)")
+_ALONE_FA = re.compile(r"تک\s?و\s?تنها|تنهایی|(?<![\u0600-\u06FF])تنها(?!\s*(?:یک|چیز|چیزی|دو|سه|کسی|راه|امید|دلیل|هدف|برای|جزیره|کشتی|قایق|مرد|زن|فرزند|پسر|دختر|بازمانده|اینکه|این|همین|آن))(?![\u0600-\u06FF])")
+_OTHERS_FA = re.compile(_pw("مردم|دیگران|افراد|همراهان|گروه|ملوانان|بومیان|قبیله|جمعیت|اهالی|ساکنان|یاران|دوستان|همسفران|نفر|کودکان|زنان|مردان|سربازان|ناجی|نجات", False))
+_ISLAND_LEAVE_FA = re.compile(_pw("خانه|شهر|روستا|دهکده|کوچه|خیابان|بازار|اتاق|کلبه|قصر|بندر|ساحل|کشتی|قایق|وطن|ترک|بازگشت|برگشت", False))
+_CROWD_EN = re.compile(r"\b(?:crowd|group|villagers|townspeople|people|persons|figures|men|women|children|kids|onlookers|passers-by|passersby|strangers|silhouettes|"
+                       r"sailors|natives|soldiers|bystanders|travell?ers|neighbou?rs|fishermen|workers|locals|folk)\b", re.I)
+_CROWD_CLAUSE_EN = re.compile(r"\s*[,;]?\s*(?:with|while|and|as|behind|beside|among|surrounded by|watched by|followed by|joined by)\s+"
+                              r"(?:(?:a|an|the|some|several|many|two|three|four|five|six|small|distant|tiny|other|more|few)\s+)*"
+                              r"(?:(?:group|crowd) of\s+)?(?:crowd|group|villagers|townspeople|people|persons|figures|men|women|children|kids|onlookers|passers-by|passersby|"
+                              r"strangers|silhouettes|sailors|natives|soldiers|bystanders|travell?ers|neighbou?rs|fishermen|workers|locals)\b[^.;]*", re.I)
+_TOWN_EN = ((r"\b(?:cobbled |narrow |busy |village |town |city |dirt |paved )?(?:streets?|alleys?|alleyways?|lanes?|roads?|squares?|market ?places?)\b", "sandy path"),
+            (r"\b(?:houses?|cottages?|buildings?|shops?|stalls?|taverns?|inns?|caf[eé]s?|villages?|towns?|cit(?:y|ies)|rooftops?|chimneys?|balcon(?:y|ies)|lamp-?posts?|streetlamps?)\b", "rocks"))
+_TOWN_RX = re.compile("|".join(p for p, _ in _TOWN_EN), re.I)
+_TOWN_BUILD_RX = re.compile(_TOWN_EN[1][0], re.I)
+ISLAND_NOTE = "Deserted island: sand, rocks, palms, driftwood, sea all around; the character is completely alone, no other human, no street, no houses."
+
+
+def island_alone_hint(narr):
+    """Stateless check of ONE part: it speaks of a deserted / empty / far-away island or of being alone on an island, with nobody else."""
+    t = DIAC.sub("", str(narr or "")).replace("\u200c", " ")
+    return bool(_ISLAND_FA.search(t) and (_ISLAND_EMPTY_FA.search(t) or _ALONE_FA.search(t)) and not _OTHERS_FA.search(t))
+
+
+def island_state(t, present_n):
+    """True while the story is on a deserted island where the hero is alone (it stays so for the next parts until somebody comes or he leaves)."""
+    others = bool(_OTHERS_FA.search(t)) or present_n >= 2
+    has_island = bool(_ISLAND_FA.search(t))
+    if has_island and (_ISLAND_EMPTY_FA.search(t) or _ALONE_FA.search(t)) and not others:
+        ISLAND["on"] = True
+    elif ISLAND["on"] and (others or (_ISLAND_LEAVE_FA.search(t) and not has_island)):
+        ISLAND["on"] = False
+    return ISLAND["on"]
+
+
+def _island_clean(text):
+    out = _CROWD_CLAUSE_EN.sub("", str(text or ""))
+    parts = re.split(r"(?<=[.;])\s+", out)
+    c_ = _content_idx(parts)
+    keep = [p for i, p in enumerate(parts)
+            if i <= c_ or ((not _CROWD_EN.search(p) or re.search(r"\b(?:no|nobody|without|never)\b", p, re.I))
+                           and (not _TOWN_BUILD_RX.search(p) or re.search(r"\b(?:no|nobody|without|never)\b", p, re.I)))]
+    out = " ".join(keep) if keep else out
+    for pat, new_ in _TOWN_EN:
+        out = re.sub(pat, new_, out, flags=re.I)
+    return " ".join(out.split())
+
+
+def island_fix(sc, beat_text):
+    """Free check in code: on a deserted island where the hero is alone the picture has only the island (sand, rocks, palms, sea) and the
+    hero: no crowd or figures behind him, and never a street, an alley or houses."""
+    t = DIAC.sub("", str(beat_text or "")).replace("\u200c", " ")
+    present = list(sc.get("characters_present") or [])
+    if not island_state(t, len(present)):
+        return sc
+    sc["others"] = []
+    for k_ in ("visual_en", "event_en", "setting_en", "action_en", "gentle_en"):
+        if sc.get(k_):
+            sc[k_] = _island_clean(sc[k_])
+    sc["must_show"] = [x for x in (sc.get("must_show") or []) if not (_CROWD_EN.search(str(x)) or _TOWN_RX.search(str(x)))]
+    if len(present) == 1:
+        sc["people_en"] = "exactly 1 person, completely alone on the island, nobody else"
+    sc["alone_en"] = ISLAND_NOTE
     return sc
 
 
@@ -3699,6 +3892,7 @@ def review_visual_plan(vis, items, book, chars, src=None):
     for k in idx:
         v = vis[k]
         rows.append({"i": k, "narration_fa": items[k]["narration_fa"],
+                     "hints": {h_: items[k][h_] for h_ in ("figurative_not_creature", "alone_on_island", "goes_to_sea_by_ship_or_boat") if items[k].get(h_)},
                      "previous_fa": items[k - 1]["narration_fa"] if k else "",
                      "plan": {"event_en": v.get("event_en", ""), "location": v.get("location", ""),
                               "characters_present": v.get("characters_present", []), "people_en": v.get("people_en", ""),
@@ -3733,9 +3927,10 @@ Check EVERY plan:
    every concrete thing that the narration names (people and their number, objects, place, weather, time of day); a calm or
    symbolic picture of a part in which something happens is rewritten.
 12. FIGURATIVE SENTENCES: when the narration uses a figure of speech (a metaphor, a personification, an idiom, a euphemism), the
-   picture shows the REAL event behind it, never the literal impossible image.
-16. EVENT AND CREATURE SEEN: when the narration tells an attack, a chase, a capture, a trap, a death or names a creature
-   (a dinosaur, a wolf, a monster), the plan shows that EVENT with the creature drawn big and clearly in "creatures_en" and
+   picture shows the REAL event behind it, never the literal impossible image. An adjective such as هیولایی, غول پیکر or غول آسا only
+   tells the size or fury of the storm, the wave or the wind: the plan has no monster, giant or dragon for it.
+16. EVENT AND CREATURE SEEN: when the narration tells an attack, a chase, a capture, a trap, a death or names a REAL creature of the story
+   (a dinosaur, a wolf; NOT a figurative word such as a «monstrous storm», see 12 and 21), the plan shows that EVENT with the creature drawn big and clearly in "creatures_en" and
    "visual_en" (never only the people calmly standing, never only a shadow or a far away dot); a death is shown by its result
    without gore. Fix a plan that shows only characters.
 17. PLACE MATCH: the place drawn is the one the narration names or implies (the jungle, the paddock fence in the storm, the
@@ -3759,11 +3954,21 @@ Check EVERY plan:
    harnessed in front of it, written in \"visual_en\", \"must_show\" and \"creatures_en\"; add them when they are missing.
 20. ONE FACE, NATURAL BODY: no second face or face-like shape on any head, hat, clothes or wall; natural proportions (long legs,
    small head, normal hands).
+21. FIGURATIVE CREATURE WORD: when "hints" has "figurative_not_creature" (or the narration only says «monstrous», «giant-like» or
+   «dragon-like» about a storm, a wave, a wind, a night...), the plan shows that real thing (a violent storm, towering waves, dark
+   clouds) and has NO monster, giant, dragon or creature anywhere (not in "creatures_en", "must_show", "event_en", "visual_en"): remove it.
+22. SEA: a person at sea is INSIDE the boat or ON THE DECK of the ship, never walking or standing on the water or on the waves; when
+   "hints" has "goes_to_sea_by_ship_or_boat", the vessel is out on the open water with the person aboard, never the person on the
+   shore, a beach or a dock.
+23. DESERTED ISLAND: when "hints" has "alone_on_island", the plan has only the island (sand, rocks, scrub, palm trees, sea) and the
+   person alone: no other person or figure anywhere, no street, houses, village or town; "others" is empty.
+24. FEET AND HANDS: feet are hidden or both flat side by side, each in exactly one shoe (never doubled shoes, never crossed or overlapping
+   legs), hands simple; rewrite a plan that asks for a walking stride, crossed legs or many hands.
 For a plan WITHOUT a mistake return {{"i": n, "ok": true}}. For a plan WITH a mistake return {{"i": n, "ok": false,
 "problem": "short", "fix": {{...}}}} where "fix" holds ONLY the fields that change, among: "event_en", "visual_en"
 (English, 90 to 110 words, starts with the shot type, written again completely whenever the people or the event change),
 "people_en", "must_show", "characters_present" (names exactly as in the characters), "others" (one short English
-description per unnamed person), "roles".
+description per unnamed person), "roles", "creatures_en".
 Return JSON {{"checks": [...]}} with one item per plan, in the same order.
 Plans: {json.dumps(rows, ensure_ascii=False)}"""
     try:
@@ -3965,6 +4170,8 @@ def align_visuals(data, book, src=None):
     scenes = data["scenes"]
     chars = data.get("characters", [])
     places = data.get("locations") or []
+    if src and not SRC_LOWER["t"]:                      # the figurative-word check needs the source text (does the book have a monster?)
+        SRC_LOWER["t"] = (str(src.get("text") or "") + " " + json.dumps(data.get("spine") or {}, ensure_ascii=False)).lower()
     if not places and src:
         places = design_places(book, src, data.get("era_en", ""))
         data["locations"] = places
@@ -3995,6 +4202,13 @@ def align_visuals(data, book, src=None):
     for k, it in enumerate(items):                     # neighbours: pronouns ("he", "she") and the place continue from them
         it["previous_part_fa"] = items[k - 1]["narration_fa"] if k else ""
         it["next_part_fa"] = items[k + 1]["narration_fa"] if k + 1 < len(items) else ""
+        fw_ = figurative_words(it["narration_fa"])
+        if fw_:
+            it["figurative_not_creature"] = fw_              # these Persian words only describe size or force: no monster
+        if island_alone_hint(it["narration_fa"]):
+            it["alone_on_island"] = True
+        if _VOYAGE.search(DIAC.sub("", it["narration_fa"]).replace("\u200c", " ")):
+            it["goes_to_sea_by_ship_or_boat"] = True
     place_ids = [x["id"] for x in places]
     source_block = f"\nSOURCE TEXT (the truth about who is where and when):\n{src['text']}\n" if src else ""
     prompt = f"""You are a film storyboard artist and a production designer. Below are the FINAL Persian narration parts, in
@@ -4015,6 +4229,9 @@ with exactly {len(items)} items, in the same order.
 Rules:
 - "text_en": a faithful English translation of THIS part, only what the Persian says (nothing added, nothing left out).
   Write it FIRST: the picture is drawn from this text, not from your idea of the book.
+  A Persian creature word used as an ADJECTIVE or a comparison (هیولایی, هیولاوار, هیولاگونه, غول پیکر, غول آسا, اژدها گونه, دیو آسا) only tells the
+  SIZE or FEROCITY of what it describes: translate it with a plain word (terrible, violent, enormous, fierce), never with «monster»,
+  «monstrous», «giant» or «dragon».
 - "kind": ALWAYS "event", whatever the part talks about: the opening (also when it names the novel and its author: draw the
   first place of the story with the main hero), the heroes, the story AND the closing wrap-up (a wrap-up sentence about the
   whole story or its central idea is drawn as an event: the main hero in the key situation of the story, in its main place).
@@ -4097,6 +4314,10 @@ Rules:
 - FIGURATIVE SENTENCES: when the part says something with a figure of speech (a metaphor, a personification, an idiom, a
   euphemism: for example a ship that «kills itself»), draw the REAL event behind it, judged from "text_en", the SOURCE TEXT and
   the story, never the literal impossible image.
+  Example: «طوفان سخت هیولایی در دریا» is a terrible storm at sea: draw towering dark waves, black clouds, lightning and the vessel tossed
+  on the water, NEVER a monster. When a part has "figurative_not_creature", the Persian words listed there are NOT creatures (they only
+  describe the size or fury of a storm, a wave, a wind, a night...): no monster, giant, dragon or creature in "creatures_en",
+  "must_show", "event_en" or "visual_en" for them.
 - SAME AGE EVERYWHERE (very important): every named character is drawn at exactly the age of his or her look sheet in EVERY picture, never as a child in one picture and as a grown person in another. When the narration speaks about the childhood or youth of a character, draw the place, the objects and the other people of that scene, or the adult character remembering (adult age, thoughtful face), NEVER a child version of the named character.
 - AGE FIT: every person is drawn at the age that fits his or her ROLE in THIS moment (parent, bride, groom, worker, child,
   old person); a child is NEVER drawn as a bride, a groom, a lover or in a wedding dress or a wedding scene: a person who
@@ -4164,7 +4385,7 @@ Rules:
   as general words like "a sad room". Details never add a person. At least 2 items of "must_show" are such details.
 - NO INVENTED CREATURES (very important): a monster, ghost, dragon, giant or any other creature is drawn ONLY when the SOURCE or
   the sentence really has one. A figurative word («monster» for a bank, «wolves» for hunger, a «giant» company) is NOT a creature:
-  draw the real thing behind it (people, a building, a machine, a field). Never add a creature that the story does not have.
+  draw the real thing behind it (people, a building, a machine, a field). Never add a creature that the story does not have. An ADJECTIVE (هیولایی, غول پیکر, غول آسا...) never creates a creature.
 - THE PICTURE IS THE SENTENCE: the picture shows what THIS part says and nothing else: first find the one or two most visual facts
   of the part (who does what, where, to what) and draw exactly them, with the objects the part names; never a generic scene that
   would fit any part, never something from another part.
@@ -4179,7 +4400,8 @@ Rules:
   happens (the way the part tells it), never a calm picture of a place or of people standing.
 - AT SEA (very important): when the sentence is at sea (a boat, rowing, fishing, the open water, a fish or a shark), the picture is
   AT SEA: water and sky all around, NO shore, beach, harbor or hut (the shore only when the sentence itself says the person is on
-  the shore); every person is INSIDE a small boat with the whole boat visible (never standing, walking or floating on the water);
+  the shore); every person is INSIDE the boat, or ON THE DECK of the ship when the story has a ship, with the whole vessel visible (nobody ever
+  stands, walks or floats on the water or on the waves, not even in a storm);
   every fish, shark and whale is IN the water (never in the sky or the air); a person and a shark are two separate figures, each with
   its own head and its own body, and a shark never has a person's face.
 - THE HIGH POINTS MUST BE SEEN (very important): the biggest moments of the story (the fight with an animal, the catch of a giant
@@ -4187,6 +4409,20 @@ Rules:
   its own picture that SHOWS the action itself with the creature or the opponent large and clearly visible next to the person
   (the person pulling the line while the giant fish leaps from the water; the person striking at the shark with a harpoon while the
   shark rises beside the boat), never a calm picture of a place or of the person alone. Show it by the action, without blood.
+- GOING TO SEA (very important): when the part says that a person sails away or goes to sea by ship or boat (the part has
+  "goes_to_sea_by_ship_or_boat"), the picture shows the vessel under way on the open water with that person ON it (on the deck or inside
+  the boat); never the person on the shore, a beach, a dock or in a harbor. The shore is drawn only when the sentence itself says the
+  person stays on land or waits at the harbor.
+- A STORM AT SEA: dark towering waves, black clouds, lightning, spray, the vessel tossed on the swell with the people holding on to it.
+- DESERTED ISLAND (very important): when a part has "alone_on_island" (a deserted, empty or far-away island, or the person is alone on
+  it), the picture shows ONLY that island: sand, rocks, scrub, palm trees, driftwood and the sea around it, with the person completely
+  alone: "people_en" is exactly one person (or only the named characters of the part), "others" is an empty list, and "visual_en" has no
+  crowd, no figures behind or far away, no street, no alley, no houses, no village or town, no market. A deserted island is never
+  drawn as a town.
+- FEET AND SHOES (the picture model often doubles shoes and bends feet and hands): plan every person so that the feet and hands are EASY
+  to draw: a shot from the waist or the knees up, or the feet hidden behind a foreground object (rocks, grass, sand, a rail, a table,
+  breaking waves); when feet are visible both stand flat and side by side, each foot in exactly one plain shoe, one pair per person;
+  never a walking stride with crossed or overlapping legs; hands simple (one object, resting, or hidden).
 - "shot" is exactly one of {json.dumps(SHOTS)}. Two neighbouring pictures NEVER use the same shot.
 - {FRAMING}
 - {POSE}
@@ -5119,7 +5355,7 @@ KLEIN_WORDS = 300         # FLUX.2 klein reads a longer text than the old square
 MAX_PEOPLE = 2          # at most this many people with a LARGE clear face in one picture (more of them blend their faces);
                         # every other person is small and far away or seen from behind
 ANATOMY = ("Each person: one head with exactly one face (no extra face or face-like shape anywhere), two arms, two hands with five fingers, "
-           "two long legs (legs about half of the body height), small head (one eighth of the height), normal hands and feet, no overlapping limbs, "
+           "two long legs (legs about half of the body height), small head (one eighth of the height), two feet, each in one single shoe (never doubled or extra shoes), no overlapping limbs, "
            "head only on the neck, feet only at the leg ends")
 NO_EXTRA = "No eyeglasses, no other person anywhere, no crowd, no faces in windows, no second copy, twin, reflection or extra head"
 
@@ -5229,6 +5465,10 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
     sea_note = " ".join(str(scene.get("sea_en") or "").split())
     if sea_note:                     # a picture AT SEA: the rules of the sea stand before everything that may be cut
         subject += sea_note + " "
+    for k_ in ("fig_en", "alone_en"):          # a figurative word is not a monster / a deserted island has nobody and no town: before the cut
+        note_ = " ".join(str(scene.get(k_) or "").split())
+        if note_:
+            subject += note_ + " "
     if creatures:                    # "nobody else" must not forbid the creature of the event
         people_en = re.sub(r"\bnobody else\b", "no other people", people_en, flags=re.I)
     if people_en:
@@ -5263,7 +5503,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
             count += ("No other character anywhere: no crowd, no figures in windows or doorways" if nh_all else no_extra_for(present)) + ". "
     if has_people and scene.get("kind") in (None, "", "event"):
         count += ("Every person mid-action (pulling, rowing, striking, gripping), never idle. " if sea_note else
-                  "Every character mid-action in a dynamic full-body pose (running, reaching, gripping, turning, kneeling), never standing still. ")
+                  "Every character mid-action in a dynamic pose (running, reaching, gripping, turning, kneeling), never standing still; legs simple and natural, feet flat on the ground or hidden behind foreground objects. ")
     if total > MAX_PEOPLE:
         count += f"Only {MAX_PEOPLE} people have large clear faces; the others are small, far away or from behind. "
     if has_people and not BED_WORDS.search(" ".join(str(scene.get(k) or "") for k in ("visual_en", "event_en"))):
@@ -5379,7 +5619,7 @@ def build_prompt(art, chars, scene, fix="", ref_names=None, limit=None, style_re
         out = compose(main, False, era_short, CLEAN_SHORT)
     if len(out) > 1850:        # still too long (many people with references): the general rules get shorter, the end of the prompt (era, shot, style) must not be cut
         for old_, new_ in ((no_extra_for(present) + ". ", ""), ("Everybody alive and upright. ", ""), ("Everybody wears proper day clothes. ", ""),
-                           ("No animals. ", ""), (ANATOMY, "Each person: one head with one face, two arms, two hands, two long legs, small head")):
+                           ("No animals. ", ""), (ANATOMY, "Each person: one head with one face, two arms, two hands, two long legs, one shoe per foot, small head")):
             count = count.replace(old_, new_)
             out = compose(main, False, era_short, CLEAN_SHORT)
             if len(out) <= 1850:
@@ -5877,8 +6117,11 @@ For EACH picture return:
   * SCALE: a person much bigger or much smaller than the others at the same distance (a giant or a dwarf; a child is smaller by
     nature): at most 4;
   * a missing arm, hand or head, or a hand growing from the wrong place: "limbs_ok" false;
-  * SEA: a person at sea who stands or walks on the water or floats with no boat, or a boat that is not visible: at most 2; a picture at
-    the shore or in a village when the narration is at sea (a boat, rowing, the open water): at most 2;
+  * SEA: a person at sea who stands or walks on the water or on the waves, or floats with no boat or ship, or a vessel that is not visible: at most 2;
+    a picture at the shore, on a beach or dock or in a village when the narration is at sea (a boat, a ship, rowing, the open water, a person going to sea
+    by ship): at most 2;
+  * DESERTED ISLAND: when the narration puts the hero alone on a deserted island, any other person or figure (also small or far away), a street,
+    an alley, houses or a town in the picture: at most 2;
   * CREATURE IN THE WRONG PLACE: a shark, a fish, a whale or another sea creature in the sky, in the clouds or on dry land: at most 2;
   * MERGED FACE: a creature (a shark, a fish) whose head or face is the same as, or mixed with, a person's face, or a person with an
     animal's head: at most 2 and "extra_face" true;
@@ -5908,7 +6151,7 @@ For EACH picture return:
   * a face or a body cut off by the border of the picture, or a zoomed close-up, at most 4;
   * LOOK AT EVERY BODY: one head, two arms, two hands (five fingers each), two legs. A person with a third arm or hand,
     extra fingers or legs, a missing head or a headless body, a head on the wrong place, merged or floating bodies, melted
-    faces, or a head lying on an object: at most 2. Hands that hold nothing but look doubled: at most 4;
+    faces, or a head lying on an object: at most 2. Hands that hold nothing but look doubled: at most 4; doubled, stacked or extra shoes, an extra or deformed foot, a deformed hand: at most 2 and "limbs_ok" false;
   * COUNT THE PEOPLE: their number and kind must equal "exact_people" (for example one mother and ONE child: two girls
     next to the mother is wrong); one person too many or too few: at most 4. Any extra figure that is not in "exact_people" (a small person far away,
     a crowd, a face in a window, a figure in a painting or a statue that looks like a person): at most 3;
@@ -5949,7 +6192,9 @@ For EACH picture return:
 - "limbs_ok": false if ANY person has a wrong body (when you are NOT SURE about the count of a hand, an arm or a leg, say false). Look at EVERY person from the head down to the feet, one by one and COUNT
   the hands of each person (exactly two, never three: look at hands that hold something, at hands near the face and at hands
   between two people, they are often doubled): more or fewer than two legs, two arms, two hands or two feet (a third leg or a doubled leg between two standing people is
-  common: check it), a doubled, missing or misplaced head, merged bodies. Otherwise true.
+  common: check it), a doubled, missing or misplaced head, merged bodies; ALSO look closely at every FOOT and every HAND: a doubled, stacked or extra shoe or boot, two shoes on
+  one foot, a third foot, merged or twisted feet, a foot pointing the wrong way, or a deformed hand (fused, bent or missing fingers, more than five
+  fingers, a twisted wrist) (when unsure, say false). Otherwise true.
 - "head_ok": false when the head of ANY person is even a little too big for his or her body (a big-head, chibi, bobble-head or toy look; a
   natural head is about one seventh to one eighth of the body height; when in doubt say false), or when the people at the same distance have very different head sizes.
   Otherwise true.
@@ -5973,7 +6218,8 @@ For EACH picture return:
 - "outfit_ok": false when the clothes of a person clearly contradict his or her job or class in the description (a writer in a guard's
   uniform, a farmer in royal robes, a servant in a general's uniform). Otherwise true.
 - "invented": true when the picture shows a monster, ghost, demon, creature or person that the narration and the cast do NOT have
-  (for example a monster chasing people when the sentence only speaks of noise or excitement). Otherwise false.
+  (for example a monster chasing people when the sentence only speaks of noise or excitement, or a monster or giant drawn for a figurative word
+  such as a «monstrous storm» or «giant waves»: the storm or the waves must be drawn instead). Otherwise false.
 - "animal_ok": false when ANY animal or creature (pig, dog, horse, bird, dragon...) has a wrong body: not exactly four legs (a bird two)
   unless its look sheet says otherwise, two heads, a head WITHOUT clearly visible eyes, nose and mouth, a flat or melted face, a tail growing
   from the belly or the side instead of the rear, a doubled or merged body, extra limbs. Count the legs and the heads of EVERY animal.
@@ -6021,7 +6267,7 @@ Return JSON {{"checks": [{{"n": 1, "people_count": 2, "limbs_ok": true, "head_ok
             if c.get("limbs_ok") is False or many:
                 score = min(score, 2)
                 fix = ("every person with exactly one head, two arms, two hands and exactly two legs, hands hidden behind "
-                       "the back or in pockets, no third hand, no third leg; " + fix)[:200]
+                       "the back or in pockets, no third hand, no third leg, exactly one shoe on each foot; " + fix)[:200]
             if c.get("head_ok") is False:
                 score = min(score, 2)
                 fix = ("every person with a natural small head about one seventh of the body height, adult proportions, never a big head; "
@@ -7805,6 +8051,7 @@ def main():
 
     SRC_LOWER["t"] = (str(src.get("text") or "") + " " + json.dumps(script.get("spine") or {}, ensure_ascii=False)).lower()
     SEA_STORY["on"] = sea_story_of(scenes)
+    ISLAND["on"] = False
     if SEA_STORY["on"]:
         print("Sea story: the pictures at sea get a boat, creatures in the water and no shore.", flush=True)
     for i, s in enumerate(scenes):
@@ -7842,7 +8089,10 @@ def main():
                 sc["event_en"] = " ".join(str(s.get("action_en") or "").split())
             inject_subjects(sc, beat, script.get("subjects"))
             inject_event(sc, beat)
+            figurative_fix(sc, beat)               # «a monstrous storm»: the storm is drawn, never a monster
             sea_fix(sc, beat)                      # at sea: a boat under the people, creatures in the water, no shore, no merged faces
+            if str(s.get("part") or "story") == "story":
+                island_fix(sc, beat)               # alone on a deserted island: nobody else, no street, no houses
             if dead and not any((events_by_id.get(x_) or {}).get("flashback") for x_ in (s.get("ev_ids") or [])):
                 drop_dead_from_pic(sc, is_dead)    # a character who died in an earlier picture is never drawn again (alive)
             card_kind = None
