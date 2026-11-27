@@ -643,5 +643,15 @@
   "date_pt": "2026-11-26",
   "wiki": "Robinson Crusoe",
   "date": "2026-11-26"
+ },
+ {
+  "title_en": "Gulliver's Travels",
+  "title_fa": "سفرهای گالیور",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-27",
+  "wiki": "Gulliver's Travels",
+  "date": "2026-11-27"
  }
 ]
