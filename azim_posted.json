@@ -653,5 +653,15 @@
   "date_pt": "2026-11-27",
   "wiki": "Gulliver's Travels",
   "date": "2026-11-27"
+ },
+ {
+  "title_en": "Treasure Island",
+  "title_fa": "جزیره گنج",
+  "type": "novel",
+  "voice": "female",
+  "engine": "gemini",
+  "date_pt": "2026-11-27",
+  "wiki": "Treasure Island",
+  "date": "2026-11-28"
  }
 ]
