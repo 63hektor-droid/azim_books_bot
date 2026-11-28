@@ -663,5 +663,15 @@
   "date_pt": "2026-11-27",
   "wiki": "Treasure Island",
   "date": "2026-11-28"
+ },
+ {
+  "title_en": "The Adventures of Tom Sawyer",
+  "title_fa": "ماجراهای تام سایر",
+  "type": "novel",
+  "voice": "male",
+  "engine": "gemini",
+  "date_pt": "2026-11-28",
+  "wiki": "The Adventures of Tom Sawyer",
+  "date": "2026-11-28"
  }
 ]
